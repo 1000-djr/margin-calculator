@@ -4,112 +4,109 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>농수산물 마진 계산기</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0f1310;
-  --surface: #161d18;
-  --surface2: #1e2820;
-  --surface3: #232e24;
-  --border: #2a3a2c;
-  --green: #4ade80;
-  --green2: #22c55e;
-  --green-dim: #14532d;
-  --green-glow: rgba(74,222,128,0.12);
-  --red: #f87171;
-  --red-dim: #450a0a;
-  --yellow: #fbbf24;
-  --yellow-dim: #451a03;
-  --text: #ecfdf5;
-  --text-sub: #86efac;
-  --text-dim: #4b7a55;
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface2: #f5f5f7;
+  --surface3: #e8e8ed;
+  --border: #d2d2d7;
+  --green: #1d8348;
+  --green2: #28a745;
+  --green-light: #d4edda;
+  --green-bg: #f0faf3;
+  --red: #c0392b;
+  --red-light: #fde8e6;
+  --yellow: #b7950b;
+  --yellow-light: #fef9e7;
+  --text: #1d1d1f;
+  --text-sub: #3a3a3c;
+  --text-dim: #86868b;
+  --accent: #0071e3;
   --mono: 'DM Mono', monospace;
-  --sans: 'Noto Sans KR', sans-serif;
+  --sans: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
-body::before {
-  content: ''; position: fixed; inset: 0;
-  background-image: linear-gradient(rgba(74,222,128,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.03) 1px, transparent 1px);
-  background-size: 32px 32px; pointer-events: none; z-index: 0;
-}
-.app { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 24px 16px 80px; }
-.header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-.header-icon { width: 40px; height: 40px; background: var(--green-glow); border: 1px solid var(--green-dim); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-.header h1 { font-size: 18px; font-weight: 700; }
-.header p { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+.app { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
+.header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
+.header-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #34c759, #1d8348); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 8px rgba(29,131,72,0.3); }
+.header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+.header p { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
 .header-right { margin-left: auto; }
-.badge { background: var(--green-dim); color: var(--green); font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; font-family: var(--mono); }
-.tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
-.tab { flex: 1; padding: 8px; border-radius: 7px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; }
-.tab.active { background: var(--surface3); color: var(--green); }
+.badge { background: var(--green-light); color: var(--green); font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; font-family: var(--mono); border: 1px solid rgba(29,131,72,0.2); }
+.tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface3); border-radius: 10px; padding: 3px; width: fit-content; }
+.tab { padding: 7px 18px; border-radius: 8px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 .tab:hover:not(.active) { color: var(--text-sub); }
-.section-label { font-size: 11px; font-weight: 700; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; margin-top: 24px; }
+.section-label { font-size: 11px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px; margin-top: 24px; }
 .section-label:first-child { margin-top: 0; }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 12px; }
-.card-title { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
-.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; }
-.field { margin-bottom: 12px; }
-.field label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 5px; font-weight: 500; }
-.field input, .field select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: var(--mono); padding: 9px 12px; outline: none; transition: border 0.15s; }
-.field input:focus, .field select:focus { border-color: var(--green2); }
-.field select option { background: var(--surface2); }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.result-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-.result-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.card { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow); border: 1px solid rgba(0,0,0,0.04); }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text-sub); margin-bottom: 16px; display: flex; align-items: center; gap: 6px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green2); display: inline-block; }
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+.field input, .field select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; font-family: var(--mono); padding: 10px 12px; outline: none; transition: all 0.15s; -webkit-appearance: none; }
+.field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); background: #fff; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.result-box { background: var(--surface2); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
+.result-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
 .result-row:last-child { border-bottom: none; }
-.result-label { font-size: 12px; color: var(--text-dim); }
-.result-value { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+.result-label { font-size: 13px; color: var(--text-dim); }
+.result-value { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text); }
 .result-value.green { color: var(--green); }
 .result-value.red { color: var(--red); }
 .result-value.yellow { color: var(--yellow); }
-.result-value.dim { color: var(--text-sub); }
-.big-result { background: linear-gradient(135deg, var(--green-dim), var(--surface2)); border: 1px solid var(--green-dim); border-radius: 12px; padding: 20px; margin-top: 12px; text-align: center; }
-.big-result.danger { background: linear-gradient(135deg, var(--red-dim), var(--surface2)); border-color: var(--red-dim); }
-.big-result.warning { background: linear-gradient(135deg, var(--yellow-dim), var(--surface2)); border-color: var(--yellow-dim); }
-.big-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; letter-spacing: 0.1em; }
-.big-value { font-family: var(--mono); font-size: 32px; font-weight: 500; color: var(--green); }
+.big-result { background: var(--green-bg); border: 1px solid rgba(29,131,72,0.2); border-radius: 12px; padding: 20px; margin-top: 14px; text-align: center; }
+.big-result.danger { background: var(--red-light); border-color: rgba(192,57,43,0.2); }
+.big-result.warning { background: var(--yellow-light); border-color: rgba(183,149,11,0.2); }
+.big-label { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; }
+.big-value { font-family: var(--mono); font-size: 34px; font-weight: 600; color: var(--green); letter-spacing: -1px; }
 .big-value.danger { color: var(--red); }
 .big-value.warning { color: var(--yellow); }
-.big-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
-.divider { border: none; border-top: 1px dashed var(--border); margin: 20px 0; }
-.toggle-area { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.toggle-label { font-size: 13px; color: var(--text-sub); }
-.toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+.big-sub { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.toggle-area { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.toggle-label { font-size: 14px; color: var(--text-sub); font-weight: 500; }
+.toggle { position: relative; width: 44px; height: 26px; cursor: pointer; flex-shrink: 0; }
 .toggle input { opacity: 0; width: 0; height: 0; }
-.toggle-slider { position: absolute; inset: 0; background: var(--surface3); border-radius: 22px; border: 1px solid var(--border); transition: 0.2s; }
-.toggle-slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 2px; top: 2px; background: var(--text-dim); border-radius: 50%; transition: 0.2s; }
-.toggle input:checked + .toggle-slider { background: var(--green-dim); border-color: var(--green2); }
-.toggle input:checked + .toggle-slider::before { background: var(--green); transform: translateX(18px); }
+.toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 26px; transition: 0.2s; }
+.toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.toggle input:checked + .toggle-slider { background: #34c759; }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
 .b2b-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.b2b-table th { text-align: left; padding: 8px 10px; color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); background: var(--surface2); }
-.b2b-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.b2b-table th { text-align: left; padding: 10px 14px; color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.b2b-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .b2b-table tr:last-child td { border-bottom: none; }
-.b2b-table tr:hover td { background: rgba(74,222,128,0.03); }
-.b2b-table td input { background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 13px; padding: 4px 8px; width: 100%; outline: none; transition: border 0.15s; }
-.b2b-table td input:focus { border-color: var(--green2); background: var(--surface3); }
-.change-badge { font-size: 10px; padding: 2px 7px; border-radius: 20px; font-family: var(--mono); white-space: nowrap; }
-.up { background: rgba(248,113,113,0.15); color: var(--red); }
-.down { background: var(--green-glow); color: var(--green); }
+.b2b-table tr:hover td { background: #fafafa; }
+.b2b-table td input { background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 13px; padding: 4px 8px; width: 100%; outline: none; transition: all 0.15s; }
+.b2b-table td input:focus { border-color: var(--accent); background: var(--surface2); box-shadow: 0 0 0 3px rgba(0,113,227,0.1); }
+.change-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-family: var(--mono); font-weight: 500; }
+.up { background: var(--red-light); color: var(--red); }
+.down { background: var(--green-light); color: var(--green); }
 .same { background: var(--surface3); color: var(--text-dim); }
-.btn { padding: 9px 16px; border-radius: 8px; border: none; cursor: pointer; font-family: var(--sans); font-size: 13px; font-weight: 600; transition: all 0.15s; }
-.btn-primary { background: var(--green2); color: #0f1310; }
-.btn-primary:hover { background: var(--green); }
-.btn-ghost { background: var(--surface2); color: var(--text-sub); border: 1px solid var(--border); }
-.btn-ghost:hover { border-color: var(--green2); color: var(--text); }
-.btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid transparent; }
-.btn-danger:hover { border-color: var(--red); }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn { padding: 10px 18px; border-radius: 8px; border: none; cursor: pointer; font-family: var(--sans); font-size: 14px; font-weight: 500; transition: all 0.15s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #0077ed; }
+.btn-ghost { background: var(--surface); color: var(--text-sub); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+.btn-ghost:hover { border-color: #aaa; color: var(--text); }
+.btn-danger { background: var(--red-light); color: var(--red); border: 1px solid rgba(192,57,43,0.2); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-row { display: flex; gap: 8px; margin-top: 16px; }
 .product-selector { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-.product-chip { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
-.product-chip.active { background: var(--green-dim); border-color: var(--green2); color: var(--green); }
-.product-chip:hover:not(.active) { border-color: var(--text-dim); color: var(--text); }
-.info-box { background: rgba(88,166,255,0.06); border: 1px solid rgba(88,166,255,0.2); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #93c5fd; line-height: 1.6; }
+.product-chip { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.product-chip.active { background: var(--green-light); border-color: rgba(29,131,72,0.3); color: var(--green); }
+.product-chip:hover:not(.active) { border-color: #aaa; color: var(--text); }
+.info-box { background: #e8f4fd; border: 1px solid rgba(0,113,227,0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #0056b3; line-height: 1.6; }
 .history-list { display: flex; flex-direction: column; gap: 8px; }
-.history-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; }
-.history-meta { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
-.history-margin { font-family: var(--mono); font-size: 15px; font-weight: 500; }
+.history-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); }
+.history-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.history-margin { font-family: var(--mono); font-size: 16px; font-weight: 600; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ad-section { transition: opacity 0.2s; }
 .ad-section.hidden { opacity: 0.3; pointer-events: none; }
@@ -118,110 +115,58 @@ body::before {
 .green { color: var(--green); }
 .red { color: var(--red); }
 .yellow { color: var(--yellow); }
-@media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+@media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } .field-row { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div class="app">
-
   <div class="header">
     <div class="header-icon">🌾</div>
     <div>
       <h1>농수산물 마진 계산기</h1>
       <p>쿠팡 위탁 · B2B 매입가 실시간 관리</p>
     </div>
-    <div class="header-right">
-      <span class="badge">쿠팡 11.66%</span>
-    </div>
+    <div class="header-right"><span class="badge">쿠팡 11.66%</span></div>
   </div>
-
   <div class="tabs">
     <button class="tab active" onclick="switchTab('calc', this)">💰 마진 계산</button>
     <button class="tab" onclick="switchTab('b2b', this)">📦 B2B 매입가</button>
     <button class="tab" onclick="switchTab('history', this)">📋 계산 이력</button>
   </div>
-
-  <!-- TAB 1: 마진 계산 -->
   <div class="panel active" id="tab-calc">
     <div class="section-label">상품 선택</div>
     <div class="card" style="padding:16px">
       <div class="product-selector" id="productChips"></div>
       <div class="field-row">
-        <div class="field">
-          <label>상품명</label>
-          <input type="text" id="calcProductName" placeholder="직접 입력 가능">
-        </div>
-        <div class="field">
-          <label>단위</label>
-          <select id="calcUnit">
-            <option value="1kg">1kg</option>
-            <option value="2kg">2kg</option>
-            <option value="3kg">3kg</option>
-            <option value="5kg">5kg</option>
-            <option value="10kg">10kg</option>
-            <option value="개">개</option>
-            <option value="박스">박스</option>
-          </select>
-        </div>
+        <div class="field"><label>상품명</label><input type="text" id="calcProductName" placeholder="직접 입력 가능"></div>
+        <div class="field"><label>단위</label><select id="calcUnit"><option value="1kg">1kg</option><option value="2kg">2kg</option><option value="3kg">3kg</option><option value="5kg">5kg</option><option value="10kg">10kg</option><option value="개">개</option><option value="박스">박스</option></select></div>
       </div>
     </div>
-
     <div class="section-label">① 1차 마진 계산 (광고비 제외)</div>
     <div class="two-col">
       <div class="card">
         <div class="card-title"><span class="dot"></span>입력값</div>
-        <div class="field">
-          <label>B2B 매입가 (원/단위)</label>
-          <input type="number" id="costPrice" placeholder="0" oninput="calc1()">
-        </div>
-        <div class="field">
-          <label>쿠팡 판매가 (원)</label>
-          <input type="number" id="salePrice" placeholder="0" oninput="calc1()">
-        </div>
-        <div class="field">
-          <label>쿠팡 수수료율</label>
-          <select id="feeRate" onchange="onFeeChange()">
-            <option value="0.1166" selected>과일·채소 11.66% (부가세포함)</option>
-            <option value="0.106">과일·채소 10.6% (부가세제외)</option>
-            <option value="0.1166b">수산물 11.66%</option>
-            <option value="custom">직접입력</option>
-          </select>
-        </div>
-        <div class="field" id="customFeeField" style="display:none">
-          <label>수수료율 직접입력 (%)</label>
-          <input type="number" id="customFee" placeholder="0.00" step="0.01" oninput="calc1()">
-        </div>
+        <div class="field"><label>B2B 매입가 (원/단위)</label><input type="number" id="costPrice" placeholder="0" oninput="calc1()"></div>
+        <div class="field"><label>쿠팡 판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
+        <div class="field"><label>쿠팡 수수료율</label><select id="feeRate" onchange="onFeeChange()"><option value="0.1166" selected>과일·채소 11.66% (부가세포함)</option><option value="0.106">과일·채소 10.6% (부가세제외)</option><option value="0.1166b">수산물 11.66%</option><option value="custom">직접입력</option></select></div>
+        <div class="field" id="customFeeField" style="display:none"><label>수수료율 직접입력 (%)</label><input type="number" id="customFee" placeholder="0.00" step="0.01" oninput="calc1()"></div>
       </div>
       <div class="card">
         <div class="card-title"><span class="dot"></span>1차 마진 결과</div>
         <div class="result-box">
-          <div class="result-row"><span class="result-label">판매가</span><span class="result-value dim" id="r1-sale">-</span></div>
+          <div class="result-row"><span class="result-label">판매가</span><span class="result-value" id="r1-sale">-</span></div>
           <div class="result-row"><span class="result-label">쿠팡 수수료</span><span class="result-value red" id="r1-fee">-</span></div>
-          <div class="result-row"><span class="result-label">수수료 차감 후</span><span class="result-value dim" id="r1-after">-</span></div>
+          <div class="result-row"><span class="result-label">수수료 차감 후</span><span class="result-value" id="r1-after">-</span></div>
           <div class="result-row"><span class="result-label">매입가</span><span class="result-value red" id="r1-cost">-</span></div>
         </div>
-        <div class="big-result" id="r1-box">
-          <div class="big-label">1차 마진</div>
-          <div class="big-value" id="r1-margin">-</div>
-          <div class="big-sub" id="r1-rate">마진율 -</div>
-        </div>
+        <div class="big-result" id="r1-box"><div class="big-label">1차 마진</div><div class="big-value" id="r1-margin">-</div><div class="big-sub" id="r1-rate">마진율 -</div></div>
       </div>
     </div>
-
     <div class="card">
       <div class="card-title"><span class="dot"></span>목표 마진율 역산 — 얼마에 팔아야 할까?</div>
       <div class="field-row">
-        <div class="field">
-          <label>목표 마진율 (%)</label>
-          <input type="number" id="targetRate" placeholder="예: 20" oninput="calcReverse()">
-        </div>
-        <div class="field">
-          <label>B2B 매입가</label>
-          <input type="number" id="reverseCost" placeholder="자동연동" oninput="calcReverse()">
-        </div>
+        <div class="field"><label>목표 마진율 (%)</label><input type="number" id="targetRate" placeholder="예: 20" oninput="calcReverse()"></div>
+        <div class="field"><label>B2B 매입가</label><input type="number" id="reverseCost" placeholder="자동연동" oninput="calcReverse()"></div>
       </div>
       <div class="result-box">
         <div class="result-row"><span class="result-label">필요 최소 판매가</span><span class="result-value green" id="r-minPrice">-</span></div>
@@ -229,365 +174,73 @@ body::before {
         <div class="result-row"><span class="result-label">예상 마진액</span><span class="result-value green" id="r-minMargin">-</span></div>
       </div>
     </div>
-
     <hr class="divider">
-
     <div class="section-label">② 2차 마진 계산 (광고비 포함)</div>
-    <div class="info-box" style="margin-bottom:12px">
-      📌 광고비를 포함한 <b>실수익</b>을 확인하는 단계입니다. 1차 마진 확인 후 토글을 켜세요.
-    </div>
+    <div class="info-box" style="margin-bottom:14px">📌 광고비를 포함한 <b>실수익</b>을 확인하는 단계입니다. 1차 마진 확인 후 토글을 켜세요.</div>
     <div class="toggle-area">
-      <label class="toggle">
-        <input type="checkbox" id="adToggle" onchange="toggleAd()">
-        <span class="toggle-slider"></span>
-      </label>
+      <label class="toggle"><input type="checkbox" id="adToggle" onchange="toggleAd()"><span class="toggle-slider"></span></label>
       <span class="toggle-label">광고비 입력 활성화</span>
     </div>
     <div class="ad-section hidden" id="adSection">
       <div class="two-col">
         <div class="card">
           <div class="card-title"><span class="dot"></span>광고비 입력</div>
-          <div class="field">
-            <label>광고 방식</label>
-            <select id="adType" onchange="toggleAdType()">
-              <option value="cpc">CPC (클릭당 비용)</option>
-              <option value="roas">ROAS 목표</option>
-              <option value="fixed">건당 고정 광고비</option>
-            </select>
-          </div>
-          <div id="adCpcFields">
-            <div class="field-row">
-              <div class="field"><label>클릭당 단가 (원)</label><input type="number" id="cpcBid" placeholder="예: 150" oninput="calc2()"></div>
-              <div class="field"><label>전환율 (%)</label><input type="number" id="cpcCvr" placeholder="예: 3" step="0.1" oninput="calc2()"></div>
-            </div>
-          </div>
-          <div id="adRoasFields" style="display:none">
-            <div class="field"><label>목표 ROAS (%)</label><input type="number" id="roasTarget" placeholder="예: 500" oninput="calc2()"></div>
-          </div>
-          <div id="adFixedFields" style="display:none">
-            <div class="field"><label>건당 광고비 (원)</label><input type="number" id="adFixed" placeholder="예: 300" oninput="calc2()"></div>
-          </div>
+          <div class="field"><label>광고 방식</label><select id="adType" onchange="toggleAdType()"><option value="cpc">CPC (클릭당 비용)</option><option value="roas">ROAS 목표</option><option value="fixed">건당 고정 광고비</option></select></div>
+          <div id="adCpcFields"><div class="field-row"><div class="field"><label>클릭당 단가 (원)</label><input type="number" id="cpcBid" placeholder="예: 150" oninput="calc2()"></div><div class="field"><label>전환율 (%)</label><input type="number" id="cpcCvr" placeholder="예: 3" step="0.1" oninput="calc2()"></div></div></div>
+          <div id="adRoasFields" style="display:none"><div class="field"><label>목표 ROAS (%)</label><input type="number" id="roasTarget" placeholder="예: 500" oninput="calc2()"></div></div>
+          <div id="adFixedFields" style="display:none"><div class="field"><label>건당 광고비 (원)</label><input type="number" id="adFixed" placeholder="예: 300" oninput="calc2()"></div></div>
         </div>
         <div class="card">
           <div class="card-title"><span class="dot"></span>2차 마진 결과</div>
-          <div class="result-box">
-            <div class="result-row"><span class="result-label">1차 마진액</span><span class="result-value dim" id="r2-margin1">-</span></div>
-            <div class="result-row"><span class="result-label">건당 광고비</span><span class="result-value red" id="r2-adcost">-</span></div>
-          </div>
-          <div class="big-result" id="r2-box">
-            <div class="big-label">실수익 (광고비 차감 후)</div>
-            <div class="big-value" id="r2-margin">-</div>
-            <div class="big-sub" id="r2-rate">실수익률 -</div>
-          </div>
+          <div class="result-box"><div class="result-row"><span class="result-label">1차 마진액</span><span class="result-value" id="r2-margin1">-</span></div><div class="result-row"><span class="result-label">건당 광고비</span><span class="result-value red" id="r2-adcost">-</span></div></div>
+          <div class="big-result" id="r2-box"><div class="big-label">실수익 (광고비 차감 후)</div><div class="big-value" id="r2-margin">-</div><div class="big-sub" id="r2-rate">실수익률 -</div></div>
         </div>
       </div>
     </div>
-
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveCalc()">💾 이력 저장</button>
-      <button class="btn btn-ghost" onclick="resetCalc()">초기화</button>
-    </div>
+    <div class="btn-row"><button class="btn btn-primary" onclick="saveCalc()">💾 이력 저장</button><button class="btn btn-ghost" onclick="resetCalc()">초기화</button></div>
   </div>
-
-  <!-- TAB 2: B2B -->
   <div class="panel" id="tab-b2b">
     <div class="section-label">B2B 매입가 현황</div>
-    <div class="info-box" style="margin-bottom:14px">
-      💡 <b>최저가는 초록</b>으로 표시됩니다. 저장 시 전일가 기준이 업데이트되어 등락을 추적할 수 있습니다.
-    </div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <table class="b2b-table">
-        <thead>
-          <tr>
-            <th>상품명</th>
-            <th>단위</th>
-            <th>공급처 A</th>
-            <th>공급처 B</th>
-            <th>공급처 C</th>
-            <th>최저가</th>
-            <th>전일대비</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="b2bBody"></tbody>
-      </table>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="addB2BRow()">+ 품목 추가</button>
-      <button class="btn btn-ghost" onclick="saveB2BData()">💾 저장 (전일가 업데이트)</button>
-    </div>
-
+    <div class="info-box" style="margin-bottom:14px">💡 <b>최저가는 초록</b>으로 표시됩니다. 저장 시 전일가 기준이 업데이트되어 등락을 추적할 수 있습니다.</div>
+    <div class="card" style="padding:0;overflow:hidden"><table class="b2b-table"><thead><tr><th>상품명</th><th>단위</th><th>공급처 A</th><th>공급처 B</th><th>공급처 C</th><th>최저가</th><th>전일대비</th><th></th></tr></thead><tbody id="b2bBody"></tbody></table></div>
+    <div class="btn-row"><button class="btn btn-primary" onclick="addB2BRow()">+ 품목 추가</button><button class="btn btn-ghost" onclick="saveB2BData()">💾 저장 (전일가 업데이트)</button></div>
     <div class="section-label" style="margin-top:28px">공급처별 마진율 빠른 조회</div>
     <div class="card">
-      <div class="field-row">
-        <div class="field">
-          <label>상품 선택</label>
-          <select id="quickProduct" onchange="quickCalc()"><option value="">선택하세요</option></select>
-        </div>
-        <div class="field">
-          <label>쿠팡 판매가 (원)</label>
-          <input type="number" id="quickSalePrice" placeholder="0" oninput="quickCalc()">
-        </div>
-      </div>
-      <div class="result-box" id="quickResult">
-        <div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value dim">상품과 판매가를 입력하세요</span></div>
-      </div>
+      <div class="field-row"><div class="field"><label>상품 선택</label><select id="quickProduct" onchange="quickCalc()"><option value="">선택하세요</option></select></div><div class="field"><label>쿠팡 판매가 (원)</label><input type="number" id="quickSalePrice" placeholder="0" oninput="quickCalc()"></div></div>
+      <div class="result-box" id="quickResult"><div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value">상품과 판매가를 입력하세요</span></div></div>
     </div>
   </div>
-
-  <!-- TAB 3: 이력 -->
   <div class="panel" id="tab-history">
     <div class="section-label">계산 이력</div>
-    <div class="history-list" id="historyList">
-      <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-danger btn-sm" onclick="clearHistory()">이력 전체 삭제</button>
-    </div>
+    <div class="history-list" id="historyList"><div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div></div>
+    <div class="btn-row"><button class="btn btn-danger btn-sm" onclick="clearHistory()">이력 전체 삭제</button></div>
   </div>
-
 </div>
 <script>
-// ─── DATA ───
-let b2bProducts = [
-  { id:1, name:'사과', unit:'1kg', prices:[2800, 3100, 2950], prevLowest:2800 },
-  { id:2, name:'사과', unit:'2kg', prices:[5400, 5900, 5600], prevLowest:5600 },
-  { id:3, name:'참외', unit:'1kg', prices:[3200, 3000, 3100], prevLowest:3300 },
-  { id:4, name:'방울토마토', unit:'1kg', prices:[4500, 4200, 4400], prevLowest:4200 },
-  { id:5, name:'방울토마토', unit:'2kg', prices:[8600, 8200, 8500], prevLowest:8500 },
-];
-let history = JSON.parse(localStorage.getItem('marginHistory')||'[]');
-
-// ─── TABS ───
-function switchTab(name, btn) {
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+name).classList.add('active');
-  btn.classList.add('active');
-  if(name==='b2b') renderB2B();
-  if(name==='history') renderHistory();
-  if(name==='calc') renderProductChips();
-}
-
-// ─── CHIPS ───
-function renderProductChips() {
-  const container = document.getElementById('productChips');
-  const names = [...new Set(b2bProducts.map(p=>p.name))];
-  container.innerHTML = '';
-  names.forEach(name => {
-    const chip = document.createElement('div');
-    chip.className = 'product-chip';
-    chip.textContent = name;
-    chip.onclick = () => {
-      document.querySelectorAll('.product-chip').forEach(c=>c.classList.remove('active'));
-      chip.classList.add('active');
-      const products = b2bProducts.filter(p=>p.name===name);
-      if(!products.length) return;
-      const cheapest = products.reduce((a,b)=>{
-        const la = Math.min(...a.prices.filter(v=>v>0));
-        const lb = Math.min(...b.prices.filter(v=>v>0));
-        return la<=lb?a:b;
-      });
-      document.getElementById('calcProductName').value = name;
-      const lowest = Math.min(...cheapest.prices.filter(v=>v>0));
-      document.getElementById('costPrice').value = lowest;
-      const usel = document.getElementById('calcUnit');
-      for(let i=0;i<usel.options.length;i++) if(usel.options[i].value===cheapest.unit){usel.selectedIndex=i;break;}
-      document.getElementById('reverseCost').value = lowest;
-      calc1();
-    };
-    container.appendChild(chip);
-  });
-}
+let b2bProducts=[{id:1,name:'사과',unit:'1kg',prices:[2800,3100,2950],prevLowest:2800},{id:2,name:'사과',unit:'2kg',prices:[5400,5900,5600],prevLowest:5600},{id:3,name:'참외',unit:'1kg',prices:[3200,3000,3100],prevLowest:3300},{id:4,name:'방울토마토',unit:'1kg',prices:[4500,4200,4400],prevLowest:4200},{id:5,name:'방울토마토',unit:'2kg',prices:[8600,8200,8500],prevLowest:8500}];
+let history=JSON.parse(localStorage.getItem('marginHistory')||'[]');
+function switchTab(name,btn){document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.getElementById('tab-'+name).classList.add('active');btn.classList.add('active');if(name==='b2b')renderB2B();if(name==='history')renderHistory();if(name==='calc')renderProductChips();}
+function renderProductChips(){const container=document.getElementById('productChips');const names=[...new Set(b2bProducts.map(p=>p.name))];container.innerHTML='';names.forEach(name=>{const chip=document.createElement('div');chip.className='product-chip';chip.textContent=name;chip.onclick=()=>{document.querySelectorAll('.product-chip').forEach(c=>c.classList.remove('active'));chip.classList.add('active');const products=b2bProducts.filter(p=>p.name===name);if(!products.length)return;const cheapest=products.reduce((a,b)=>{const la=Math.min(...a.prices.filter(v=>v>0));const lb=Math.min(...b.prices.filter(v=>v>0));return la<=lb?a:b;});document.getElementById('calcProductName').value=name;const lowest=Math.min(...cheapest.prices.filter(v=>v>0));document.getElementById('costPrice').value=lowest;const usel=document.getElementById('calcUnit');for(let i=0;i<usel.options.length;i++)if(usel.options[i].value===cheapest.unit){usel.selectedIndex=i;break;}document.getElementById('reverseCost').value=lowest;calc1();};container.appendChild(chip);});}
 renderProductChips();
-
-// ─── FEE ───
-function getFeeRate() {
-  const v = document.getElementById('feeRate').value;
-  if(v==='custom') return (parseFloat(document.getElementById('customFee').value)||0)/100;
-  if(v==='0.1166b') return 0.1166;
-  return parseFloat(v);
-}
-function onFeeChange() {
-  document.getElementById('customFeeField').style.display = document.getElementById('feeRate').value==='custom'?'block':'none';
-  calc1();
-}
-
-// ─── CALC 1 ───
-function fmt(n) { return Math.round(n).toLocaleString('ko-KR')+'원'; }
-function fmtPct(n) { return n.toFixed(1)+'%'; }
-
-function calc1() {
-  const cost = parseFloat(document.getElementById('costPrice').value)||0;
-  const sale = parseFloat(document.getElementById('salePrice').value)||0;
-  const fee = getFeeRate();
-  const ids = ['r1-sale','r1-fee','r1-after','r1-cost','r1-margin','r1-rate'];
-  if(!sale||!cost){ids.forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='-';});return;}
-  const feeAmt = sale*fee;
-  const afterFee = sale-feeAmt;
-  const margin = afterFee-cost;
-  const rate = (margin/sale)*100;
-  document.getElementById('r1-sale').textContent = fmt(sale);
-  document.getElementById('r1-fee').textContent = '−'+fmt(feeAmt);
-  document.getElementById('r1-after').textContent = fmt(afterFee);
-  document.getElementById('r1-cost').textContent = '−'+fmt(cost);
-  document.getElementById('r1-margin').textContent = fmt(margin);
-  document.getElementById('r1-rate').textContent = '마진율 '+fmtPct(rate);
-  const box=document.getElementById('r1-box'), val=document.getElementById('r1-margin');
-  box.className='big-result'; val.className='big-value';
-  if(margin<0){box.classList.add('danger');val.classList.add('danger');}
-  else if(rate<15){box.classList.add('warning');val.classList.add('warning');}
-  document.getElementById('reverseCost').value = cost||'';
-  calcReverse(); calc2();
-}
-
-// ─── REVERSE ───
-function calcReverse() {
-  const rate = parseFloat(document.getElementById('targetRate').value)||0;
-  const cost = parseFloat(document.getElementById('reverseCost').value)||0;
-  const fee = getFeeRate();
-  if(!rate||!cost){['r-minPrice','r-minFee','r-minMargin'].forEach(id=>document.getElementById(id).textContent='-');return;}
-  const minSale = cost/(1-fee-rate/100);
-  const minFeeAmt = minSale*fee;
-  const minMargin = minSale-minFeeAmt-cost;
-  document.getElementById('r-minPrice').textContent = fmt(Math.ceil(minSale));
-  document.getElementById('r-minFee').textContent = fmt(minFeeAmt);
-  document.getElementById('r-minMargin').textContent = fmt(minMargin);
-}
-
-// ─── TOGGLE AD ───
-function toggleAd() {
-  document.getElementById('adSection').classList.toggle('hidden', !document.getElementById('adToggle').checked);
-}
-function toggleAdType() {
-  const t = document.getElementById('adType').value;
-  document.getElementById('adCpcFields').style.display = t==='cpc'?'block':'none';
-  document.getElementById('adRoasFields').style.display = t==='roas'?'block':'none';
-  document.getElementById('adFixedFields').style.display = t==='fixed'?'block':'none';
-  calc2();
-}
-
-// ─── CALC 2 ───
-function calc2() {
-  const sale = parseFloat(document.getElementById('salePrice').value)||0;
-  const cost = parseFloat(document.getElementById('costPrice').value)||0;
-  const fee = getFeeRate();
-  if(!sale||!cost) return;
-  const margin1 = sale-sale*fee-cost;
-  document.getElementById('r2-margin1').textContent = fmt(margin1);
-  const t = document.getElementById('adType').value;
-  let adCost=0;
-  if(t==='cpc'){const bid=parseFloat(document.getElementById('cpcBid').value)||0,cvr=parseFloat(document.getElementById('cpcCvr').value)||0;if(bid&&cvr)adCost=bid/(cvr/100);}
-  else if(t==='roas'){const roas=parseFloat(document.getElementById('roasTarget').value)||0;if(roas)adCost=sale/(roas/100);}
-  else adCost=parseFloat(document.getElementById('adFixed').value)||0;
-  const margin2=margin1-adCost, rate2=(margin2/sale)*100;
-  document.getElementById('r2-adcost').textContent = '−'+fmt(adCost);
-  document.getElementById('r2-margin').textContent = fmt(margin2);
-  document.getElementById('r2-rate').textContent = '실수익률 '+fmtPct(rate2);
-  const box=document.getElementById('r2-box'),val=document.getElementById('r2-margin');
-  box.className='big-result';val.className='big-value';
-  if(margin2<0){box.classList.add('danger');val.classList.add('danger');}
-  else if(rate2<10){box.classList.add('warning');val.classList.add('warning');}
-}
-
-// ─── SAVE / RESET ───
-function saveCalc() {
-  const product=document.getElementById('calcProductName').value||'미지정';
-  const unit=document.getElementById('calcUnit').value;
-  const cost=parseFloat(document.getElementById('costPrice').value)||0;
-  const sale=parseFloat(document.getElementById('salePrice').value)||0;
-  if(!cost||!sale){alert('매입가와 판매가를 입력하세요');return;}
-  const fee=getFeeRate(), feeAmt=sale*fee, margin=sale-feeAmt-cost, rate=(margin/sale)*100;
-  history.unshift({product,unit,cost,sale,margin:Math.round(margin),marginRate:rate.toFixed(1),date:new Date().toLocaleString('ko-KR')});
-  localStorage.setItem('marginHistory',JSON.stringify(history));
-  alert('저장되었습니다!');
-}
-function resetCalc() {
-  ['costPrice','salePrice','targetRate','reverseCost','cpcBid','cpcCvr','roasTarget','adFixed'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('calcProductName').value='';
-  document.querySelectorAll('.product-chip').forEach(c=>c.classList.remove('active'));
-  calc1();
-}
-
-// ─── B2B TABLE ───
-function renderB2B() {
-  const tbody=document.getElementById('b2bBody');
-  tbody.innerHTML='';
-  b2bProducts.forEach((p,idx)=>{
-    const valids=p.prices.filter(v=>v>0);
-    const lowest=valids.length?Math.min(...valids):0;
-    const prev=p.prevLowest||0;
-    let badge='';
-    if(prev&&lowest<prev) badge=`<span class="change-badge down">▼ ${(prev-lowest).toLocaleString()}</span>`;
-    else if(prev&&lowest>prev) badge=`<span class="change-badge up">▲ ${(lowest-prev).toLocaleString()}</span>`;
-    else badge=`<span class="change-badge same">—</span>`;
-    const cells=[0,1,2].map(i=>{
-      const isLowest=p.prices[i]&&p.prices[i]===lowest;
-      return `<td><input type="number" value="${p.prices[i]||''}" placeholder="-" 
-        style="width:90px${isLowest?';color:var(--green);font-weight:600':''}"
-        onchange="b2bProducts[${idx}].prices[${i}]=parseFloat(this.value)||0;renderB2B()"></td>`;
-    }).join('');
-    const row=document.createElement('tr');
-    row.innerHTML=`
-      <td><input type="text" value="${p.name}" onchange="b2bProducts[${idx}].name=this.value;updateQuickSelect()"></td>
-      <td><input type="text" value="${p.unit}" style="width:60px" onchange="b2bProducts[${idx}].unit=this.value"></td>
-      ${cells}
-      <td style="font-family:var(--mono);color:var(--green);font-weight:600">${lowest?lowest.toLocaleString()+'원':'-'}</td>
-      <td>${badge}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="removeB2BRow(${idx})">삭제</button></td>`;
-    tbody.appendChild(row);
-  });
-  updateQuickSelect();
-}
+function getFeeRate(){const v=document.getElementById('feeRate').value;if(v==='custom')return(parseFloat(document.getElementById('customFee').value)||0)/100;if(v==='0.1166b')return 0.1166;return parseFloat(v);}
+function onFeeChange(){document.getElementById('customFeeField').style.display=document.getElementById('feeRate').value==='custom'?'block':'none';calc1();}
+function fmt(n){return Math.round(n).toLocaleString('ko-KR')+'원';}
+function fmtPct(n){return n.toFixed(1)+'%';}
+function calc1(){const cost=parseFloat(document.getElementById('costPrice').value)||0;const sale=parseFloat(document.getElementById('salePrice').value)||0;const fee=getFeeRate();if(!sale||!cost){['r1-sale','r1-fee','r1-after','r1-cost','r1-margin','r1-rate'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='-';});return;}const feeAmt=sale*fee,afterFee=sale-feeAmt,margin=afterFee-cost,rate=(margin/sale)*100;document.getElementById('r1-sale').textContent=fmt(sale);document.getElementById('r1-fee').textContent='−'+fmt(feeAmt);document.getElementById('r1-after').textContent=fmt(afterFee);document.getElementById('r1-cost').textContent='−'+fmt(cost);document.getElementById('r1-margin').textContent=fmt(margin);document.getElementById('r1-rate').textContent='마진율 '+fmtPct(rate);const box=document.getElementById('r1-box'),val=document.getElementById('r1-margin');box.className='big-result';val.className='big-value';if(margin<0){box.classList.add('danger');val.classList.add('danger');}else if(rate<15){box.classList.add('warning');val.classList.add('warning');}document.getElementById('reverseCost').value=cost||'';calcReverse();calc2();}
+function calcReverse(){const rate=parseFloat(document.getElementById('targetRate').value)||0;const cost=parseFloat(document.getElementById('reverseCost').value)||0;const fee=getFeeRate();if(!rate||!cost){['r-minPrice','r-minFee','r-minMargin'].forEach(id=>document.getElementById(id).textContent='-');return;}const minSale=cost/(1-fee-rate/100);document.getElementById('r-minPrice').textContent=fmt(Math.ceil(minSale));document.getElementById('r-minFee').textContent=fmt(minSale*fee);document.getElementById('r-minMargin').textContent=fmt(minSale-minSale*fee-cost);}
+function toggleAd(){document.getElementById('adSection').classList.toggle('hidden',!document.getElementById('adToggle').checked);}
+function toggleAdType(){const t=document.getElementById('adType').value;document.getElementById('adCpcFields').style.display=t==='cpc'?'block':'none';document.getElementById('adRoasFields').style.display=t==='roas'?'block':'none';document.getElementById('adFixedFields').style.display=t==='fixed'?'block':'none';calc2();}
+function calc2(){const sale=parseFloat(document.getElementById('salePrice').value)||0;const cost=parseFloat(document.getElementById('costPrice').value)||0;const fee=getFeeRate();if(!sale||!cost)return;const margin1=sale-sale*fee-cost;document.getElementById('r2-margin1').textContent=fmt(margin1);const t=document.getElementById('adType').value;let adCost=0;if(t==='cpc'){const bid=parseFloat(document.getElementById('cpcBid').value)||0,cvr=parseFloat(document.getElementById('cpcCvr').value)||0;if(bid&&cvr)adCost=bid/(cvr/100);}else if(t==='roas'){const roas=parseFloat(document.getElementById('roasTarget').value)||0;if(roas)adCost=sale/(roas/100);}else adCost=parseFloat(document.getElementById('adFixed').value)||0;const margin2=margin1-adCost,rate2=(margin2/sale)*100;document.getElementById('r2-adcost').textContent='−'+fmt(adCost);document.getElementById('r2-margin').textContent=fmt(margin2);document.getElementById('r2-rate').textContent='실수익률 '+fmtPct(rate2);const box=document.getElementById('r2-box'),val=document.getElementById('r2-margin');box.className='big-result';val.className='big-value';if(margin2<0){box.classList.add('danger');val.classList.add('danger');}else if(rate2<10){box.classList.add('warning');val.classList.add('warning');}}
+function saveCalc(){const product=document.getElementById('calcProductName').value||'미지정';const unit=document.getElementById('calcUnit').value;const cost=parseFloat(document.getElementById('costPrice').value)||0;const sale=parseFloat(document.getElementById('salePrice').value)||0;if(!cost||!sale){alert('매입가와 판매가를 입력하세요');return;}const fee=getFeeRate(),feeAmt=sale*fee,margin=sale-feeAmt-cost,rate=(margin/sale)*100;history.unshift({product,unit,cost,sale,margin:Math.round(margin),marginRate:rate.toFixed(1),date:new Date().toLocaleString('ko-KR')});localStorage.setItem('marginHistory',JSON.stringify(history));alert('저장되었습니다!');}
+function resetCalc(){['costPrice','salePrice','targetRate','reverseCost','cpcBid','cpcCvr','roasTarget','adFixed'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('calcProductName').value='';document.querySelectorAll('.product-chip').forEach(c=>c.classList.remove('active'));calc1();}
+function renderB2B(){const tbody=document.getElementById('b2bBody');tbody.innerHTML='';b2bProducts.forEach((p,idx)=>{const valids=p.prices.filter(v=>v>0);const lowest=valids.length?Math.min(...valids):0;const prev=p.prevLowest||0;let badge='';if(prev&&lowest<prev)badge=`<span class="change-badge down">▼ ${(prev-lowest).toLocaleString()}</span>`;else if(prev&&lowest>prev)badge=`<span class="change-badge up">▲ ${(lowest-prev).toLocaleString()}</span>`;else badge=`<span class="change-badge same">—</span>`;const cells=[0,1,2].map(i=>{const isLowest=p.prices[i]&&p.prices[i]===lowest;return`<td><input type="number" value="${p.prices[i]||''}" placeholder="-" style="width:90px${isLowest?';color:var(--green);font-weight:600':''}" onchange="b2bProducts[${idx}].prices[${i}]=parseFloat(this.value)||0;renderB2B()"></td>`;}).join('');const row=document.createElement('tr');row.innerHTML=`<td><input type="text" value="${p.name}" onchange="b2bProducts[${idx}].name=this.value;updateQuickSelect()"></td><td><input type="text" value="${p.unit}" style="width:60px" onchange="b2bProducts[${idx}].unit=this.value"></td>${cells}<td style="font-family:var(--mono);color:var(--green);font-weight:600">${lowest?lowest.toLocaleString()+'원':'-'}</td><td>${badge}</td><td><button class="btn btn-danger btn-sm" onclick="removeB2BRow(${idx})">삭제</button></td>`;tbody.appendChild(row);});updateQuickSelect();}
 function addB2BRow(){b2bProducts.push({id:Date.now(),name:'신규품목',unit:'1kg',prices:[0,0,0],prevLowest:0});renderB2B();}
 function removeB2BRow(idx){b2bProducts.splice(idx,1);renderB2B();}
-function saveB2BData(){
-  b2bProducts=b2bProducts.map(p=>{const v=p.prices.filter(x=>x>0);return{...p,prevLowest:v.length?Math.min(...v):0};});
-  renderB2B(); renderProductChips();
-  alert('저장되었습니다! 오늘 가격이 전일가로 기록됩니다.');
-}
-function updateQuickSelect(){
-  const sel=document.getElementById('quickProduct');
-  const prev=sel.value; sel.innerHTML='<option value="">선택하세요</option>';
-  b2bProducts.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${p.name} (${p.unit})`;sel.appendChild(o);});
-  if(prev)sel.value=prev;
-}
-function quickCalc(){
-  const idx=document.getElementById('quickProduct').value;
-  const sale=parseFloat(document.getElementById('quickSalePrice').value)||0;
-  const container=document.getElementById('quickResult');
-  if(!idx||!sale){container.innerHTML='<div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value dim">상품과 판매가를 입력하세요</span></div>';return;}
-  const p=b2bProducts[parseInt(idx)];
-  const fee=0.1166, feeAmt=sale*fee, afterFee=sale-feeAmt;
-  container.innerHTML=['A','B','C'].map((name,i)=>{
-    const cost=p.prices[i];
-    if(!cost) return `<div class="result-row"><span class="result-label">공급처 ${name}</span><span class="result-value dim">가격 없음</span></div>`;
-    const margin=afterFee-cost, rate=(margin/sale)*100;
-    const cls=margin<0?'red':rate<15?'yellow':'green';
-    return `<div class="result-row"><span class="result-label">공급처 ${name} (매입 ${cost.toLocaleString()}원)</span><span class="result-value ${cls}">${Math.round(margin).toLocaleString()}원 · ${rate.toFixed(1)}%</span></div>`;
-  }).join('');
-}
-
-// ─── HISTORY ───
-function renderHistory(){
-  const container=document.getElementById('historyList');
-  if(!history.length){container.innerHTML='<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>';return;}
-  container.innerHTML=history.map(h=>{
-    const cls=h.margin<0?'red':parseFloat(h.marginRate)<15?'yellow':'green';
-    return `<div class="history-item">
-      <div>
-        <div style="font-size:14px;font-weight:600">${h.product} <span style="font-size:12px;color:var(--text-dim)">(${h.unit})</span></div>
-        <div class="history-meta">매입 ${h.cost.toLocaleString()}원 → 판매 ${h.sale.toLocaleString()}원 · ${h.date}</div>
-      </div>
-      <div style="text-align:right">
-        <div class="history-margin ${cls}">${h.margin.toLocaleString()}원</div>
-        <div style="font-size:11px;color:var(--text-dim)">${h.marginRate}%</div>
-      </div>
-    </div>`;
-  }).join('');
-}
+function saveB2BData(){b2bProducts=b2bProducts.map(p=>{const v=p.prices.filter(x=>x>0);return{...p,prevLowest:v.length?Math.min(...v):0};});renderB2B();renderProductChips();alert('저장되었습니다! 오늘 가격이 전일가로 기록됩니다.');}
+function updateQuickSelect(){const sel=document.getElementById('quickProduct');const prev=sel.value;sel.innerHTML='<option value="">선택하세요</option>';b2bProducts.forEach((p,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${p.name} (${p.unit})`;sel.appendChild(o);});if(prev)sel.value=prev;}
+function quickCalc(){const idx=document.getElementById('quickProduct').value;const sale=parseFloat(document.getElementById('quickSalePrice').value)||0;const container=document.getElementById('quickResult');if(!idx||!sale){container.innerHTML='<div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value">상품과 판매가를 입력하세요</span></div>';return;}const p=b2bProducts[parseInt(idx)];const fee=0.1166,feeAmt=sale*fee,afterFee=sale-feeAmt;container.innerHTML=['A','B','C'].map((name,i)=>{const cost=p.prices[i];if(!cost)return`<div class="result-row"><span class="result-label">공급처 ${name}</span><span class="result-value" style="color:var(--text-dim)">가격 없음</span></div>`;const margin=afterFee-cost,rate=(margin/sale)*100;const cls=margin<0?'red':rate<15?'yellow':'green';return`<div class="result-row"><span class="result-label">공급처 ${name} (매입 ${cost.toLocaleString()}원)</span><span class="result-value ${cls}">${Math.round(margin).toLocaleString()}원 · ${rate.toFixed(1)}%</span></div>`;}).join('');}
+function renderHistory(){const container=document.getElementById('historyList');if(!history.length){container.innerHTML='<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>';return;}container.innerHTML=history.map(h=>{const cls=h.margin<0?'red':parseFloat(h.marginRate)<15?'yellow':'green';return`<div class="history-item"><div><div style="font-size:14px;font-weight:600">${h.product} <span style="font-size:12px;color:var(--text-dim)">(${h.unit})</span></div><div class="history-meta">매입 ${h.cost.toLocaleString()}원 → 판매 ${h.sale.toLocaleString()}원 · ${h.date}</div></div><div style="text-align:right"><div class="history-margin ${cls}">${h.margin.toLocaleString()}원</div><div style="font-size:12px;color:var(--text-dim)">${h.marginRate}%</div></div></div>`;}).join('');}
 function clearHistory(){if(confirm('이력을 모두 삭제할까요?')){history=[];localStorage.setItem('marginHistory',JSON.stringify(history));renderHistory();}}
-
 renderB2B();
 </script>
 </body>
