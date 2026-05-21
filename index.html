@@ -128,6 +128,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .unit-combo { display: flex; gap: 8px; }
 .unit-combo input { flex: 1; min-width: 0; }
 .unit-combo select { flex: 1; min-width: 0; }
+/* 과세/면세 토글 */
+.tax-toggle { display: flex; gap: 2px; background: var(--surface3); border-radius: 8px; padding: 3px; }
+.tax-btn { flex: 1; padding: 7px 12px; border-radius: 6px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.tax-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.tax-btn.active.taxable { color: var(--red); }
+.fee-note { font-size: 12px; color: var(--green); background: var(--green-bg); border: 1px solid rgba(29,131,72,0.2); border-radius: 7px; padding: 8px 12px; margin-top: 2px; }
 /* 인포박스 */
 .info-box { background: #e8f4fd; border: 1px solid rgba(0,113,227,0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #0056b3; line-height: 1.6; }
 /* 이력 */
@@ -205,13 +211,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="two-col">
       <div class="card">
         <div class="card-title"><span class="dot"></span>입력값</div>
+        <div class="field">
+          <label>과세 구분</label>
+          <div class="tax-toggle">
+            <button class="tax-btn active" id="taxBtnExempt" onclick="setTax('exempt')">면세</button>
+            <button class="tax-btn taxable" id="taxBtnTaxable" onclick="setTax('taxable')">과세</button>
+          </div>
+        </div>
         <div class="field"><label>B2B 매입가 (원/단위)</label><input type="number" id="costPrice" placeholder="0" oninput="calc1()"></div>
         <div class="field"><label>쿠팡 판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
-        <div class="field">
+        <div class="field" id="feeRateField" style="display:none">
           <label>쿠팡 수수료율</label>
           <select id="feeRate" onchange="onFeeChange()">
             <option value="0.1166" selected>과일·채소 11.66% (부가세포함)</option>
-            <option value="0.106">과일·채소 10.6% (부가세제외)</option>
             <option value="0.1166b">수산물 11.66%</option>
             <option value="custom">직접입력</option>
           </select>
@@ -220,6 +232,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <label>수수료율 직접입력 (%)</label>
           <input type="number" id="customFee" placeholder="0.00" step="0.01" oninput="calc1()">
         </div>
+        <div id="exemptFeeNote" class="fee-note">면세 상품 — 실질수수료 10.6% 자동 적용</div>
       </div>
       <div class="card">
         <div class="card-title"><span class="dot"></span>1차 마진 결과</div>
@@ -228,6 +241,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <div class="result-row"><span class="result-label">쿠팡 수수료</span><span class="result-value red" id="r1-fee">-</span></div>
           <div class="result-row"><span class="result-label">수수료 차감 후</span><span class="result-value" id="r1-after">-</span></div>
           <div class="result-row"><span class="result-label">매입가</span><span class="result-value red" id="r1-cost">-</span></div>
+          <div class="result-row" id="r1-vat-row" style="display:none"><span class="result-label">부가세 납부액</span><span class="result-value red" id="r1-vat">-</span></div>
         </div>
         <div class="big-result" id="r1-box">
           <div class="big-label">1차 마진</div>
@@ -468,8 +482,24 @@ async function loadApiPrices() {
   } catch (e) { alert('가격 불러오기 실패: ' + e.message); }
 }
 
+// ── 과세/면세 ────────────────────────────────────────────────────────────────
+let taxType = 'exempt'; // 'exempt' | 'taxable'
+
+function setTax(type) {
+  taxType = type;
+  document.getElementById('taxBtnExempt').classList.toggle('active', type === 'exempt');
+  document.getElementById('taxBtnTaxable').classList.toggle('active', type === 'taxable');
+  document.getElementById('feeRateField').style.display   = type === 'taxable' ? 'block' : 'none';
+  document.getElementById('customFeeField').style.display =
+    type === 'taxable' && document.getElementById('feeRate').value === 'custom' ? 'block' : 'none';
+  document.getElementById('exemptFeeNote').style.display  = type === 'exempt' ? 'block' : 'none';
+  document.getElementById('r1-vat-row').style.display     = type === 'taxable' ? 'flex' : 'none';
+  calc1();
+}
+
 // ── 마진 계산 ────────────────────────────────────────────────────────────────
 function getFeeRate() {
+  if (taxType === 'exempt') return 0.106; // 면세: 10.6% 고정
   const v = document.getElementById('feeRate').value;
   if (v === 'custom') return (parseFloat(document.getElementById('customFee').value) || 0) / 100;
   if (v === '0.1166b') return 0.1166;
@@ -486,20 +516,34 @@ function fmtPct(n) { return n.toFixed(1) + '%'; }
 function calc1() {
   const cost = parseFloat(document.getElementById('costPrice').value) || 0;
   const sale = parseFloat(document.getElementById('salePrice').value) || 0;
-  const fee = getFeeRate();
+  const fee  = getFeeRate();
   if (!sale || !cost) {
-    ['r1-sale','r1-fee','r1-after','r1-cost','r1-margin','r1-rate'].forEach(id => {
+    ['r1-sale','r1-fee','r1-after','r1-cost','r1-vat','r1-margin','r1-rate'].forEach(id => {
       const el = document.getElementById(id); if (el) el.textContent = '-';
     });
     return;
   }
-  const feeAmt = sale * fee, afterFee = sale - feeAmt, margin = afterFee - cost, rate = (margin / sale) * 100;
-  document.getElementById('r1-sale').textContent = fmt(sale);
-  document.getElementById('r1-fee').textContent = '−' + fmt(feeAmt);
+  const feeAmt  = sale * fee;
+  const afterFee = sale - feeAmt;
+
+  // 과세: 부가세 납부액 = 판매가/11 - (공급가/11 + 쿠팡수수료/11)
+  let vatPayable = 0;
+  if (taxType === 'taxable') {
+    vatPayable = sale / 11 - (cost / 11 + feeAmt / 11);
+  }
+
+  const margin = afterFee - cost - vatPayable;
+  const rate   = (margin / sale) * 100;
+
+  document.getElementById('r1-sale').textContent  = fmt(sale);
+  document.getElementById('r1-fee').textContent   = '−' + fmt(feeAmt);
   document.getElementById('r1-after').textContent = fmt(afterFee);
-  document.getElementById('r1-cost').textContent = '−' + fmt(cost);
+  document.getElementById('r1-cost').textContent  = '−' + fmt(cost);
+  if (taxType === 'taxable') {
+    document.getElementById('r1-vat').textContent = '−' + fmt(vatPayable);
+  }
   document.getElementById('r1-margin').textContent = fmt(margin);
-  document.getElementById('r1-rate').textContent = '마진율 ' + fmtPct(rate);
+  document.getElementById('r1-rate').textContent   = '마진율 ' + fmtPct(rate);
   const box = document.getElementById('r1-box'), val = document.getElementById('r1-margin');
   box.className = 'big-result'; val.className = 'big-value';
   if (margin < 0) { box.classList.add('danger'); val.classList.add('danger'); }
