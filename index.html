@@ -134,6 +134,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .tax-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 .tax-btn.active.taxable { color: var(--red); }
 .fee-note { font-size: 12px; color: var(--green); background: var(--green-bg); border: 1px solid rgba(29,131,72,0.2); border-radius: 7px; padding: 8px 12px; margin-top: 2px; }
+/* 매입가 입력 방식 토글 */
+.cost-mode-toggle { display: flex; gap: 2px; background: var(--surface3); border-radius: 8px; padding: 3px; margin-bottom: 10px; }
+.cost-mode-btn { flex: 1; padding: 6px 10px; border-radius: 6px; border: none; background: transparent; color: var(--text-dim); font-size: 12px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.cost-mode-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.b2b-pick { display: flex; flex-direction: column; gap: 8px; }
+.b2b-pick select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: var(--sans); padding: 9px 12px; outline: none; transition: all 0.15s; -webkit-appearance: none; }
+.b2b-pick select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); background: #fff; }
+.b2b-pick-supplier { display: flex; gap: 6px; }
+.b2b-pick-supplier button { flex: 1; padding: 8px 4px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.b2b-pick-supplier button.active { background: var(--green-light); border-color: rgba(29,131,72,0.35); color: var(--green); font-weight: 600; }
+.b2b-pick-supplier button:disabled { opacity: 0.35; cursor: default; }
+.cost-from-b2b { font-size: 12px; color: var(--text-dim); background: var(--surface2); border-radius: 7px; padding: 7px 12px; text-align: center; }
 /* 인포박스 */
 .info-box { background: #e8f4fd; border: 1px solid rgba(0,113,227,0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #0056b3; line-height: 1.6; }
 /* 이력 */
@@ -218,7 +230,29 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <button class="tax-btn taxable" id="taxBtnTaxable" onclick="setTax('taxable')">과세</button>
           </div>
         </div>
-        <div class="field"><label>B2B 매입가 (원/단위)</label><input type="number" id="costPrice" placeholder="0" oninput="calc1()"></div>
+        <div class="field">
+          <label>B2B 매입가 (원/단위)</label>
+          <div class="cost-mode-toggle">
+            <button class="cost-mode-btn active" id="costModeManual" onclick="setCostMode('manual')">✏️ 직접 입력</button>
+            <button class="cost-mode-btn" id="costModeB2B" onclick="setCostMode('b2b')">📦 B2B에서 불러오기</button>
+          </div>
+          <!-- 직접 입력 -->
+          <div id="costManualArea">
+            <input type="number" id="costPrice" placeholder="0" oninput="calc1()">
+          </div>
+          <!-- B2B 불러오기 -->
+          <div id="costB2BArea" style="display:none" class="b2b-pick">
+            <select id="b2bProductSelect" onchange="onB2BProductSelect()">
+              <option value="">상품 선택…</option>
+            </select>
+            <div class="b2b-pick-supplier">
+              <button id="supBtn0" onclick="onB2BSupplierSelect(0)" disabled>공급처 A<br><span id="supPrice0" style="font-size:11px">-</span></button>
+              <button id="supBtn1" onclick="onB2BSupplierSelect(1)" disabled>공급처 B<br><span id="supPrice1" style="font-size:11px">-</span></button>
+              <button id="supBtn2" onclick="onB2BSupplierSelect(2)" disabled>공급처 C<br><span id="supPrice2" style="font-size:11px">-</span></button>
+            </div>
+            <div class="cost-from-b2b" id="costFromB2BNote">상품과 공급처를 선택하면 매입가가 자동 입력됩니다</div>
+          </div>
+        </div>
         <div class="field"><label>쿠팡 판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
         <div class="field" id="feeRateField" style="display:none">
           <label>쿠팡 수수료율</label>
@@ -393,6 +427,7 @@ function switchTab(name, btn) {
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
   if (name === 'b2b') { renderB2B(); }
+  if (name === 'calc' && costInputMode === 'b2b') { populateB2BProductSelect(); }
   if (name === 'history') renderHistory();
   if (name === 'shortcuts') renderShortcuts();
 }
@@ -482,6 +517,86 @@ async function loadApiPrices() {
   } catch (e) { alert('가격 불러오기 실패: ' + e.message); }
 }
 
+// ── 매입가 입력 방식 ─────────────────────────────────────────────────────────
+let costInputMode = 'manual'; // 'manual' | 'b2b'
+let b2bCostValue  = 0;        // B2B 모드에서 선택된 매입가
+
+function setCostMode(mode) {
+  costInputMode = mode;
+  document.getElementById('costModeManual').classList.toggle('active', mode === 'manual');
+  document.getElementById('costModeB2B').classList.toggle('active', mode === 'b2b');
+  document.getElementById('costManualArea').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('costB2BArea').style.display    = mode === 'b2b'    ? 'block' : 'none';
+  if (mode === 'b2b') populateB2BProductSelect();
+  b2bCostValue = 0;
+  calc1();
+}
+
+function populateB2BProductSelect() {
+  const sel = document.getElementById('b2bProductSelect');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">상품 선택…</option>';
+  b2bProducts.forEach((p, i) => {
+    const hasPrice = p.prices.some(v => v > 0);
+    if (!hasPrice) return;
+    const o = document.createElement('option');
+    o.value = i;
+    o.textContent = `${p.name}${p.unit ? ' (' + p.unit + ')' : ''}`;
+    sel.appendChild(o);
+  });
+  if (prev) sel.value = prev;
+  onB2BProductSelect();
+}
+
+function onB2BProductSelect() {
+  const idx = document.getElementById('b2bProductSelect').value;
+  const btns = [0, 1, 2].map(i => document.getElementById('supBtn' + i));
+  const spans = [0, 1, 2].map(i => document.getElementById('supPrice' + i));
+
+  if (idx === '') {
+    btns.forEach((b, i) => { b.disabled = true; b.classList.remove('active'); spans[i].textContent = '-'; });
+    b2bCostValue = 0;
+    document.getElementById('costFromB2BNote').textContent = '상품과 공급처를 선택하면 매입가가 자동 입력됩니다';
+    calc1(); return;
+  }
+
+  const p = b2bProducts[parseInt(idx)];
+  btns.forEach((btn, i) => {
+    const price = p.prices[i];
+    btn.classList.remove('active');
+    if (price > 0) {
+      btn.disabled = false;
+      spans[i].textContent = price.toLocaleString() + '원';
+    } else {
+      btn.disabled = true;
+      spans[i].textContent = '-';
+    }
+  });
+
+  // 상품명·단위 자동 반영
+  document.getElementById('calcProductName').value = p.name;
+  b2bCostValue = 0;
+  document.getElementById('costFromB2BNote').textContent = '공급처를 선택하면 매입가가 자동 입력됩니다';
+  calc1();
+}
+
+function onB2BSupplierSelect(supplierIdx) {
+  const productIdx = document.getElementById('b2bProductSelect').value;
+  if (productIdx === '') return;
+  const p = b2bProducts[parseInt(productIdx)];
+  const price = p.prices[supplierIdx];
+  if (!price) return;
+
+  // 버튼 active 상태
+  [0, 1, 2].forEach(i => document.getElementById('supBtn' + i).classList.toggle('active', i === supplierIdx));
+
+  b2bCostValue = price;
+  const label = ['A', 'B', 'C'][supplierIdx];
+  document.getElementById('costFromB2BNote').textContent =
+    `공급처 ${label} · ${price.toLocaleString()}원 반영됨`;
+  calc1();
+}
+
 // ── 과세/면세 ────────────────────────────────────────────────────────────────
 let taxType = 'exempt'; // 'exempt' | 'taxable'
 
@@ -514,7 +629,9 @@ function fmt(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
 function fmtPct(n) { return n.toFixed(1) + '%'; }
 
 function calc1() {
-  const cost = parseFloat(document.getElementById('costPrice').value) || 0;
+  const cost = costInputMode === 'b2b'
+    ? b2bCostValue
+    : (parseFloat(document.getElementById('costPrice').value) || 0);
   const sale = parseFloat(document.getElementById('salePrice').value) || 0;
   const fee  = getFeeRate();
   if (!sale || !cost) {
@@ -624,6 +741,15 @@ function resetCalc() {
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('calcProductName').value = '';
   document.getElementById('calcUnitType').selectedIndex = 0;
+  // B2B 모드 초기화
+  b2bCostValue = 0;
+  document.getElementById('b2bProductSelect').value = '';
+  [0,1,2].forEach(i => {
+    document.getElementById('supBtn'+i).classList.remove('active');
+    document.getElementById('supPrice'+i).textContent = '-';
+    document.getElementById('supBtn'+i).disabled = true;
+  });
+  document.getElementById('costFromB2BNote').textContent = '상품과 공급처를 선택하면 매입가가 자동 입력됩니다';
   calc1();
 }
 
