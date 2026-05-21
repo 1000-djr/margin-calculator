@@ -179,6 +179,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .shortcut-card-actions { display: flex; gap: 6px; }
 .shortcut-open-btn { flex: 1; padding: 6px 10px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: var(--sans); transition: background 0.15s; }
 .shortcut-open-btn:hover { background: #0077ed; }
+/* 판매 매체 선택 */
+.platform-toggle { display: flex; flex-wrap: wrap; gap: 6px; }
+.platform-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.platform-btn:hover:not(.active) { border-color: var(--accent); color: var(--accent); background: #f0f5ff; }
+.platform-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 2px 6px rgba(0,113,227,0.25); }
+.platform-rate { font-size: 11px; font-family: var(--mono); }
+/* 설정 탭 */
+.plat-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.plat-table th { text-align: left; padding: 10px 14px; color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.plat-table td { padding: 8px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.plat-table tr:last-child td { border-bottom: none; }
+.plat-table td input { background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 13px; padding: 4px 8px; outline: none; transition: all 0.15s; }
+.plat-table td input:focus { border-color: var(--accent); background: var(--surface2); box-shadow: 0 0 0 2px rgba(0,113,227,0.1); }
 @media (max-width: 700px) {
   .two-col { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }
@@ -196,13 +209,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <h1>농수산물 마진 계산기</h1>
       <p>쿠팡 위탁 · B2B 매입가 실시간 관리</p>
     </div>
-    <div class="header-right"><span class="badge">쿠팡 11.66%</span></div>
+    <div class="header-right"><span class="badge" id="headerBadge">쿠팡 11.66%</span></div>
   </div>
   <div class="tabs">
     <button class="tab active" onclick="switchTab('calc', this)">💰 마진 계산</button>
     <button class="tab" onclick="switchTab('b2b', this)">📦 B2B 매입가</button>
     <button class="tab" onclick="switchTab('history', this)">📋 계산 이력</button>
     <button class="tab" onclick="switchTab('shortcuts', this)">🔗 바로가기</button>
+    <button class="tab" onclick="switchTab('settings', this)">⚙️ 설정</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -226,6 +240,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             </select>
           </div>
         </div>
+      </div>
+    </div>
+    <div class="section-label">판매 매체</div>
+    <div class="card" style="padding:14px 16px;margin-bottom:20px">
+      <div id="platformBtns" class="platform-toggle"></div>
+      <div id="customPlatformArea" style="display:none;margin-top:12px">
+        <label style="font-size:12px;color:var(--text-dim);font-weight:500;display:block;margin-bottom:6px">수수료율 직접입력 (%)</label>
+        <input type="number" id="customPlatformRate" placeholder="예: 10.5" step="0.01" style="width:180px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:15px;font-family:var(--mono);padding:10px 12px;outline:none;transition:all 0.15s" oninput="onCustomPlatformRate()">
       </div>
     </div>
     <div class="section-label">① 1차 마진 계산 (광고비 제외)</div>
@@ -258,26 +280,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <div class="cost-from-b2b" id="costFromB2BNote">상품과 공급처를 선택하면 매입가가 자동 입력됩니다</div>
           </div>
         </div>
-        <div class="field"><label>쿠팡 판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
-        <div class="field" id="feeRateField" style="display:none">
-          <label>쿠팡 수수료율</label>
-          <select id="feeRate" onchange="onFeeChange()">
-            <option value="0.1166" selected>과일·채소 11.66% (부가세포함)</option>
-            <option value="0.1166b">수산물 11.66%</option>
-            <option value="custom">직접입력</option>
-          </select>
-        </div>
-        <div class="field" id="customFeeField" style="display:none">
-          <label>수수료율 직접입력 (%)</label>
-          <input type="number" id="customFee" placeholder="0.00" step="0.01" oninput="calc1()">
-        </div>
-        <div id="exemptFeeNote" class="fee-note">면세 상품 — 실질수수료 10.6% 자동 적용</div>
+        <div class="field"><label>판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
+        <div id="exemptFeeNote" class="fee-note">면세 상품 — 실질수수료 자동 적용</div>
       </div>
       <div class="card">
         <div class="card-title"><span class="dot"></span>1차 마진 결과</div>
         <div class="result-box">
           <div class="result-row"><span class="result-label">판매가</span><span class="result-value" id="r1-sale">-</span></div>
-          <div class="result-row"><span class="result-label">쿠팡 수수료</span><span class="result-value red" id="r1-fee">-</span></div>
+          <div class="result-row"><span class="result-label" id="r1-fee-label">플랫폼 수수료</span><span class="result-value red" id="r1-fee">-</span></div>
           <div class="result-row"><span class="result-label">수수료 차감 후</span><span class="result-value" id="r1-after">-</span></div>
           <div class="result-row"><span class="result-label">매입가</span><span class="result-value red" id="r1-cost">-</span></div>
           <div class="result-row" id="r1-vat-row" style="display:none"><span class="result-label">부가세 납부액</span><span class="result-value red" id="r1-vat">-</span></div>
@@ -297,7 +307,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
       <div class="result-box">
         <div class="result-row"><span class="result-label">필요 최소 판매가</span><span class="result-value green" id="r-minPrice">-</span></div>
-        <div class="result-row"><span class="result-label">이 가격의 쿠팡 수수료</span><span class="result-value red" id="r-minFee">-</span></div>
+        <div class="result-row"><span class="result-label" id="r-minFee-label">플랫폼 수수료</span><span class="result-value red" id="r-minFee">-</span></div>
         <div class="result-row"><span class="result-label">예상 마진액</span><span class="result-value green" id="r-minMargin">-</span></div>
       </div>
     </div>
@@ -379,6 +389,36 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
+  <!-- ══ 설정 탭 ══════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-settings">
+    <div class="section-label">판매 매체 관리</div>
+    <div class="info-box" style="margin-bottom:14px">
+      📌 마진 계산 탭에서 사용할 <b>판매 매체와 수수료율</b>을 관리합니다. 면세 상품은 수수료율에서 부가세(10%)를 제거한 실질수수료가 자동 적용됩니다.
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>새 매체 추가</div>
+      <div class="field-row">
+        <div class="field">
+          <label>매체명</label>
+          <input type="text" id="platNameInput" placeholder="예: 위메프">
+        </div>
+        <div class="field">
+          <label>수수료율 (%)</label>
+          <input type="number" id="platRateInput" placeholder="예: 8.5" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-primary" onclick="addPlatform()">+ 매체 추가</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="plat-table">
+        <thead><tr><th>매체명</th><th>수수료율</th><th>면세 실질수수료</th><th></th></tr></thead>
+        <tbody id="platListBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- ══ 바로가기 탭 ════════════════════════════════════════════════ -->
   <div class="panel" id="tab-shortcuts">
     <div class="section-label">사이트 바로가기 등록</div>
@@ -405,6 +445,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
 <script>
 // ── 데이터 ───────────────────────────────────────────────────────────────────
+// 판매 매체
+let platforms = JSON.parse(localStorage.getItem('platforms') || 'null') || [
+  {id:1, name:'쿠팡',        rate:11.66},
+  {id:2, name:'스마트스토어', rate:5.85},
+  {id:3, name:'11번가',      rate:7.7},
+  {id:4, name:'옥션/G마켓',  rate:12},
+];
+let selectedPlatformId = platforms[0].id; // 기본값: 첫 번째 매체
+function savePlatforms() { localStorage.setItem('platforms', JSON.stringify(platforms)); }
+
 let suppliers = JSON.parse(localStorage.getItem('b2bSuppliers') || 'null') || [
   {id: 1, name: '공급처 A'},
   {id: 2, name: '공급처 B'},
@@ -438,6 +488,7 @@ function switchTab(name, btn) {
   if (name === 'calc' && costInputMode === 'b2b') { populateB2BProductSelect(); }
   if (name === 'history') renderHistory();
   if (name === 'shortcuts') renderShortcuts();
+  if (name === 'settings') renderPlatformList();
 }
 
 // ── B2B 사이트 등록 (API) ────────────────────────────────────────────────────
@@ -622,26 +673,118 @@ function setTax(type) {
   taxType = type;
   document.getElementById('taxBtnExempt').classList.toggle('active', type === 'exempt');
   document.getElementById('taxBtnTaxable').classList.toggle('active', type === 'taxable');
-  document.getElementById('feeRateField').style.display   = type === 'taxable' ? 'block' : 'none';
-  document.getElementById('customFeeField').style.display =
-    type === 'taxable' && document.getElementById('feeRate').value === 'custom' ? 'block' : 'none';
-  document.getElementById('exemptFeeNote').style.display  = type === 'exempt' ? 'block' : 'none';
-  document.getElementById('r1-vat-row').style.display     = type === 'taxable' ? 'flex' : 'none';
+  document.getElementById('exemptFeeNote').style.display = type === 'exempt' ? 'block' : 'none';
+  document.getElementById('r1-vat-row').style.display    = type === 'taxable' ? 'flex' : 'none';
+  updateExemptNote();
+  calc1();
+}
+
+// ── 판매 매체 ────────────────────────────────────────────────────────────────
+function getBaseRate() {
+  if (selectedPlatformId === 'custom') {
+    return (parseFloat(document.getElementById('customPlatformRate').value) || 0) / 100;
+  }
+  const p = platforms.find(pl => pl.id === selectedPlatformId);
+  return p ? p.rate / 100 : 0.1166;
+}
+
+function renderPlatformBtns() {
+  const container = document.getElementById('platformBtns');
+  if (!container) return;
+  const btns = platforms.map(p =>
+    `<button class="platform-btn ${selectedPlatformId === p.id ? 'active' : ''}" onclick="selectPlatform(${p.id})">
+      ${p.name}<span class="platform-rate">${p.rate}%</span>
+    </button>`
+  ).join('');
+  const isCustom = selectedPlatformId === 'custom';
+  container.innerHTML = btns +
+    `<button class="platform-btn ${isCustom ? 'active' : ''}" onclick="selectPlatform('custom')">직접입력</button>`;
+  document.getElementById('customPlatformArea').style.display = isCustom ? 'block' : 'none';
+  updateHeaderBadge();
+  updateExemptNote();
+}
+
+function selectPlatform(id) {
+  selectedPlatformId = (id === 'custom') ? 'custom' : Number(id);
+  renderPlatformBtns();
+  calc1();
+}
+
+function onCustomPlatformRate() {
+  updateHeaderBadge();
+  updateExemptNote();
+  calc1();
+}
+
+function updateHeaderBadge() {
+  const badge = document.getElementById('headerBadge');
+  if (!badge) return;
+  if (selectedPlatformId === 'custom') {
+    const r = parseFloat(document.getElementById('customPlatformRate')?.value) || 0;
+    badge.textContent = `직접입력 ${r}%`;
+  } else {
+    const p = platforms.find(pl => pl.id === selectedPlatformId);
+    badge.textContent = p ? `${p.name} ${p.rate}%` : '';
+  }
+}
+
+function updateExemptNote() {
+  const el = document.getElementById('exemptFeeNote');
+  if (!el) return;
+  const base = getBaseRate();
+  const exemptRate = (base / 1.1 * 100).toFixed(2).replace(/\.?0+$/, '');
+  const platformName = selectedPlatformId === 'custom' ? '직접입력' :
+    (platforms.find(p => p.id === selectedPlatformId)?.name || '');
+  el.textContent = `면세 상품 — 실질수수료 ${exemptRate}% 자동 적용 (${platformName} ${(base*100).toFixed(2).replace(/\.?0+$/,'')}% ÷ 1.1)`;
+}
+
+function renderPlatformList() {
+  const tbody = document.getElementById('platListBody');
+  if (!tbody) return;
+  tbody.innerHTML = platforms.map((p, i) => {
+    const exemptRate = (p.rate / 1.1).toFixed(2).replace(/\.?0+$/, '');
+    return `<tr>
+      <td><input type="text" value="${p.name}" style="width:130px" onchange="platforms[${i}].name=this.value;savePlatforms();renderPlatformBtns()" onblur="platforms[${i}].name=this.value||platforms[${i}].name;savePlatforms();renderPlatformBtns()"></td>
+      <td><input type="number" value="${p.rate}" step="0.01" min="0" style="width:80px" onchange="platforms[${i}].rate=parseFloat(this.value)||0;savePlatforms();renderPlatformBtns();calc1()" onblur="platforms[${i}].rate=parseFloat(this.value)||0;savePlatforms();renderPlatformBtns();calc1()"><span style="font-size:12px;color:var(--text-dim);margin-left:4px">%</span></td>
+      <td style="font-family:var(--mono);font-size:13px;color:var(--green)">${exemptRate}%</td>
+      <td><button class="btn btn-danger btn-xs" onclick="deletePlatform(${i})">삭제</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function addPlatform() {
+  const name = document.getElementById('platNameInput').value.trim();
+  const rate = parseFloat(document.getElementById('platRateInput').value);
+  if (!name) { alert('매체명을 입력하세요'); return; }
+  if (!rate || rate <= 0) { alert('수수료율을 입력하세요'); return; }
+  platforms.push({ id: Date.now(), name, rate });
+  savePlatforms();
+  renderPlatformBtns();
+  renderPlatformList();
+  document.getElementById('platNameInput').value = '';
+  document.getElementById('platRateInput').value = '';
+}
+
+function deletePlatform(idx) {
+  if (platforms.length <= 1) { alert('최소 1개 이상의 매체가 필요합니다.'); return; }
+  if (!confirm(`'${platforms[idx].name}'을 삭제할까요?`)) return;
+  const deletedId = platforms[idx].id;
+  platforms.splice(idx, 1);
+  savePlatforms();
+  if (selectedPlatformId === deletedId) {
+    selectedPlatformId = platforms[0].id;
+  }
+  renderPlatformBtns();
+  renderPlatformList();
   calc1();
 }
 
 // ── 마진 계산 ────────────────────────────────────────────────────────────────
 function getFeeRate() {
-  if (taxType === 'exempt') return 0.106; // 면세: 10.6% 고정
-  const v = document.getElementById('feeRate').value;
-  if (v === 'custom') return (parseFloat(document.getElementById('customFee').value) || 0) / 100;
-  if (v === '0.1166b') return 0.1166;
-  return parseFloat(v);
-}
-function onFeeChange() {
-  document.getElementById('customFeeField').style.display =
-    document.getElementById('feeRate').value === 'custom' ? 'block' : 'none';
-  calc1();
+  const base = getBaseRate();
+  // 면세: 수수료율에서 부가세 10% 제거한 실질수수료
+  if (taxType === 'exempt') return base / 1.1;
+  return base;
 }
 function fmt(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
 function fmtPct(n) { return n.toFixed(1) + '%'; }
@@ -670,6 +813,11 @@ function calc1() {
   const margin = afterFee - cost - vatPayable;
   const rate   = (margin / sale) * 100;
 
+  // 플랫폼 수수료 레이블 업데이트
+  const platName = selectedPlatformId === 'custom' ? '직접입력' :
+    (platforms.find(p => p.id === selectedPlatformId)?.name || '플랫폼');
+  const feeLabel = document.getElementById('r1-fee-label');
+  if (feeLabel) feeLabel.textContent = platName + ' 수수료' + (taxType === 'exempt' ? ' (면세)' : '');
   document.getElementById('r1-sale').textContent  = fmt(sale);
   document.getElementById('r1-fee').textContent   = '−' + fmt(feeAmt);
   document.getElementById('r1-after').textContent = fmt(afterFee);
@@ -696,6 +844,10 @@ function calcReverse() {
     return;
   }
   const minSale = cost / (1 - fee - rate / 100);
+  const platName2 = selectedPlatformId === 'custom' ? '직접입력' :
+    (platforms.find(p => p.id === selectedPlatformId)?.name || '플랫폼');
+  const minFeeLabel = document.getElementById('r-minFee-label');
+  if (minFeeLabel) minFeeLabel.textContent = platName2 + ' 수수료';
   document.getElementById('r-minPrice').textContent = fmt(Math.ceil(minSale));
   document.getElementById('r-minFee').textContent = fmt(minSale * fee);
   document.getElementById('r-minMargin').textContent = fmt(minSale - minSale * fee - cost);
@@ -713,7 +865,7 @@ function toggleAdType() {
 }
 function calc2() {
   const sale = parseFloat(document.getElementById('salePrice').value) || 0;
-  const cost = parseFloat(document.getElementById('costPrice').value) || 0;
+  const cost = costInputMode === 'b2b' ? b2bCostValue : (parseFloat(document.getElementById('costPrice').value) || 0);
   const fee = getFeeRate();
   if (!sale || !cost) return;
   const margin1 = sale - sale * fee - cost;
@@ -941,7 +1093,7 @@ function quickCalc() {
     return;
   }
   const p = b2bProducts[parseInt(idx)];
-  const fee = 0.1166, feeAmt = sale * fee, afterFee = sale - feeAmt;
+  const fee = getFeeRate(), feeAmt = sale * fee, afterFee = sale - feeAmt;
   container.innerHTML = suppliers.map((s, i) => {
     const cost = p.prices[i];
     if (!cost) return `<div class="result-row"><span class="result-label">${s.name}</span><span class="result-value" style="color:var(--text-dim)">가격 없음</span></div>`;
@@ -1018,6 +1170,7 @@ function deleteShortcut(idx) {
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
+renderPlatformBtns();
 renderB2B();
 </script>
 </body>
