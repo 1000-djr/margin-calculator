@@ -284,39 +284,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ B2B 매입가 탭 ════════════════════════════════════════════ -->
   <div class="panel" id="tab-b2b">
-    <div class="section-label">B2B 사이트 등록</div>
-    <div class="card">
-      <div class="card-title"><span class="dot"></span>새 사이트 추가</div>
-      <div class="field-row">
-        <div class="field"><label>사이트 이름</label><input type="text" id="siteNameInput" placeholder="예: AdminPlus 과일"></div>
-        <div class="field"><label>상품 목록 URL</label><input type="text" id="siteUrlInput" placeholder="https://www.adminplus.co.kr/..."></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>로그인 URL</label><input type="text" id="siteLoginUrlInput" placeholder="https://www.adminplus.co.kr/member/login"></div>
-        <div class="field"><label>아이디 환경변수 키</label><input type="text" id="siteUserEnvInput" placeholder="ADMINPLUS_USERNAME"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>비밀번호 환경변수 키</label><input type="text" id="sitePwEnvInput" placeholder="ADMINPLUS_PASSWORD"></div>
-        <div class="field" style="display:flex;align-items:flex-end">
-          <button class="btn btn-primary" style="width:100%" onclick="registerSite()">+ 사이트 등록</button>
-        </div>
-      </div>
-    </div>
-    <div class="section-label">등록된 사이트</div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <table class="b2b-table">
-        <thead><tr><th>사이트명</th><th>상품 URL</th><th>아이디 ENV</th><th>최근 수집</th><th></th></tr></thead>
-        <tbody id="siteListBody">
-          <tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:20px">등록된 사이트 없음</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="triggerCrawl()" id="crawlBtn">🔄 지금 수집 실행</button>
-      <span id="crawlStatusText" style="font-size:13px;color:var(--text-dim);margin-left:8px;align-self:center"></span>
-    </div>
-
-    <div class="section-label" style="margin-top:28px">B2B 매입가 현황</div>
+    <div class="section-label">B2B 매입가 현황</div>
     <div class="info-box" style="margin-bottom:14px">
       💡 <b>최저가는 초록</b>으로 표시됩니다. 각 행의 <b>▾ 정보</b> 버튼으로 썸네일·링크를 등록할 수 있습니다.
     </div>
@@ -408,7 +376,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-  if (name === 'b2b') { renderB2B(); loadSiteList(); }
+  if (name === 'b2b') { renderB2B(); }
   if (name === 'history') renderHistory();
   if (name === 'shortcuts') renderShortcuts();
 }
