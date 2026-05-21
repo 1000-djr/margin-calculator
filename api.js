@@ -50,10 +50,15 @@ router.get('/prices/latest', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT DISTINCT ON (ph.product_id)
         ph.product_id,
-        ph.price,
+        ph.supply_price,
+        ph.sale_price,
+        ph.stock,
+        ph.tax_type,
+        ph.shipping_fee,
         ph.crawled_at,
         p.name        AS product_name,
         p.unit,
+        p.image_url,
         p.external_id,
         s.id          AS site_id,
         s.name        AS site_name
