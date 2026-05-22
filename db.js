@@ -7,6 +7,23 @@ const pool = new Pool({
 
 async function initDB() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id         SERIAL PRIMARY KEY,
+      google_id  VARCHAR(100) UNIQUE NOT NULL,
+      email      VARCHAR(200),
+      name       VARCHAR(200),
+      picture    TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS user_data (
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      key        VARCHAR(50) NOT NULL,
+      value      JSONB,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, key)
+    );
+
     CREATE TABLE IF NOT EXISTS b2b_sites (
       id           SERIAL PRIMARY KEY,
       name         VARCHAR(100) NOT NULL,
@@ -42,7 +59,7 @@ async function initDB() {
 
   // 기존 DB 마이그레이션: 컬럼이 없으면 추가
   await pool.query(`
-    ALTER TABLE products     ADD COLUMN IF NOT EXISTS image_url   TEXT;
+    ALTER TABLE products      ADD COLUMN IF NOT EXISTS image_url    TEXT;
     ALTER TABLE price_history ADD COLUMN IF NOT EXISTS supply_price INTEGER;
     ALTER TABLE price_history ADD COLUMN IF NOT EXISTS sale_price   INTEGER;
     ALTER TABLE price_history ADD COLUMN IF NOT EXISTS stock        INTEGER;

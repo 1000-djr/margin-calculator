@@ -1,6 +1,7 @@
 /**
  * api.js
  * B2B 사이트 등록, 최신 가격 조회, 수동 크롤링 트리거 REST API
+ * + 사용자 인증 정보 및 개인 데이터 저장 API
  */
 
 const express = require('express');
@@ -8,6 +9,46 @@ const router  = express.Router();
 const { pool } = require('./db');
 
 let crawlStatus = { running: false, lastRun: null, lastResult: null };
+
+// ─── 인증 미들웨어 ────────────────────────────────────────────────────────────
+function requireAuth(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: '로그인이 필요합니다.' });
+  next();
+}
+
+// ─── 현재 유저 정보 ───────────────────────────────────────────────────────────
+router.get('/auth/me', (req, res) => {
+  res.json(req.user || null);
+});
+
+// ─── 유저 데이터 키-값 저장소 ─────────────────────────────────────────────────
+// key: platforms | suppliers | b2bProducts | history | shortcuts
+router.get('/user/data/:key', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT value FROM user_data WHERE user_id = $1 AND key = $2',
+      [req.user.id, req.params.key]
+    );
+    res.json(rows[0]?.value ?? null);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/user/data/:key', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      `INSERT INTO user_data (user_id, key, value)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, key)
+       DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+      [req.user.id, req.params.key, JSON.stringify(req.body)]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ─── 사이트 등록 목록 ─────────────────────────────────────────────
 router.get('/sites', async (req, res) => {

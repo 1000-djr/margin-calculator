@@ -199,6 +199,15 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   .detail-form { grid-template-columns: 1fr; }
   .shortcut-grid { grid-template-columns: 1fr 1fr; }
 }
+/* 인증 영역 */
+.auth-area { display: flex; align-items: center; gap: 10px; }
+.google-login-btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-sub); font-size: 13px; font-weight: 500; text-decoration: none; cursor: pointer; transition: all 0.15s; font-family: var(--sans); white-space: nowrap; }
+.google-login-btn:hover { border-color: var(--accent); color: var(--accent); background: #f0f5ff; }
+.user-profile { display: flex; align-items: center; gap: 8px; }
+.user-avatar { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--border); object-fit: cover; flex-shrink: 0; }
+.user-name { font-size: 13px; font-weight: 600; color: var(--text); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logout-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer; font-family: var(--sans); transition: all 0.15s; white-space: nowrap; }
+.logout-btn:hover { border-color: var(--red); color: var(--red); }
 </style>
 </head>
 <body>
@@ -209,7 +218,27 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <h1>농수산물 마진 계산기</h1>
       <p>쿠팡 위탁 · B2B 매입가 실시간 관리</p>
     </div>
-    <div class="header-right"><span class="badge" id="headerBadge">쿠팡 11.66%</span></div>
+    <div class="header-right" style="display:flex;align-items:center;gap:12px;margin-left:auto">
+      <span class="badge" id="headerBadge">쿠팡 11.66%</span>
+      <div class="auth-area" id="authArea">
+        <!-- 비로그인 -->
+        <a href="/auth/google" class="google-login-btn" id="loginBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          Google 로그인
+        </a>
+        <!-- 로그인 후 프로필 -->
+        <div class="user-profile" id="userProfile" style="display:none">
+          <img id="userAvatar" class="user-avatar" src="" alt="프로필">
+          <span id="userName" class="user-name"></span>
+          <button class="logout-btn" onclick="logout()">로그아웃</button>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="tabs">
     <button class="tab active" onclick="switchTab('calc', this)">💰 마진 계산</button>
@@ -444,6 +473,86 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 </div>
 
 <script>
+// ── 인증 ─────────────────────────────────────────────────────────────────────
+let currentUser = null;
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    currentUser = await res.json();
+    updateAuthUI();
+    if (currentUser) {
+      await loadUserData();
+    }
+  } catch (e) {
+    console.warn('[auth] 인증 확인 실패', e);
+  }
+}
+
+function updateAuthUI() {
+  const loginBtn    = document.getElementById('loginBtn');
+  const userProfile = document.getElementById('userProfile');
+  if (currentUser) {
+    loginBtn.style.display    = 'none';
+    userProfile.style.display = 'flex';
+    document.getElementById('userAvatar').src         = currentUser.picture || '';
+    document.getElementById('userName').textContent   = currentUser.name || '';
+  } else {
+    loginBtn.style.display    = 'flex';
+    userProfile.style.display = 'none';
+  }
+}
+
+async function loadUserData() {
+  try {
+    const keys = ['platforms', 'suppliers', 'b2bProducts', 'history', 'shortcuts'];
+    const results = await Promise.all(
+      keys.map(k => fetch('/api/user/data/' + k).then(r => r.json()).catch(() => null))
+    );
+    const [pData, sData, b2bData, hData, scData] = results;
+
+    if (pData && Array.isArray(pData)) {
+      platforms = pData;
+      if (!platforms.find(p => p.id === selectedPlatformId)) selectedPlatformId = platforms[0].id;
+      renderPlatformBtns();
+      renderPlatformList();
+    }
+    if (sData && Array.isArray(sData)) {
+      suppliers = sData;
+    }
+    if (b2bData && Array.isArray(b2bData)) {
+      b2bProducts = b2bData;
+      b2bProducts.forEach(p => {
+        while (p.prices.length < suppliers.length) p.prices.push(0);
+        while (p.prices.length > suppliers.length) p.prices.pop();
+      });
+      renderB2B();
+    }
+    if (hData && Array.isArray(hData)) history = hData;
+    if (scData && Array.isArray(scData)) shortcuts = scData;
+  } catch (e) {
+    console.warn('[auth] 유저 데이터 불러오기 실패', e);
+  }
+}
+
+async function saveToServer(key, data) {
+  if (!currentUser) return;
+  try {
+    await fetch('/api/user/data/' + key, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(data),
+    });
+  } catch (e) {
+    console.warn('[auth] 서버 저장 실패 (' + key + ')', e);
+  }
+}
+
+async function logout() {
+  try { await fetch('/auth/logout', { method: 'POST' }); } catch (e) {}
+  window.location.reload();
+}
+
 // ── 데이터 ───────────────────────────────────────────────────────────────────
 // 판매 매체
 let platforms = JSON.parse(localStorage.getItem('platforms') || 'null') || [
@@ -452,17 +561,25 @@ let platforms = JSON.parse(localStorage.getItem('platforms') || 'null') || [
   {id:3, name:'11번가',      rate:7.7},
   {id:4, name:'옥션/G마켓',  rate:12},
 ];
-let selectedPlatformId = platforms[0].id; // 기본값: 첫 번째 매체
-function savePlatforms() { localStorage.setItem('platforms', JSON.stringify(platforms)); }
+let selectedPlatformId = platforms[0].id;
+
+function savePlatforms() {
+  localStorage.setItem('platforms', JSON.stringify(platforms));
+  saveToServer('platforms', platforms);
+}
 
 let suppliers = JSON.parse(localStorage.getItem('b2bSuppliers') || 'null') || [
   {id: 1, name: '공급처 A'},
   {id: 2, name: '공급처 B'},
   {id: 3, name: '공급처 C'},
 ];
-function saveSuppliers() { localStorage.setItem('b2bSuppliers', JSON.stringify(suppliers)); }
 
-let b2bProducts = [
+function saveSuppliers() {
+  localStorage.setItem('b2bSuppliers', JSON.stringify(suppliers));
+  saveToServer('suppliers', suppliers);
+}
+
+let b2bProducts = JSON.parse(localStorage.getItem('b2bProducts') || 'null') || [
   {id:1,name:'사과',unit:'1kg',prices:[2800,3100,2950],prevLowest:2800,imageUrl:'',detailUrl:'',shareUrl:''},
   {id:2,name:'사과',unit:'2kg',prices:[5400,5900,5600],prevLowest:5600,imageUrl:'',detailUrl:'',shareUrl:''},
   {id:3,name:'참외',unit:'1kg',prices:[3200,3000,3100],prevLowest:3300,imageUrl:'',detailUrl:'',shareUrl:''},
@@ -475,8 +592,8 @@ b2bProducts.forEach(p => {
   while (p.prices.length > suppliers.length) p.prices.pop();
 });
 
-let history = JSON.parse(localStorage.getItem('marginHistory') || '[]');
-let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts') || '[]');
+let history   = JSON.parse(localStorage.getItem('marginHistory') || '[]');
+let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts')  || '[]');
 
 // ── 탭 전환 ──────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
@@ -903,6 +1020,7 @@ function saveCalc() {
   const fee = getFeeRate(), feeAmt = sale * fee, margin = sale - feeAmt - cost, rate = (margin / sale) * 100;
   history.unshift({ product, unit, cost, sale, margin: Math.round(margin), marginRate: rate.toFixed(1), date: new Date().toLocaleString('ko-KR') });
   localStorage.setItem('marginHistory', JSON.stringify(history));
+  saveToServer('history', history);
   alert('저장되었습니다!');
 }
 
@@ -1067,6 +1185,8 @@ function saveB2BData() {
     const v = p.prices.filter(x => x > 0);
     return { ...p, prevLowest: v.length ? Math.min(...v) : 0 };
   });
+  localStorage.setItem('b2bProducts', JSON.stringify(b2bProducts));
+  saveToServer('b2bProducts', b2bProducts);
   renderB2B();
   alert('저장되었습니다! 오늘 가격이 전일가로 기록됩니다.');
 }
@@ -1128,6 +1248,7 @@ function clearHistory() {
   if (confirm('이력을 모두 삭제할까요?')) {
     history = [];
     localStorage.setItem('marginHistory', JSON.stringify(history));
+    saveToServer('history', history);
     renderHistory();
   }
 }
@@ -1158,6 +1279,7 @@ function addShortcut() {
   if (!name || !url) { alert('사이트 이름과 URL을 모두 입력하세요'); return; }
   shortcuts.push({ id: Date.now(), name, url });
   localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts));
+  saveToServer('shortcuts', shortcuts);
   document.getElementById('scNameInput').value = '';
   document.getElementById('scUrlInput').value = '';
   renderShortcuts();
@@ -1166,12 +1288,16 @@ function addShortcut() {
 function deleteShortcut(idx) {
   shortcuts.splice(idx, 1);
   localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts));
+  saveToServer('shortcuts', shortcuts);
   renderShortcuts();
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
+// localStorage 데이터로 즉시 렌더링 (비로그인 사용자도 바로 사용 가능)
 renderPlatformBtns();
 renderB2B();
+// 인증 상태 확인 후 로그인 유저는 서버 데이터로 업데이트
+checkAuth();
 </script>
 </body>
 </html>
