@@ -159,9 +159,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .info-box { background: #e8f4fd; border: 1px solid rgba(0,113,227,0.2); border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #0056b3; line-height: 1.6; }
 /* 이력 */
 .history-list { display: flex; flex-direction: column; gap: 8px; }
-.history-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); }
+.history-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; box-shadow: var(--shadow-sm); }
 .history-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
 .history-margin { font-family: var(--mono); font-size: 16px; font-weight: 600; }
+.history-right { text-align: right; flex-shrink: 0; }
+.history-actions { display: flex; gap: 4px; margin-top: 7px; justify-content: flex-end; }
+.history-edit-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 11px; font-weight: 500; font-family: var(--sans); cursor: pointer; transition: all 0.15s; }
+.history-edit-btn:hover { border-color: var(--accent); color: var(--accent); background: #f0f5ff; }
+.history-del-btn  { padding: 4px 10px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--text-dim); font-size: 11px; font-weight: 500; font-family: var(--sans); cursor: pointer; transition: all 0.15s; }
+.history-del-btn:hover  { border-color: rgba(192,57,43,0.3); color: var(--red); background: var(--red-light); }
+/* 수정 모드 배너 */
+.edit-mode-notice { background: #fff8e6; border: 1px solid rgba(183,149,11,0.35); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--yellow); font-weight: 500; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 /* 레이아웃 */
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .ad-section { transition: opacity 0.2s; }
@@ -545,8 +553,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </div>
       </div>
     </div>
+    <div id="editModeNotice" class="edit-mode-notice" style="display:none">
+      ✏️ 이력 수정 중 — 저장하면 기존 항목을 덮어씁니다
+    </div>
     <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveCalc()">💾 이력 저장</button>
+      <button class="btn btn-primary" id="saveCalcBtn" onclick="saveCalc()">💾 이력 저장</button>
       <button class="btn btn-ghost" onclick="resetCalc()">초기화</button>
     </div>
   </div>
@@ -771,7 +782,8 @@ b2bProducts.forEach(p => {
   while (p.prices.length > suppliers.length) p.prices.pop();
 });
 
-let history   = JSON.parse(localStorage.getItem('marginHistory') || '[]');
+let history          = JSON.parse(localStorage.getItem('marginHistory') || '[]');
+let editingHistoryIdx = -1; // -1: 신규, >=0: 수정 중인 이력 인덱스
 let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts')  || '[]');
 
 // ── 탭 전환 ──────────────────────────────────────────────────────────────────
@@ -1314,8 +1326,15 @@ async function saveCalc() {
   if (!cost || !sale) { alert('매입가와 판매가를 입력하세요'); return; }
   const fee = getFeeRate(), feeAmt = sale * fee, margin = sale - feeAmt - cost, rate = (margin / sale) * 100;
 
-  // 계산 이력 저장
-  history.unshift({ product, unit, cost, sale, margin: Math.round(margin), marginRate: rate.toFixed(1), date: new Date().toLocaleString('ko-KR') });
+  // 계산 이력 저장 (수정 모드면 덮어쓰기, 신규면 맨 앞 추가)
+  const entry = { product, unit, cost, sale, margin: Math.round(margin), marginRate: rate.toFixed(1), date: new Date().toLocaleString('ko-KR') };
+  if (editingHistoryIdx >= 0) {
+    history[editingHistoryIdx] = entry;
+  } else {
+    history.unshift(entry);
+  }
+  editingHistoryIdx = -1;
+  setEditMode(false);
   localStorage.setItem('marginHistory', JSON.stringify(history));
   saveToServer('history', history);
 
@@ -1340,6 +1359,8 @@ async function saveCalc() {
 }
 
 function resetCalc() {
+  editingHistoryIdx = -1;
+  setEditMode(false);
   ['costPrice','salePrice','targetRate','reverseCost','cpcBid','cpcCvr','roasTarget','adFixed','calcUnitQty']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('calcProductName').value = '';
@@ -1539,29 +1560,90 @@ function quickCalc() {
 }
 
 // ── 계산 이력 ────────────────────────────────────────────────────────────────
+function setEditMode(on) {
+  document.getElementById('editModeNotice').style.display = on ? 'flex' : 'none';
+  document.getElementById('saveCalcBtn').textContent = on ? '✏️ 수정 저장' : '💾 이력 저장';
+}
+
 function renderHistory() {
   const container = document.getElementById('historyList');
   if (!history.length) {
     container.innerHTML = '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>';
     return;
   }
-  container.innerHTML = history.map(h => {
+  container.innerHTML = history.map((h, i) => {
     const cls = h.margin < 0 ? 'red' : parseFloat(h.marginRate) < 15 ? 'yellow' : 'green';
     return `<div class="history-item">
-      <div>
+      <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:600">${h.product} <span style="font-size:12px;color:var(--text-dim)">(${h.unit})</span></div>
         <div class="history-meta">매입 ${h.cost.toLocaleString()}원 → 판매 ${h.sale.toLocaleString()}원 · ${h.date}</div>
       </div>
-      <div style="text-align:right">
+      <div class="history-right">
         <div class="history-margin ${cls}">${h.margin.toLocaleString()}원</div>
         <div style="font-size:12px;color:var(--text-dim)">${h.marginRate}%</div>
+        <div class="history-actions">
+          <button class="history-edit-btn" onclick="loadHistoryToCalc(${i})">수정</button>
+          <button class="history-del-btn"  onclick="deleteHistory(${i})">삭제</button>
+        </div>
       </div>
     </div>`;
   }).join('');
 }
+
+function loadHistoryToCalc(idx) {
+  const h = history[idx];
+  if (!h) return;
+
+  // 마진 계산 탭으로 이동
+  const calcTab = document.querySelector('.tab');
+  switchTab('calc', document.querySelectorAll('.tab')[0]);
+
+  // 입력값 복원
+  document.getElementById('calcProductName').value = h.product;
+  document.getElementById('salePrice').value        = h.sale;
+
+  // 단위 파싱 (예: "1kg" → qty=1, type=kg / "박스" → qty='', type=박스)
+  const unitTypes = ['kg', 'g', '박스', '개'];
+  let matched = false;
+  for (const t of unitTypes) {
+    if (h.unit.endsWith(t)) {
+      const qty = h.unit.slice(0, -t.length);
+      document.getElementById('calcUnitQty').value = qty;
+      document.getElementById('calcUnitType').value = t;
+      matched = true;
+      break;
+    }
+  }
+  if (!matched) {
+    document.getElementById('calcUnitQty').value = '';
+    document.getElementById('calcUnitType').value = h.unit || 'kg';
+  }
+
+  // 매입가는 직접입력 모드로 복원
+  setCostMode('manual');
+  document.getElementById('costPrice').value = h.cost;
+
+  // 수정 모드 진입
+  editingHistoryIdx = idx;
+  setEditMode(true);
+  calc1();
+}
+
+function deleteHistory(idx) {
+  if (!confirm(`이 이력을 삭제할까요?\n${history[idx].product} · ${history[idx].date}`)) return;
+  history.splice(idx, 1);
+  if (editingHistoryIdx === idx) { editingHistoryIdx = -1; setEditMode(false); }
+  else if (editingHistoryIdx > idx) editingHistoryIdx--;
+  localStorage.setItem('marginHistory', JSON.stringify(history));
+  saveToServer('history', history);
+  renderHistory();
+}
+
 function clearHistory() {
   if (confirm('이력을 모두 삭제할까요?')) {
     history = [];
+    editingHistoryIdx = -1;
+    setEditMode(false);
     localStorage.setItem('marginHistory', JSON.stringify(history));
     saveToServer('history', history);
     renderHistory();
