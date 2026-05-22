@@ -268,6 +268,63 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .app-fadein { animation: fadeIn 0.3s ease; }
+/* ── 커스텀 모달 ─────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.36);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 3000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.modal-backdrop.visible { opacity: 1; }
+.modal-dialog {
+  background: #fff;
+  border-radius: 20px;
+  padding: 32px 28px 24px;
+  max-width: 340px;
+  width: 100%;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.18);
+  transform: scale(0.93) translateY(8px);
+  opacity: 0;
+  transition: transform 0.24s cubic-bezier(0.34,1.1,0.64,1), opacity 0.2s ease;
+}
+.modal-backdrop.visible .modal-dialog { transform: scale(1) translateY(0); opacity: 1; }
+.modal-icon-wrap {
+  width: 52px; height: 52px;
+  border-radius: 16px;
+  background: var(--green-bg);
+  border: 1px solid rgba(29,131,72,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+  margin: 0 auto 18px;
+}
+.modal-title {
+  font-size: 17px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.3px;
+  text-align: center; margin-bottom: 8px;
+}
+.modal-message {
+  font-size: 13px; color: var(--text-dim);
+  text-align: center; line-height: 1.7;
+  margin-bottom: 24px;
+}
+.modal-message strong { color: var(--text-sub); font-weight: 600; }
+.modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.modal-btn {
+  padding: 13px 8px; border-radius: 12px; border: none;
+  font-size: 14px; font-weight: 500; font-family: var(--sans);
+  cursor: pointer; transition: all 0.15s;
+}
+.modal-btn-cancel { background: var(--surface2); color: var(--text-sub); border: 1px solid var(--border); }
+.modal-btn-cancel:hover { background: var(--surface3); }
+.modal-btn-confirm { background: var(--accent); color: #fff; }
+.modal-btn-confirm:hover { background: #0077ed; }
 /* ── 헤더 인증 영역 ──────────────────────────────────────────────── */
 .auth-area { display: flex; align-items: center; gap: 10px; }
 .user-profile { display: flex; align-items: center; gap: 8px; }
@@ -278,6 +335,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 </style>
 </head>
 <body>
+
+<!-- ══ 커스텀 모달 ═══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal-dialog">
+    <div class="modal-icon-wrap" id="modalIcon">📦</div>
+    <div class="modal-title"   id="modalTitle"></div>
+    <div class="modal-message" id="modalMessage"></div>
+    <div class="modal-actions">
+      <button class="modal-btn modal-btn-cancel"  id="modalCancelBtn"></button>
+      <button class="modal-btn modal-btn-confirm" id="modalConfirmBtn"></button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ 로그인 화면 ══════════════════════════════════════════════════════ -->
 <div id="loginScreen">
@@ -1094,6 +1164,29 @@ function calc2() {
   else if (rate2 < 10) { box.classList.add('warning'); val.classList.add('warning'); }
 }
 
+// ── 커스텀 모달 ──────────────────────────────────────────────────────────────
+function showConfirmModal({ icon = '📦', title, message, confirmText = '확인', cancelText = '취소' }) {
+  return new Promise(resolve => {
+    const backdrop = document.getElementById('modalBackdrop');
+    document.getElementById('modalIcon').textContent    = icon;
+    document.getElementById('modalTitle').textContent   = title;
+    document.getElementById('modalMessage').innerHTML   = message;
+    document.getElementById('modalConfirmBtn').textContent = confirmText;
+    document.getElementById('modalCancelBtn').textContent  = cancelText;
+
+    backdrop.style.display = 'flex';
+    requestAnimationFrame(() => backdrop.classList.add('visible'));
+
+    function close(result) {
+      backdrop.classList.remove('visible');
+      setTimeout(() => { backdrop.style.display = 'none'; resolve(result); }, 200);
+    }
+    document.getElementById('modalConfirmBtn').onclick = () => close(true);
+    document.getElementById('modalCancelBtn').onclick  = () => close(false);
+    backdrop.onclick = e => { if (e.target === backdrop) close(false); };
+  });
+}
+
 function syncCostToB2B(productName, unit, cost) {
   // 공급처 인덱스 결정: B2B 모드면 선택된 공급처, 직접입력이면 공급처 A(0번)
   const supplierIdx = (costInputMode === 'b2b' && b2bSelectedSupplierIdx >= 0)
@@ -1131,7 +1224,7 @@ function syncCostToB2B(productName, unit, cost) {
   saveToServer('b2bProducts', b2bProducts);
 }
 
-function saveCalc() {
+async function saveCalc() {
   const product = document.getElementById('calcProductName').value || '미지정';
   const unitQty = document.getElementById('calcUnitQty').value || '';
   const unitType = document.getElementById('calcUnitType').value;
@@ -1146,13 +1239,21 @@ function saveCalc() {
   localStorage.setItem('marginHistory', JSON.stringify(history));
   saveToServer('history', history);
 
-  // B2B 매입가 탭 동기화
-  syncCostToB2B(product, unit, cost);
-
+  // B2B 반영 여부 확인 모달
   const supplierName = (costInputMode === 'b2b' && b2bSelectedSupplierIdx >= 0)
-    ? suppliers[b2bSelectedSupplierIdx]?.name
-    : suppliers[0]?.name;
-  alert(`저장되었습니다!\nB2B 매입가 탭 "${supplierName}" 칸에도 반영됐습니다.`);
+    ? (suppliers[b2bSelectedSupplierIdx]?.name || '공급처 A')
+    : (suppliers[0]?.name || '공급처 A');
+  const unitLabel = unit ? ` · ${unit}` : '';
+
+  const confirmed = await showConfirmModal({
+    icon: '📦',
+    title: 'B2B 매입가에 추가',
+    message: `<strong>${product}</strong>${unitLabel}<br>${cost.toLocaleString()}원을 <strong>${supplierName}</strong> 칸에 반영할까요?`,
+    confirmText: '반영하기',
+    cancelText: '이력만 저장',
+  });
+
+  if (confirmed) syncCostToB2B(product, unit, cost);
 }
 
 function resetCalc() {
