@@ -325,6 +325,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .modal-btn-cancel:hover { background: var(--surface3); }
 .modal-btn-confirm { background: var(--accent); color: #fff; }
 .modal-btn-confirm:hover { background: #0077ed; }
+.modal-select {
+  width: 100%; padding: 11px 14px;
+  border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text);
+  font-size: 14px; font-family: var(--sans);
+  outline: none; -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2386868b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.modal-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); background-color: #fff; }
 /* ── 헤더 인증 영역 ──────────────────────────────────────────────── */
 .auth-area { display: flex; align-items: center; gap: 10px; }
 .user-profile { display: flex; align-items: center; gap: 8px; }
@@ -342,6 +353,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="modal-icon-wrap" id="modalIcon">📦</div>
     <div class="modal-title"   id="modalTitle"></div>
     <div class="modal-message" id="modalMessage"></div>
+    <div id="modalSelectWrap" style="display:none;margin-bottom:20px">
+      <select id="modalSelect" class="modal-select"></select>
+    </div>
     <div class="modal-actions">
       <button class="modal-btn modal-btn-cancel"  id="modalCancelBtn"></button>
       <button class="modal-btn modal-btn-confirm" id="modalConfirmBtn"></button>
@@ -1165,20 +1179,37 @@ function calc2() {
 }
 
 // ── 커스텀 모달 ──────────────────────────────────────────────────────────────
-function showConfirmModal({ icon = '📦', title, message, confirmText = '확인', cancelText = '취소' }) {
+// selectOptions: string[] → 드롭다운 표시, selectDefault: number → 초기 선택 인덱스
+// 반환: confirmText 클릭 시 선택된 인덱스(number) 또는 true, 취소 시 null
+function showConfirmModal({ icon = '📦', title, message, confirmText = '확인', cancelText = '취소', selectOptions = null, selectDefault = 0 }) {
   return new Promise(resolve => {
-    const backdrop = document.getElementById('modalBackdrop');
-    document.getElementById('modalIcon').textContent    = icon;
-    document.getElementById('modalTitle').textContent   = title;
-    document.getElementById('modalMessage').innerHTML   = message;
+    const backdrop   = document.getElementById('modalBackdrop');
+    const selectWrap = document.getElementById('modalSelectWrap');
+    const selectEl   = document.getElementById('modalSelect');
+
+    document.getElementById('modalIcon').textContent       = icon;
+    document.getElementById('modalTitle').textContent      = title;
+    document.getElementById('modalMessage').innerHTML      = message;
     document.getElementById('modalConfirmBtn').textContent = confirmText;
     document.getElementById('modalCancelBtn').textContent  = cancelText;
+
+    if (selectOptions && selectOptions.length) {
+      selectEl.innerHTML = selectOptions.map((name, i) =>
+        `<option value="${i}"${i === selectDefault ? ' selected' : ''}>${name}</option>`
+      ).join('');
+      selectWrap.style.display = 'block';
+    } else {
+      selectWrap.style.display = 'none';
+    }
 
     backdrop.style.display = 'flex';
     requestAnimationFrame(() => backdrop.classList.add('visible'));
 
-    function close(result) {
+    function close(confirmed) {
       backdrop.classList.remove('visible');
+      const result = confirmed
+        ? (selectOptions ? parseInt(selectEl.value) : true)
+        : null;
       setTimeout(() => { backdrop.style.display = 'none'; resolve(result); }, 200);
     }
     document.getElementById('modalConfirmBtn').onclick = () => close(true);
@@ -1187,11 +1218,13 @@ function showConfirmModal({ icon = '📦', title, message, confirmText = '확인
   });
 }
 
-function syncCostToB2B(productName, unit, cost) {
-  // 공급처 인덱스 결정: B2B 모드면 선택된 공급처, 직접입력이면 공급처 A(0번)
-  const supplierIdx = (costInputMode === 'b2b' && b2bSelectedSupplierIdx >= 0)
-    ? b2bSelectedSupplierIdx
-    : 0;
+function syncCostToB2B(productName, unit, cost, supplierIdx) {
+  // supplierIdx 미지정 시 fallback: B2B 모드면 선택된 공급처, 직접입력이면 0번
+  if (supplierIdx === undefined) {
+    supplierIdx = (costInputMode === 'b2b' && b2bSelectedSupplierIdx >= 0)
+      ? b2bSelectedSupplierIdx
+      : 0;
+  }
 
   // B2B 모드에서는 이미 선택된 product를 직접 참조
   let target = null;
@@ -1239,21 +1272,23 @@ async function saveCalc() {
   localStorage.setItem('marginHistory', JSON.stringify(history));
   saveToServer('history', history);
 
-  // B2B 반영 여부 확인 모달
-  const supplierName = (costInputMode === 'b2b' && b2bSelectedSupplierIdx >= 0)
-    ? (suppliers[b2bSelectedSupplierIdx]?.name || '공급처 A')
-    : (suppliers[0]?.name || '공급처 A');
+  // B2B 반영 여부 확인 모달 (공급처 드롭다운 포함)
+  const defaultSupplierIdx = (costInputMode === 'b2b' && b2bSelectedSupplierIdx >= 0)
+    ? b2bSelectedSupplierIdx
+    : 0;
   const unitLabel = unit ? ` · ${unit}` : '';
 
-  const confirmed = await showConfirmModal({
+  const selectedSupplierIdx = await showConfirmModal({
     icon: '📦',
     title: 'B2B 매입가에 추가',
-    message: `<strong>${product}</strong>${unitLabel}<br>${cost.toLocaleString()}원을 <strong>${supplierName}</strong> 칸에 반영할까요?`,
+    message: `<strong>${product}</strong>${unitLabel}<br>${cost.toLocaleString()}원을 반영할 공급처를 선택하세요`,
     confirmText: '반영하기',
     cancelText: '이력만 저장',
+    selectOptions: suppliers.map(s => s.name),
+    selectDefault: defaultSupplierIdx,
   });
 
-  if (confirmed) syncCostToB2B(product, unit, cost);
+  if (selectedSupplierIdx !== null) syncCostToB2B(product, unit, cost, selectedSupplierIdx);
 }
 
 function resetCalc() {
