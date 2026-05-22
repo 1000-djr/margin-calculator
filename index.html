@@ -336,6 +336,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .modal-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); background-color: #fff; }
+.modal-new-input {
+  width: 100%; padding: 11px 14px;
+  border-radius: 10px; border: 1px solid var(--accent);
+  background: #fff; color: var(--text);
+  font-size: 14px; font-family: var(--sans);
+  outline: none; box-shadow: 0 0 0 3px rgba(0,113,227,0.1);
+  transition: box-shadow 0.15s;
+}
+.modal-new-input::placeholder { color: var(--text-dim); }
+.modal-new-input:focus { box-shadow: 0 0 0 4px rgba(0,113,227,0.18); }
 /* ── 헤더 인증 영역 ──────────────────────────────────────────────── */
 .auth-area { display: flex; align-items: center; gap: 10px; }
 .user-profile { display: flex; align-items: center; gap: 8px; }
@@ -355,6 +365,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="modal-message" id="modalMessage"></div>
     <div id="modalSelectWrap" style="display:none;margin-bottom:20px">
       <select id="modalSelect" class="modal-select"></select>
+      <div id="modalNewSupplierWrap" style="display:none;margin-top:8px">
+        <input type="text" id="modalNewSupplierInput" class="modal-new-input"
+               placeholder="새 공급처 이름 입력…" maxlength="30">
+      </div>
     </div>
     <div class="modal-actions">
       <button class="modal-btn modal-btn-cancel"  id="modalCancelBtn"></button>
@@ -1180,12 +1194,16 @@ function calc2() {
 
 // ── 커스텀 모달 ──────────────────────────────────────────────────────────────
 // selectOptions: string[] → 드롭다운 표시, selectDefault: number → 초기 선택 인덱스
-// 반환: confirmText 클릭 시 선택된 인덱스(number) 또는 true, 취소 시 null
-function showConfirmModal({ icon = '📦', title, message, confirmText = '확인', cancelText = '취소', selectOptions = null, selectDefault = 0 }) {
+// enableNewOption: true → "＋ 새 공급처 추가" 항목 추가; 선택·확인 시 공급처 자동 생성 후 새 인덱스 반환
+// 반환: confirm 시 선택된 인덱스(number) 또는 true, 취소 시 null
+function showConfirmModal({ icon = '📦', title, message, confirmText = '확인', cancelText = '취소',
+                            selectOptions = null, selectDefault = 0, enableNewOption = false }) {
   return new Promise(resolve => {
-    const backdrop   = document.getElementById('modalBackdrop');
-    const selectWrap = document.getElementById('modalSelectWrap');
-    const selectEl   = document.getElementById('modalSelect');
+    const backdrop     = document.getElementById('modalBackdrop');
+    const selectWrap   = document.getElementById('modalSelectWrap');
+    const selectEl     = document.getElementById('modalSelect');
+    const newWrap      = document.getElementById('modalNewSupplierWrap');
+    const newInput     = document.getElementById('modalNewSupplierInput');
 
     document.getElementById('modalIcon').textContent       = icon;
     document.getElementById('modalTitle').textContent      = title;
@@ -1194,22 +1212,51 @@ function showConfirmModal({ icon = '📦', title, message, confirmText = '확인
     document.getElementById('modalCancelBtn').textContent  = cancelText;
 
     if (selectOptions && selectOptions.length) {
+      const extraOption = enableNewOption
+        ? `<option value="-1">＋ 새 공급처 추가</option>` : '';
       selectEl.innerHTML = selectOptions.map((name, i) =>
         `<option value="${i}"${i === selectDefault ? ' selected' : ''}>${name}</option>`
-      ).join('');
+      ).join('') + extraOption;
+      newWrap.style.display = 'none';
+      newInput.value = '';
       selectWrap.style.display = 'block';
+
+      // "새 공급처 추가" 선택 시 입력창 토글
+      selectEl.onchange = () => {
+        const isNew = selectEl.value === '-1';
+        newWrap.style.display = isNew ? 'block' : 'none';
+        if (isNew) setTimeout(() => newInput.focus(), 50);
+      };
     } else {
       selectWrap.style.display = 'none';
+      selectEl.onchange = null;
     }
 
     backdrop.style.display = 'flex';
     requestAnimationFrame(() => backdrop.classList.add('visible'));
 
     function close(confirmed) {
+      let result = null;
+      if (confirmed) {
+        if (selectOptions) {
+          const val = parseInt(selectEl.value);
+          if (val === -1 && enableNewOption) {
+            // 새 공급처 생성 후 인덱스 반환
+            const name = newInput.value.trim() || '새 공급처';
+            suppliers.push({ id: Date.now(), name });
+            b2bProducts.forEach(p => p.prices.push(0));
+            saveSuppliers();
+            renderB2B();
+            if (costInputMode === 'b2b') renderSupplierBtns();
+            result = suppliers.length - 1;
+          } else {
+            result = val;
+          }
+        } else {
+          result = true;
+        }
+      }
       backdrop.classList.remove('visible');
-      const result = confirmed
-        ? (selectOptions ? parseInt(selectEl.value) : true)
-        : null;
       setTimeout(() => { backdrop.style.display = 'none'; resolve(result); }, 200);
     }
     document.getElementById('modalConfirmBtn').onclick = () => close(true);
@@ -1284,8 +1331,9 @@ async function saveCalc() {
     message: `<strong>${product}</strong>${unitLabel}<br>${cost.toLocaleString()}원을 반영할 공급처를 선택하세요`,
     confirmText: '반영하기',
     cancelText: '이력만 저장',
-    selectOptions: suppliers.map(s => s.name),
-    selectDefault: defaultSupplierIdx,
+    selectOptions:   suppliers.map(s => s.name),
+    selectDefault:   defaultSupplierIdx,
+    enableNewOption: true,
   });
 
   if (selectedSupplierIdx !== null) syncCostToB2B(product, unit, cost, selectedSupplierIdx);
