@@ -31,7 +31,7 @@
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; -webkit-font-smoothing: antialiased; opacity: 0; transition: opacity 0.22s ease; }
 .result-value, .big-value, .history-margin, .badge,
 .b2b-table td input[type="number"], input[type="number"] { font-feature-settings: "tnum"; }
 .app { max-width: 1080px; margin: 0 auto; padding: 32px 20px 80px; }
@@ -386,7 +386,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 </div>
 
 <!-- ══ 로그인 화면 ══════════════════════════════════════════════════════ -->
-<div id="loginScreen">
+<div id="loginScreen" style="display:none">
   <div class="login-card">
     <div class="login-app-icon">🌾</div>
     <div class="login-title">마진 계산기</div>
@@ -685,7 +685,6 @@ function updateAuthUI() {
   if (currentUser) {
     loginScreen.style.display = 'none';
     appEl.style.display       = 'block';
-    appEl.classList.add('app-fadein');
     userProfile.style.display = 'flex';
     document.getElementById('userAvatar').src       = currentUser.picture || '';
     document.getElementById('userName').textContent = currentUser.name   || '';
@@ -694,6 +693,8 @@ function updateAuthUI() {
     appEl.style.display       = 'none';
     userProfile.style.display = 'none';
   }
+  // auth 확인 완료 후 정확한 화면이 결정된 다음 한 번만 fade-in
+  document.body.style.opacity = '1';
 }
 
 async function loadUserData() {
