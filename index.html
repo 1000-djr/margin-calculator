@@ -474,6 +474,23 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 주문서 컬럼 설정 모달 ═══════════════════════════════════════════ -->
+<div id="colSettingsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface1);border-radius:16px;padding:28px 32px;width:560px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008">
+    <div style="font-size:20px;font-weight:700;margin-bottom:4px">⚙️ 컬럼 설정</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">표시할 컬럼을 선택하세요. 체크 해제해도 저장된 데이터는 유지됩니다.</div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="setAllColSettings(true)">전체 선택</button>
+      <button class="btn btn-ghost btn-sm" onclick="setAllColSettings(false)">전체 해제</button>
+    </div>
+    <div id="colSettingsList" style="overflow-y:auto;flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;padding-right:4px"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeColSettingsModal()">취소</button>
+      <button class="btn btn-primary" onclick="applyColSettings()">적용</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 로그인 화면 ══════════════════════════════════════════════════════ -->
 <div id="loginScreen" style="display:none">
   <div class="login-card">
@@ -801,6 +818,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="field"><label>주문일 종료</label><input type="date" id="ordersDateTo"></div>
         <div class="field"><label>상품명 검색</label><input type="text" id="ordersSearchName" placeholder="등록상품명 검색…"></div>
         <button class="btn btn-ghost btn-sm" onclick="renderOrders()" style="margin-bottom:0">검색</button>
+        <button class="btn btn-ghost btn-sm" onclick="openColSettingsModal()" style="margin-bottom:0">⚙️ 컬럼 설정</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="margin-bottom:0">전체 삭제</button>
       </div>
     </div>
@@ -1118,6 +1136,7 @@ let editingCouponId = null;
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
 let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
+let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -2462,6 +2481,40 @@ function parseOrderDate(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function openColSettingsModal() {
+  const cols = ORDER_DISPLAY_COLS;
+  const visible = ordersVisibleCols ? new Set(ordersVisibleCols) : new Set(cols);
+  const list = document.getElementById('colSettingsList');
+  list.innerHTML = cols.map(c => `
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:3px 0">
+      <input type="checkbox" id="colchk_${CSS.escape(c)}" ${visible.has(c) ? 'checked' : ''} style="accent-color:var(--primary)">
+      ${c}
+    </label>`).join('');
+  document.getElementById('colSettingsModal').style.display = 'flex';
+}
+
+function closeColSettingsModal() {
+  document.getElementById('colSettingsModal').style.display = 'none';
+}
+
+function setAllColSettings(checked) {
+  ORDER_DISPLAY_COLS.forEach(c => {
+    const el = document.getElementById('colchk_' + CSS.escape(c));
+    if (el) el.checked = checked;
+  });
+}
+
+function applyColSettings() {
+  const selected = ORDER_DISPLAY_COLS.filter(c => {
+    const el = document.getElementById('colchk_' + CSS.escape(c));
+    return el ? el.checked : true;
+  });
+  ordersVisibleCols = selected.length === ORDER_DISPLAY_COLS.length ? null : selected;
+  localStorage.setItem('ordersVisibleCols', JSON.stringify(ordersVisibleCols));
+  closeColSettingsModal();
+  renderOrders();
+}
+
 function setOrdersFilter(mode) {
   ordersExcludeFilter = mode;
   ['All','Included','Excluded'].forEach(m => {
@@ -2568,9 +2621,10 @@ function renderOrders() {
   const tbody = document.getElementById('ordersTbody');
   if (!thead || !tbody) return;
 
-  thead.innerHTML = '<tr><th>미인식</th>' + ORDER_DISPLAY_COLS.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  const activeCols = ordersVisibleCols || ORDER_DISPLAY_COLS;
+  thead.innerHTML = '<tr><th>미인식</th>' + activeCols.map(c => `<th>${c}</th>`).join('') + '</tr>';
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="${ORDER_DISPLAY_COLS.length + 1}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${activeCols.length + 1}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(o => {
@@ -2578,7 +2632,7 @@ function renderOrders() {
     const btnLabel = isExcluded ? '✅인식' : '🚫미인식';
     const rowStyle = isExcluded ? ' style="opacity:0.4"' : '';
     const toggleBtn = `<td><button class="btn btn-ghost btn-xs" onclick="toggleOrderExclude('${(o['주문번호'] || '').replace(/'/g, "\\'")}')">${btnLabel}</button></td>`;
-    return `<tr${rowStyle}>${toggleBtn}` + ORDER_DISPLAY_COLS.map(c => `<td>${o[c] ?? ''}</td>`).join('') + '</tr>';
+    return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => `<td>${o[c] ?? ''}</td>`).join('') + '</tr>';
   }).join('');
 }
 
