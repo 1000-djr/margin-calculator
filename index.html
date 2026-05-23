@@ -784,6 +784,27 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn btn-danger btn-sm" onclick="deleteAllAds()" style="margin-bottom:0">전체 삭제</button>
       </div>
     </div>
+    <div class="section-label" style="cursor:pointer;user-select:none" onclick="toggleAdMappingSection()">
+      📦 상품 매칭 관리 <span id="adMappingToggleIcon">▾</span>
+    </div>
+    <div id="adMappingSection" style="display:none">
+      <div class="card" style="padding:14px">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="autoDetectAdMappings()">광고 데이터에서 자동 감지</button>
+          <button class="btn btn-primary btn-sm" onclick="showAddAdMappingRow()">+ 직접 추가</button>
+          <span style="font-size:11px;color:var(--text-dim)">상품명 ↔ 옵션ID 연결을 직접 관리합니다. 자동 감지는 광고집행 상품명의 첫 번째 콤마 이전 텍스트를 기준으로 묶습니다.</span>
+        </div>
+        <div id="adMappingAddRow" style="display:none;margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:6px">
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+            <div class="field" style="margin:0;flex:1;min-width:160px"><label style="font-size:11px">상품명</label><input type="text" id="newMappingProduct" placeholder="상품명 입력" style="width:100%"></div>
+            <div class="field" style="margin:0;flex:2;min-width:200px"><label style="font-size:11px">옵션ID (쉼표로 구분)</label><input type="text" id="newMappingOptionIds" placeholder="123456789, 987654321" style="width:100%"></div>
+            <button class="btn btn-primary btn-sm" style="margin-bottom:0" onclick="addAdMapping()">저장</button>
+            <button class="btn btn-ghost btn-sm" style="margin-bottom:0" onclick="document.getElementById('adMappingAddRow').style.display='none'">취소</button>
+          </div>
+        </div>
+        <div id="adMappingList"></div>
+      </div>
+    </div>
     <div id="adsContent"></div>
   </div>
 
@@ -954,6 +975,11 @@ async function loadUserData() {
       cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt' }; });
       localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
     }
+    const apmData = await fetch('/api/user/data/adProductMappings').then(r => r.json()).catch(() => null);
+    if (apmData && typeof apmData === 'object' && !Array.isArray(apmData)) {
+      adProductMappings = apmData;
+      localStorage.setItem('adProductMappings', JSON.stringify(adProductMappings));
+    }
   } catch (e) {
     console.warn('[auth] 유저 데이터 불러오기 실패', e);
   }
@@ -1026,6 +1052,8 @@ let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
+let adProductMappings = JSON.parse(localStorage.getItem('adProductMappings') || '{}');
+// { [productName]: [optionId1, optionId2, ...] }
 let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 
 // ── 탭 전환 ──────────────────────────────────────────────────────────────────
@@ -2263,25 +2291,35 @@ function renderAds() {
     return;
   }
 
-  // 옵션ID 기준 그룹핑
-  const groupMap = new Map();
-  filtered.forEach(r => {
-    const optId = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '(옵션ID 없음)';
-    if (!groupMap.has(optId)) groupMap.set(optId, []);
-    groupMap.get(optId).push(r);
+  // 수동 매핑 역색인: optionId → productName
+  const optIdToMappedProduct = {};
+  Object.entries(adProductMappings).forEach(([pName, optIds]) => {
+    (optIds || []).forEach(oid => { optIdToMappedProduct[oid] = pName; });
   });
 
-  // 날짜별 상세 표시용 컬럼 (실광고비 포함)
-  const DETAIL_COLS = ['날짜', '광고비', '실광고비', '노출수', '클릭수', '클릭률',
+  // 상품명 추출 함수: 광고집행 상품명에서 첫 번째 ',' 이전 텍스트
+  function extractAdProductName(r) {
+    const raw = r[AD_PRODUCT_COL] || r['광고집행상품명'] || '';
+    return raw.split(',')[0].trim() || '(상품명 없음)';
+  }
+
+  // 상품명 기준 그룹핑 (수동 매핑 우선, 없으면 자동 추출)
+  const groupMap = new Map();
+  filtered.forEach(r => {
+    const optId = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '';
+    const pName = optIdToMappedProduct[optId] || extractAdProductName(r);
+    if (!groupMap.has(pName)) groupMap.set(pName, []);
+    groupMap.get(pName).push(r);
+  });
+
+  // 날짜별 상세 표시용 컬럼
+  const DETAIL_COLS = ['날짜', '광고집행 옵션ID', '광고비', '실광고비', '노출수', '클릭수', '클릭률',
     '총 주문수(1일)', '총 판매수량(1일)', '총 전환매출액(1일)',
     '총 주문수(14일)', '총 판매수량(14일)', '총 전환매출액(14일)',
     '총광고수익률(1일)', '총광고수익률(14일)', '키워드', '캠페인명', '광고그룹'];
 
   let html = '';
-  groupMap.forEach((rows, optId) => {
-    // 그룹 내 대표 상품명 (첫 번째 행에서)
-    const productName = rows[0]?.[AD_PRODUCT_COL] || rows[0]?.['광고집행상품명'] || '';
-
+  groupMap.forEach((rows, pName) => {
     const totalAdCost = rows.reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
     const realAdCost  = totalAdCost * 1.1;
     const totalImpr   = rows.reduce((s, r) => s + (parseFloat(r['노출수']) || 0), 0);
@@ -2289,27 +2327,62 @@ function renderAds() {
     const totalOrd    = rows.reduce((s, r) => s + (parseFloat(r['총 주문수(1일)']) || parseFloat(r['총주문수(1일)']) || 0), 0);
     const totalRev    = rows.reduce((s, r) => s + (parseFloat(r['총 전환매출액(1일)']) || parseFloat(r['총전환매출액(1일)']) || 0), 0);
 
-    const gid = 'adg_' + optId.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+    const gid = 'adg_' + pName.replace(/[^a-zA-Z0-9가-힣]/g, '_');
 
-    // 날짜 오름차순 정렬
-    const sortedRows = [...rows].sort((a, b) => (a['날짜'] || '').localeCompare(b['날짜'] || ''));
+    // 옵션ID별 서브 그룹핑
+    const optMap = new Map();
+    rows.forEach(r => {
+      const oid = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '(옵션 없음)';
+      if (!optMap.has(oid)) optMap.set(oid, []);
+      optMap.get(oid).push(r);
+    });
 
-    // 날짜별 상세 행
-    const detailHeaderCols = DETAIL_COLS.map(c => `<th style="white-space:nowrap">${c}</th>`).join('');
-    const detailDataRows = sortedRows.map(r => {
-      const adCost = parseFloat(r['광고비']) || 0;
-      const rowData = { ...r, '실광고비': Math.round(adCost * 1.1).toLocaleString('ko-KR') + '원' };
-      return '<tr>' + DETAIL_COLS.map(c => `<td style="white-space:nowrap">${rowData[c] ?? ''}</td>`).join('') + '</tr>';
-    }).join('');
+    // 옵션ID별 행 렌더링
+    let optionDetailHtml = '';
+    optMap.forEach((optRows, oid) => {
+      const oidCost = optRows.reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
+      const oidOrd  = optRows.reduce((s, r) => s + (parseFloat(r['총 주문수(1일)']) || parseFloat(r['총주문수(1일)']) || 0), 0);
+      const oidRev  = optRows.reduce((s, r) => s + (parseFloat(r['총 전환매출액(1일)']) || parseFloat(r['총전환매출액(1일)']) || 0), 0);
+      const subId = gid + '_' + oid.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+
+      // 날짜 오름차순 정렬
+      const sortedOptRows = [...optRows].sort((a, b) => (a['날짜'] || '').localeCompare(b['날짜'] || ''));
+      const detailHeaderCols = DETAIL_COLS.map(c => `<th style="white-space:nowrap">${c}</th>`).join('');
+      const detailDataRows = sortedOptRows.map(r => {
+        const adCost = parseFloat(r['광고비']) || 0;
+        const rowData = { ...r, '실광고비': Math.round(adCost * 1.1).toLocaleString('ko-KR') + '원' };
+        return '<tr>' + DETAIL_COLS.map(c => `<td style="white-space:nowrap">${rowData[c] ?? ''}</td>`).join('') + '</tr>';
+      }).join('');
+
+      optionDetailHtml += `
+        <tr style="background:var(--surface2);cursor:pointer" onclick="toggleAdGroup('${subId}')">
+          <td style="padding:8px 14px;font-family:var(--mono);font-size:12px;font-weight:600">${oid}</td>
+          <td>${Math.round(oidCost).toLocaleString('ko-KR')}원</td>
+          <td style="color:var(--red)">${Math.round(oidCost * 1.1).toLocaleString('ko-KR')}원</td>
+          <td>${Math.round(oidOrd).toLocaleString('ko-KR')}</td>
+          <td>${Math.round(oidRev).toLocaleString('ko-KR')}원</td>
+          <td style="font-size:11px;color:var(--text-dim)">${sortedOptRows.length}행</td>
+          <td><button class="btn btn-ghost btn-xs">날짜 ▾</button></td>
+        </tr>
+        <tr class="ad-detail-rows" id="${subId}">
+          <td colspan="7" style="padding:0">
+            <div class="data-table-wrap" style="max-height:280px;overflow:auto">
+              <table class="data-table">
+                <thead><tr>${detailHeaderCols}</tr></thead>
+                <tbody>${detailDataRows}</tbody>
+              </table>
+            </div>
+          </td>
+        </tr>`;
+    });
 
     html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
       <table class="data-table" style="white-space:normal">
         <thead>
           <tr class="ad-group-row" onclick="toggleAdGroup('${gid}')">
             <td colspan="7" style="padding:12px 14px">
-              <span style="font-size:13px;font-weight:600;font-family:var(--mono)">${optId}</span>
-              ${productName ? `<span style="font-size:12px;color:var(--text-dim);margin-left:10px">${productName}</span>` : ''}
-              <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px">${rows.length}행</span>
+              <span style="font-size:13px;font-weight:600">${pName}</span>
+              <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px">${optMap.size}개 옵션 · ${rows.length}행</span>
             </td>
           </tr>
           <tr style="background:var(--surface2)">
@@ -2322,23 +2395,20 @@ function renderAds() {
             <td>${Math.round(totalClk).toLocaleString('ko-KR')}</td>
             <td>${Math.round(totalOrd).toLocaleString('ko-KR')}</td>
             <td>${Math.round(totalRev).toLocaleString('ko-KR')}원</td>
-            <td><button class="btn btn-ghost btn-xs" onclick="toggleAdGroup('${gid}')">상세 ▾</button></td>
+            <td><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();toggleAdGroup('${gid}')">옵션별 ▾</button></td>
           </tr>
         </thead>
         <tbody class="ad-detail-rows" id="${gid}">
           <tr style="background:var(--surface2)">
-            <th colspan="7" style="padding:8px 14px;font-size:11px">날짜별 상세 (${sortedRows.length}행)</th>
+            <th style="padding:6px 14px;font-size:11px">옵션ID</th>
+            <th style="font-size:11px">광고비</th>
+            <th style="font-size:11px">실광고비</th>
+            <th style="font-size:11px">주문수(1일)</th>
+            <th style="font-size:11px">전환매출(1일)</th>
+            <th style="font-size:11px">행수</th>
+            <th></th>
           </tr>
-          <tr>
-            <td colspan="7" style="padding:0">
-              <div class="data-table-wrap" style="max-height:320px;overflow:auto">
-                <table class="data-table">
-                  <thead><tr>${detailHeaderCols}</tr></thead>
-                  <tbody>${detailDataRows}</tbody>
-                </table>
-              </div>
-            </td>
-          </tr>
+          ${optionDetailHtml}
         </tbody>
       </table>
     </div>`;
@@ -2360,6 +2430,91 @@ async function deleteAllAds() {
     try { await fetch('/api/ad-reports', { method: 'DELETE' }); } catch(e) {}
   }
   renderAds();
+}
+
+// ── 광고 상품 매칭 관리 ───────────────────────────────────────────────────────
+
+function toggleAdMappingSection() {
+  const sec = document.getElementById('adMappingSection');
+  const ico = document.getElementById('adMappingToggleIcon');
+  if (!sec) return;
+  const open = sec.style.display === 'none';
+  sec.style.display = open ? '' : 'none';
+  if (ico) ico.textContent = open ? '▴' : '▾';
+  if (open) renderAdMappingList();
+}
+
+function renderAdMappingList() {
+  const el = document.getElementById('adMappingList');
+  if (!el) return;
+  const entries = Object.entries(adProductMappings);
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:8px 0">등록된 매핑이 없습니다. 자동 감지 또는 직접 추가해 주세요.</div>';
+    return;
+  }
+  el.innerHTML = `<table class="data-table" style="margin-top:0">
+    <thead><tr><th>상품명</th><th>연결된 옵션ID</th><th style="width:60px"></th></tr></thead>
+    <tbody>
+      ${entries.map(([pName, optIds]) => `
+        <tr>
+          <td style="font-weight:600;font-size:13px">${pName}</td>
+          <td style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">${(optIds || []).join(', ') || '-'}</td>
+          <td><button class="btn btn-danger btn-xs" onclick="deleteAdMapping(${JSON.stringify(pName)})">삭제</button></td>
+        </tr>`).join('')}
+    </tbody>
+  </table>`;
+}
+
+function showAddAdMappingRow() {
+  document.getElementById('adMappingAddRow').style.display = '';
+  document.getElementById('newMappingProduct').focus();
+}
+
+function addAdMapping() {
+  const pName = (document.getElementById('newMappingProduct')?.value || '').trim();
+  const rawIds = (document.getElementById('newMappingOptionIds')?.value || '').trim();
+  if (!pName) { alert('상품명을 입력하세요'); return; }
+  const optIds = rawIds.split(',').map(s => s.trim()).filter(Boolean);
+  adProductMappings[pName] = [...new Set([...(adProductMappings[pName] || []), ...optIds])];
+  saveAdMappings();
+  document.getElementById('newMappingProduct').value = '';
+  document.getElementById('newMappingOptionIds').value = '';
+  document.getElementById('adMappingAddRow').style.display = 'none';
+  renderAdMappingList();
+  renderAds();
+}
+
+function deleteAdMapping(pName) {
+  if (!confirm(`"${pName}" 매핑을 삭제할까요?`)) return;
+  delete adProductMappings[pName];
+  saveAdMappings();
+  renderAdMappingList();
+  renderAds();
+}
+
+function saveAdMappings() {
+  localStorage.setItem('adProductMappings', JSON.stringify(adProductMappings));
+  if (currentUser) saveToServer('adProductMappings', adProductMappings);
+}
+
+function autoDetectAdMappings() {
+  let added = 0;
+  adReports.forEach(r => {
+    const raw = r[AD_PRODUCT_COL] || r['광고집행상품명'] || '';
+    const pName = raw.split(',')[0].trim();
+    if (!pName || pName === '(상품명 없음)') return;
+    const optId = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '';
+    if (!optId) return;
+    if (!adProductMappings[pName]) adProductMappings[pName] = [];
+    if (!adProductMappings[pName].includes(optId)) {
+      adProductMappings[pName].push(optId);
+      added++;
+    }
+  });
+  saveAdMappings();
+  renderAdMappingList();
+  renderAds();
+  alert(`자동 감지 완료: ${Object.keys(adProductMappings).length}개 상품, ${added}개 옵션ID 추가됨`);
 }
 
 // ── 쿠폰 탭 ──────────────────────────────────────────────────────────────────
