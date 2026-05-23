@@ -2670,6 +2670,15 @@ const AD_COLUMNS = ['날짜','과금 방식','판매방식','광고유형','캠�
 const AD_PRODUCT_COL = '광고집행 상품명';
 const AD_OPTION_COL  = '광고집행 옵션ID';
 
+function formatAdDate(val) {
+  const s = String(val ?? '').trim();
+  // 정수형 YYYYMMDD (예: 20260501 또는 "20260501")
+  if (/^\d{8}$/.test(s)) {
+    return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  }
+  return s;
+}
+
 function handleAdsUpload(input) {
   const file = input.files[0];
   if (!file) return;
@@ -2690,7 +2699,8 @@ function handleAdsUpload(input) {
         const obj = {};
         AD_COLUMNS.forEach(col => {
           const i = colIdx[col];
-          obj[col] = i >= 0 ? String(row[i] ?? '').trim() : '';
+          const raw = i >= 0 ? String(row[i] ?? '').trim() : '';
+          obj[col] = col === '날짜' ? formatAdDate(raw) : raw;
         });
         return obj;
       });

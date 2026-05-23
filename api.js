@@ -338,6 +338,12 @@ router.get('/ad-reports', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+function formatAdDate(val) {
+  const s = String(val ?? '').trim();
+  if (/^\d{8}$/.test(s)) return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  return s;
+}
+
 router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
   if (!items.length) return res.json({ inserted: 0 });
@@ -373,7 +379,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
          ON CONFLICT (user_id, report_date, option_id, keyword) DO NOTHING`,
         [
           req.user.id,
-          r['날짜'] || '',
+          formatAdDate(r['날짜'] || ''),
           r['캠페인 ID'] || r['캠페인ID'] || '',
           r['캠페인명'] || '',
           r['광고그룹'] || '',
