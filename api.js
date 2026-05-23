@@ -747,15 +747,16 @@ router.get('/product-name-mappings', requireAuth, async (req, res) => {
 });
 
 router.post('/product-name-mappings', requireAuth, async (req, res) => {
-  const { registered_name, b2b_name } = req.body;
+  const { registered_name, option_name = '', b2b_name, b2b_unit = '' } = req.body;
   if (!registered_name || !b2b_name) return res.status(400).json({ error: '필수값 누락' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO product_name_mapping (user_id, registered_name, b2b_name)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (user_id, registered_name) DO UPDATE SET b2b_name = EXCLUDED.b2b_name
+      `INSERT INTO product_name_mapping (user_id, registered_name, option_name, b2b_name, b2b_unit)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, registered_name, option_name)
+         DO UPDATE SET b2b_name = EXCLUDED.b2b_name, b2b_unit = EXCLUDED.b2b_unit
        RETURNING *`,
-      [req.user.id, registered_name, b2b_name]
+      [req.user.id, registered_name, option_name, b2b_name, b2b_unit]
     );
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }

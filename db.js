@@ -250,10 +250,36 @@ async function initDB() {
       id                SERIAL PRIMARY KEY,
       user_id           INTEGER REFERENCES users(id) ON DELETE CASCADE,
       registered_name   TEXT NOT NULL,
+      option_name       TEXT NOT NULL DEFAULT '',
       b2b_name          TEXT NOT NULL,
+      b2b_unit          TEXT NOT NULL DEFAULT '',
       created_at        TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (user_id, registered_name)
+      UNIQUE (user_id, registered_name, option_name)
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE product_name_mapping ADD COLUMN IF NOT EXISTS option_name TEXT NOT NULL DEFAULT '';
+    ALTER TABLE product_name_mapping ADD COLUMN IF NOT EXISTS b2b_unit    TEXT NOT NULL DEFAULT '';
+  `);
+  // UNIQUE 제약 마이그레이션: (user_id, registered_name) → (user_id, registered_name, option_name)
+  await pool.query(`
+    DO $$
+    DECLARE
+      cname TEXT;
+    BEGIN
+      SELECT conname INTO cname
+        FROM pg_constraint
+        WHERE conrelid = 'product_name_mapping'::regclass
+          AND contype = 'u'
+          AND array_length(conkey, 1) = 2;
+      IF cname IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE product_name_mapping DROP CONSTRAINT ' || quote_ident(cname);
+        ALTER TABLE product_name_mapping
+          ADD CONSTRAINT product_name_mapping_user_registered_option_unique
+          UNIQUE (user_id, registered_name, option_name);
+      END IF;
+    END$$;
   `);
 
   console.log('[db] Tables ready');
