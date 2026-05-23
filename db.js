@@ -187,6 +187,16 @@ async function initDB() {
       created_at   TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE (user_id, option_id)
     );
+
+    CREATE TABLE IF NOT EXISTS ad_product_mapping (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      ad_option_id VARCHAR(200) NOT NULL,
+      product_id   VARCHAR(200),
+      product_name TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, ad_option_id)
+    );
   `);
 
   console.log('[db] Tables ready');

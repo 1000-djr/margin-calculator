@@ -483,4 +483,40 @@ router.delete('/cost-mappings/:optionId', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 광고 상품 매핑 (ad_option_id ↔ product_id) ──────────────────────────────
+router.get('/ad-option-mappings', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT ad_option_id, product_id, product_name FROM ad_product_mapping WHERE user_id=$1 ORDER BY created_at',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/ad-option-mappings', requireAuth, async (req, res) => {
+  const { ad_option_id, product_id, product_name } = req.body;
+  if (!ad_option_id) return res.status(400).json({ error: 'ad_option_id 필수' });
+  try {
+    await pool.query(
+      `INSERT INTO ad_product_mapping (user_id, ad_option_id, product_id, product_name)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, ad_option_id) DO UPDATE
+         SET product_id = EXCLUDED.product_id, product_name = EXCLUDED.product_name`,
+      [req.user.id, ad_option_id, product_id || '', product_name || '']
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/ad-option-mappings/:adOptionId', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM ad_product_mapping WHERE user_id=$1 AND ad_option_id=$2',
+      [req.user.id, req.params.adOptionId]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
