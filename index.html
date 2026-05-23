@@ -1977,10 +1977,17 @@ async function handleB2BBulkUpload(input) {
   const reader = new FileReader();
   reader.onload = async function(e) {
     try {
-      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const wb   = XLSX.read(e.target.result, { type: 'array', cellDates: true });
       const ws   = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       if (rows.length < 2) { alert('데이터가 없습니다'); return; }
+
+      // Date 객체 또는 텍스트 형식의 날짜를 'YYYY-MM-DD'로 변환
+      function parseB2BDate(val) {
+        if (!val && val !== 0) return '';
+        if (val instanceof Date) return isNaN(val.getTime()) ? '' : val.toISOString().split('T')[0];
+        return String(val).trim();
+      }
 
       const headers    = rows[0].map(h => String(h).trim());
       const colProduct  = headers.indexOf('상품명');
@@ -2000,8 +2007,8 @@ async function handleB2BBulkUpload(input) {
         const unit          = String(colUnit      >= 0 ? row[colUnit]     : '').trim();
         const supplier_name = String(colSupplier  >= 0 ? row[colSupplier] : '').trim();
         const cost          = parseFloat(colCost  >= 0 ? row[colCost]     : '') || 0;
-        const start_date    = String(colStart     >= 0 ? row[colStart]    : '').trim();
-        const end_date      = String(colEnd       >= 0 ? row[colEnd]      : '').trim();
+        const start_date    = parseB2BDate(colStart >= 0 ? row[colStart] : '');
+        const end_date      = parseB2BDate(colEnd   >= 0 ? row[colEnd]   : '');
 
         if (!product_name)  { errorRows.push(`${i+1}행: 상품명 없음`); continue; }
         if (!supplier_name) { errorRows.push(`${i+1}행 (${product_name}): 공급처 없음`); continue; }
