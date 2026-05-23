@@ -946,7 +946,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
-            <th>기간</th><th>총매출</th><th>순이익</th><th>마진율</th>
+            <th>기간</th><th>총매출</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>마진율</th>
           </tr></thead>
           <tbody id="profitPeriodTbody"></tbody>
         </table>
@@ -3518,7 +3518,7 @@ async function renderProfit() {
         productName: o['등록상품명'],
         optionName: o['등록옵션명'],
         optionId: oid,
-        qty: 0, payment: 0, shipping: 0, couponDiscount: 0
+        qty: 0, payment: 0, shipping: 0, couponDiscount: 0, lastOrderDate: ''
       });
     }
     const g = optionMap.get(key);
@@ -3526,6 +3526,8 @@ async function renderProfit() {
     g.payment += parseFloat(o['결제액']) || 0;
     g.shipping += parseFloat(o['배송비']) || 0;
     g.couponDiscount += localCouponDiscount(o);
+    const od = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
+    if (od > g.lastOrderDate) g.lastOrderDate = od;
   });
 
   // 매칭 현황
@@ -3659,8 +3661,7 @@ async function renderProfit() {
         const matching = g.optionId ? optionMatchings[g.optionId] : null;
         let cost = null;
         if (matching) {
-          const from = document.getElementById('profitDateFrom')?.value;
-          const repDate = from || new Date().toISOString().slice(0,10);
+          const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
           const b2bMatch = matching.productName ? localB2bCost(matching.productName, repDate) : null;
           cost = (b2bMatch ? b2bMatch.cost : (matching.cost || 0)) * g.qty;
         }
@@ -3699,7 +3700,12 @@ async function renderProfit() {
     const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
     const fee = realRevenue * feeRate;
     const matching = g.optionId ? optionMatchings[g.optionId] : null;
-    const cost = matching ? (matching.cost || 0) * g.qty : 0;
+    let cost = 0;
+    if (matching) {
+      const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
+      const b2bMatch = matching.productName ? localB2bCost(matching.productName, repDate) : null;
+      cost = (b2bMatch ? b2bMatch.cost : (matching.cost || 0)) * g.qty;
+    }
     const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
     const realAdCost = adCostRaw * 1.1;
     const taxTyp = matching ? matching.taxType : 'exempt';
@@ -3727,14 +3733,14 @@ async function renderProfit() {
     `;
   }
 
-  // 기간별 집계
+  // 기간별 집계 — 주문건 루프 (매출·수수료·원가)
   const periodMap = new Map();
   filtered.forEach(o => {
     const pk = getPeriodKey(o['주문일']);
-    if (!periodMap.has(pk)) periodMap.set(pk, { revenue: 0, net: 0 });
-    const g = periodMap.get(pk);
+    if (!periodMap.has(pk)) periodMap.set(pk, { revenue: 0, fee: 0, cost: 0, adCostRaw: 0, net: 0 });
+    const p = periodMap.get(pk);
     const oid = o['옵션ID'] || '';
-    const payment = parseFloat(o['결제액']) || 0;
+    const payment  = parseFloat(o['결제액']) || 0;
     const shipping = parseFloat(o['배송비']) || 0;
     const couponDisc = localCouponDiscount(o);
     const realRev = (payment + shipping) - couponDisc;
@@ -3748,27 +3754,42 @@ async function renderProfit() {
       if (b2bMatch) unitCost = b2bMatch.cost;
     }
     const cost = unitCost * qty;
-    const adCostRaw = oid ? localAdCost(oid) : 0;
-    const realAdCost = adCostRaw * 1.1;
-    const taxTyp = matching ? matching.taxType : 'exempt';
-    let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRev / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
-    const netProfit = matching ? realRev - fee - cost - realAdCost - vat : realRev - fee;
-    g.revenue += realRev;
-    g.net += netProfit;
+    p.revenue += realRev;
+    p.fee     += fee;
+    p.cost    += cost;
+  });
+
+  // 기간별 광고비 — pAdReports의 report_date 기준으로 별도 집계 (주문 건별 중복 방지)
+  pAdReports.forEach(r => {
+    const pk = getPeriodKey(r.report_date || r['날짜'] || '');
+    if (!periodMap.has(pk)) return; // 해당 기간에 주문이 없으면 광고비만 있어도 표시 안 함
+    periodMap.get(pk).adCostRaw += parseFloat(r['광고비']) || 0;
+  });
+
+  // 기간별 순이익 계산 (부가세 포함)
+  periodMap.forEach((p, pk) => {
+    const realAdCost = p.adCostRaw * 1.1;
+    // 전체 매칭 여부로 단순화: exempt 기준 부가세 (정확한 과세구분별 계산은 상품별 테이블에서)
+    const vat = (p.fee / 11) + (p.adCostRaw / 11);
+    p.realAdCost = realAdCost;
+    p.net = p.revenue - p.fee - p.cost - realAdCost - vat;
   });
 
   const periodTbody = document.getElementById('profitPeriodTbody');
   if (periodTbody) {
     const sortedPeriods = [...periodMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     if (!sortedPeriods.length) {
-      periodTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+      periodTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
       periodTbody.innerHTML = sortedPeriods.map(([period, d]) => {
         const rate = d.revenue > 0 ? (d.net / d.revenue * 100) : 0;
         return `<tr>
           <td style="font-family:var(--mono)">${period}</td>
           <td style="font-family:var(--mono)">${Math.round(d.revenue).toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono);color:${d.net >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${Math.round(d.net).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(d.fee).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${Math.round(d.cost).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(d.realAdCost).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);font-weight:600;color:${d.net >= 0 ? 'var(--green)' : 'var(--red)'}">${Math.round(d.net).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono)">${rate.toFixed(1)}%</td>
         </tr>`;
       }).join('');
