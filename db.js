@@ -157,14 +157,15 @@ async function initDB() {
     );
 
     CREATE TABLE IF NOT EXISTS coupons (
-      id          SERIAL PRIMARY KEY,
-      user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      name        TEXT NOT NULL,
-      discount    NUMERIC(12,2) DEFAULT 0,
-      start_date  VARCHAR(20),
-      end_date    VARCHAR(20),
-      products    TEXT DEFAULT '',
-      created_at  TIMESTAMPTZ DEFAULT NOW()
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      coupon_id       BIGINT,
+      name            TEXT NOT NULL,
+      discount_amount NUMERIC(12,2) DEFAULT 0,
+      start_at        TIMESTAMPTZ,
+      end_at          TIMESTAMPTZ,
+      option_ids      JSONB DEFAULT '[]',
+      created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS shortcuts (
@@ -197,6 +198,15 @@ async function initDB() {
       created_at   TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE (user_id, ad_option_id)
     );
+  `);
+
+  // coupons 테이블 마이그레이션 (기존 테이블에 신규 컬럼 추가)
+  await pool.query(`
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS coupon_id       BIGINT;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS discount_amount NUMERIC(12,2) DEFAULT 0;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS start_at        TIMESTAMPTZ;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS end_at          TIMESTAMPTZ;
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS option_ids      JSONB DEFAULT '[]';
   `);
 
   console.log('[db] Tables ready');

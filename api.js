@@ -374,34 +374,70 @@ router.delete('/ad-reports', requireAuth, async (req, res) => {
 });
 
 // ─── 쿠폰 ────────────────────────────────────────────────────────────────────
+function couponRow(r) {
+  return {
+    id:              r.id,
+    coupon_id:       r.coupon_id ? String(r.coupon_id) : '',
+    name:            r.name,
+    discount_amount: parseFloat(r.discount_amount) || 0,
+    start_at:        r.start_at ? r.start_at.toISOString() : '',
+    end_at:          r.end_at   ? r.end_at.toISOString()   : '',
+    option_ids:      Array.isArray(r.option_ids) ? r.option_ids : (r.option_ids || []),
+  };
+}
+
 router.get('/coupons', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM coupons WHERE user_id=$1 ORDER BY created_at ASC',
       [req.user.id]
     );
-    res.json(rows.map(r => ({
-      id:        r.id,
-      name:      r.name,
-      discount:  parseFloat(r.discount),
-      startDate: r.start_date,
-      endDate:   r.end_date,
-      products:  r.products || '',
-    })));
+    res.json(rows.map(couponRow));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/coupons', requireAuth, async (req, res) => {
-  const { name, discount, startDate, endDate, products } = req.body;
+  const { coupon_id, name, discount_amount, start_at, end_at, option_ids } = req.body;
   if (!name) return res.status(400).json({ error: 'name 필수' });
   try {
     const { rows } = await pool.query(
-      `INSERT INTO coupons (user_id,name,discount,start_date,end_date,products)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.user.id, name, discount || 0, startDate || '', endDate || '', products || '']
+      `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [
+        req.user.id,
+        coupon_id || null,
+        name,
+        discount_amount || 0,
+        start_at || null,
+        end_at   || null,
+        JSON.stringify(Array.isArray(option_ids) ? option_ids : []),
+      ]
     );
-    const r = rows[0];
-    res.status(201).json({ id: r.id, name: r.name, discount: parseFloat(r.discount), startDate: r.start_date, endDate: r.end_date, products: r.products });
+    res.status(201).json(couponRow(rows[0]));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/coupons/:id', requireAuth, async (req, res) => {
+  const { coupon_id, name, discount_amount, start_at, end_at, option_ids } = req.body;
+  if (!name) return res.status(400).json({ error: 'name 필수' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE coupons
+       SET coupon_id=$3, name=$4, discount_amount=$5, start_at=$6, end_at=$7, option_ids=$8
+       WHERE id=$1 AND user_id=$2 RETURNING *`,
+      [
+        req.params.id,
+        req.user.id,
+        coupon_id || null,
+        name,
+        discount_amount || 0,
+        start_at || null,
+        end_at   || null,
+        JSON.stringify(Array.isArray(option_ids) ? option_ids : []),
+      ]
+    );
+    if (!rows.length) return res.status(404).json({ error: '쿠폰을 찾을 수 없습니다' });
+    res.json(couponRow(rows[0]));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

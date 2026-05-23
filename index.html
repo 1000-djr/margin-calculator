@@ -803,18 +803,23 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <div class="panel" id="tab-coupons">
     <div class="section-label">쿠폰 등록</div>
     <div class="card">
-      <div class="card-title"><span class="dot"></span>새 쿠폰 추가</div>
+      <div class="card-title"><span class="dot"></span><span id="couponFormTitle">새 쿠폰 추가</span></div>
       <div class="field-row">
-        <div class="field"><label>쿠폰명</label><input type="text" id="couponName" placeholder="예: 신규가입 할인"></div>
+        <div class="field" style="flex:2"><label>쿠폰명</label><input type="text" id="couponName" placeholder="예: 신규가입 할인"></div>
+        <div class="field"><label>쿠폰ID (쿠팡)</label><input type="number" id="couponCouponId" placeholder="숫자 ID" min="0"></div>
         <div class="field"><label>할인금액 (원)</label><input type="number" id="couponDiscount" placeholder="0" min="0"></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>적용 시작일</label><input type="date" id="couponStartDate"></div>
-        <div class="field"><label>적용 종료일</label><input type="date" id="couponEndDate"></div>
+        <div class="field"><label>사용기간 시작일시</label><input type="datetime-local" id="couponStartAt"></div>
+        <div class="field"><label>사용기간 종료일시</label><input type="datetime-local" id="couponEndAt"></div>
       </div>
-      <div class="field"><label>적용 상품명 (쉼표 구분, 빈칸=전체)</label><input type="text" id="couponProducts" placeholder="예: 사과,방울토마토 — 빈칸이면 전체 적용"></div>
+      <div class="field">
+        <label>적용 옵션ID <span style="font-weight:400;color:var(--text-dim)">(쉼표 또는 엔터로 구분)</span></label>
+        <textarea id="couponOptionIds" rows="3" placeholder="123456789&#10;987654321&#10;또는 123456789, 987654321" style="width:100%;box-sizing:border-box;resize:vertical;font-family:var(--mono);font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)"></textarea>
+      </div>
       <div class="btn-row" style="margin-top:12px">
-        <button class="btn btn-primary" onclick="addCoupon()">+ 쿠폰 추가</button>
+        <button class="btn btn-primary" id="couponSaveBtn" onclick="saveCoupon()">+ 쿠폰 추가</button>
+        <button class="btn" id="couponCancelBtn" onclick="resetCouponForm()" style="display:none">취소</button>
       </div>
     </div>
     <div class="section-label">쿠폰 목록</div>
@@ -822,7 +827,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table" style="white-space:normal">
         <thead><tr>
-          <th>쿠폰명</th><th>할인금액</th><th>적용기간</th><th>적용상품</th><th>적용주문수</th><th>총할인액</th><th></th>
+          <th>쿠폰명</th><th>쿠폰ID</th><th>할인금액</th><th>사용기간</th><th>옵션ID 수</th><th>상태</th><th></th>
         </tr></thead>
         <tbody id="couponTbody"></tbody>
       </table>
@@ -1042,6 +1047,7 @@ let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts')  || '[]');
 let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
+let editingCouponId = null;
 let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -2557,40 +2563,102 @@ function openAdMappingForOid(oid) {
 }
 
 // ── 쿠폰 탭 ──────────────────────────────────────────────────────────────────
-async function addCoupon() {
-  const name = document.getElementById('couponName').value.trim();
-  const discount = parseFloat(document.getElementById('couponDiscount').value) || 0;
-  const startDate = document.getElementById('couponStartDate').value;
-  const endDate = document.getElementById('couponEndDate').value;
-  const products = document.getElementById('couponProducts').value.trim();
-  if (!name) { alert('쿠폰명을 입력하세요'); return; }
-  if (!discount || discount <= 0) { alert('할인금액을 입력하세요'); return; }
-  if (!startDate || !endDate) { alert('적용 기간을 입력하세요'); return; }
-  if (currentUser) {
-    try {
-      const data = await fetch('/api/coupons', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, discount, startDate, endDate, products }),
-      }).then(r => r.json());
-      coupons.push(data);
-    } catch(e) { coupons.push({ id: Date.now(), name, discount, startDate, endDate, products }); }
+function parseOptionIds(raw) {
+  return raw.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+}
+
+function resetCouponForm() {
+  editingCouponId = null;
+  ['couponName','couponCouponId','couponDiscount','couponStartAt','couponEndAt'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('couponOptionIds').value = '';
+  document.getElementById('couponFormTitle').textContent = '새 쿠폰 추가';
+  document.getElementById('couponSaveBtn').textContent = '+ 쿠폰 추가';
+  document.getElementById('couponCancelBtn').style.display = 'none';
+}
+
+function editCoupon(id) {
+  const c = coupons.find(x => x.id == id);
+  if (!c) return;
+  editingCouponId = id;
+  document.getElementById('couponName').value       = c.name || '';
+  document.getElementById('couponCouponId').value   = c.coupon_id || '';
+  document.getElementById('couponDiscount').value   = c.discount_amount || '';
+  // datetime-local 입력 형식: "YYYY-MM-DDTHH:mm"
+  document.getElementById('couponStartAt').value    = c.start_at ? c.start_at.slice(0, 16) : '';
+  document.getElementById('couponEndAt').value      = c.end_at   ? c.end_at.slice(0, 16)   : '';
+  document.getElementById('couponOptionIds').value  = Array.isArray(c.option_ids) ? c.option_ids.join('\n') : '';
+  document.getElementById('couponFormTitle').textContent = '쿠폰 수정';
+  document.getElementById('couponSaveBtn').textContent   = '수정 저장';
+  document.getElementById('couponCancelBtn').style.display = '';
+  document.getElementById('tab-coupons').scrollTop = 0;
+}
+
+async function saveCoupon() {
+  const name            = document.getElementById('couponName').value.trim();
+  const coupon_id       = document.getElementById('couponCouponId').value.trim();
+  const discount_amount = parseFloat(document.getElementById('couponDiscount').value) || 0;
+  const start_at        = document.getElementById('couponStartAt').value;
+  const end_at          = document.getElementById('couponEndAt').value;
+  const option_ids      = parseOptionIds(document.getElementById('couponOptionIds').value);
+
+  if (!name)            { alert('쿠폰명을 입력하세요'); return; }
+  if (!discount_amount) { alert('할인금액을 입력하세요'); return; }
+  if (!start_at || !end_at) { alert('사용기간을 입력하세요'); return; }
+
+  const payload = { coupon_id: coupon_id || null, name, discount_amount, start_at, end_at, option_ids };
+
+  if (editingCouponId !== null) {
+    // 수정
+    if (currentUser) {
+      try {
+        const data = await fetch('/api/coupons/' + editingCouponId, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).then(r => r.json());
+        const idx = coupons.findIndex(c => c.id == editingCouponId);
+        if (idx >= 0) coupons[idx] = data;
+      } catch(e) {
+        const idx = coupons.findIndex(c => c.id == editingCouponId);
+        if (idx >= 0) coupons[idx] = { ...coupons[idx], ...payload };
+      }
+    } else {
+      const idx = coupons.findIndex(c => c.id == editingCouponId);
+      if (idx >= 0) coupons[idx] = { ...coupons[idx], ...payload };
+    }
   } else {
-    coupons.push({ id: Date.now(), name, discount, startDate, endDate, products });
+    // 신규 추가
+    if (currentUser) {
+      try {
+        const data = await fetch('/api/coupons', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).then(r => r.json());
+        coupons.push(data);
+      } catch(e) {
+        coupons.push({ id: Date.now(), ...payload });
+      }
+    } else {
+      coupons.push({ id: Date.now(), ...payload });
+    }
   }
   localStorage.setItem('couponsData', JSON.stringify(coupons));
-  ['couponName','couponDiscount','couponStartDate','couponEndDate','couponProducts'].forEach(id => { document.getElementById(id).value = ''; });
+  resetCouponForm();
   renderCoupons();
 }
 
 function getCouponAppliedOrders(coupon) {
+  const startAt = coupon.start_at ? new Date(coupon.start_at) : null;
+  const endAt   = coupon.end_at   ? new Date(coupon.end_at)   : null;
+  const optIds  = Array.isArray(coupon.option_ids) ? coupon.option_ids : [];
   return orders.filter(o => {
     const d = parseOrderDate(o['주문일']);
     if (!d) return false;
-    if (d < new Date(coupon.startDate) || d > new Date(coupon.endDate + 'T23:59:59')) return false;
-    if (coupon.products) {
-      const prods = coupon.products.split(',').map(s => s.trim()).filter(Boolean);
-      if (prods.length && !prods.some(p => o['등록상품명'].includes(p))) return false;
-    }
+    if (startAt && d < startAt) return false;
+    if (endAt   && d > endAt)   return false;
+    if (optIds.length && !optIds.includes(String(o['옵션ID']))) return false;
     return true;
   });
 }
@@ -2599,27 +2667,40 @@ function renderCoupons() {
   const tbody = document.getElementById('couponTbody');
   if (!tbody) return;
 
-  // 전체 쿠폰 할인액 집계
   let totalDiscount = 0;
   const totalPayment = orders.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
+  const now = new Date();
 
   if (!coupons.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px">등록된 쿠폰이 없습니다</td></tr>`;
   } else {
-    tbody.innerHTML = coupons.map((c, i) => {
+    tbody.innerHTML = coupons.map(c => {
       const applied = getCouponAppliedOrders(c);
-      const count = applied.length;
-      const discountTotal = c.discount * count;
+      const discountTotal = (c.discount_amount || 0) * applied.length;
       totalDiscount += discountTotal;
-      const products = c.products || '전체';
+
+      const startAt = c.start_at ? new Date(c.start_at) : null;
+      const endAt   = c.end_at   ? new Date(c.end_at)   : null;
+      const isActive = startAt && endAt && now >= startAt && now <= endAt;
+      const statusBadge = isActive
+        ? `<span style="background:var(--green,#22c55e);color:#fff;border-radius:4px;padding:2px 7px;font-size:11px">사용중</span>`
+        : `<span style="background:var(--surface3);color:var(--text-dim);border-radius:4px;padding:2px 7px;font-size:11px">종료</span>`;
+
+      const fmt = dt => dt ? dt.toLocaleString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '-';
+      const period = `${fmt(startAt)} ~ ${fmt(endAt)}`;
+      const optCount = Array.isArray(c.option_ids) ? c.option_ids.length : 0;
+
       return `<tr>
         <td>${c.name}</td>
-        <td style="font-family:var(--mono)">${c.discount.toLocaleString('ko-KR')}원</td>
-        <td style="font-family:var(--mono);font-size:12px">${c.startDate} ~ ${c.endDate}</td>
-        <td style="font-size:12px">${products}</td>
-        <td style="font-family:var(--mono)">${count.toLocaleString('ko-KR')}건</td>
-        <td style="font-family:var(--mono);color:var(--red)">${discountTotal.toLocaleString('ko-KR')}원</td>
-        <td><button class="btn btn-danger btn-xs" onclick="deleteCoupon(${c.id})">삭제</button></td>
+        <td style="font-family:var(--mono)">${c.coupon_id || '-'}</td>
+        <td style="font-family:var(--mono)">${(c.discount_amount || 0).toLocaleString('ko-KR')}원</td>
+        <td style="font-size:12px;font-family:var(--mono)">${period}</td>
+        <td style="font-family:var(--mono)">${optCount.toLocaleString('ko-KR')}개</td>
+        <td>${statusBadge}</td>
+        <td style="white-space:nowrap">
+          <button class="history-edit-btn" onclick="editCoupon(${c.id})">수정</button>
+          <button class="history-del-btn"  onclick="deleteCoupon(${c.id})">삭제</button>
+        </td>
       </tr>`;
     }).join('');
   }
@@ -2639,6 +2720,7 @@ async function deleteCoupon(id) {
   const idx = coupons.findIndex(c => c.id == id);
   if (idx < 0) return;
   if (!confirm(`'${coupons[idx].name}' 쿠폰을 삭제할까요?`)) return;
+  if (editingCouponId == id) resetCouponForm();
   coupons.splice(idx, 1);
   localStorage.setItem('couponsData', JSON.stringify(coupons));
   if (currentUser) {
@@ -2669,15 +2751,17 @@ function getOptionAdCost(optionId) {
 
 function getCouponDiscountForOrder(order) {
   let discount = 0;
+  const d = parseOrderDate(order['주문일']);
+  if (!d) return 0;
+  const orderOptionId = String(order['옵션ID'] || '');
   coupons.forEach(c => {
-    const d = parseOrderDate(order['주문일']);
-    if (!d) return;
-    if (d < new Date(c.startDate) || d > new Date(c.endDate + 'T23:59:59')) return;
-    if (c.products) {
-      const prods = c.products.split(',').map(s => s.trim()).filter(Boolean);
-      if (prods.length && !prods.some(p => order['등록상품명'].includes(p))) return;
-    }
-    discount += c.discount;
+    const startAt = c.start_at ? new Date(c.start_at) : null;
+    const endAt   = c.end_at   ? new Date(c.end_at)   : null;
+    if (startAt && d < startAt) return;
+    if (endAt   && d > endAt)   return;
+    const optIds = Array.isArray(c.option_ids) ? c.option_ids : [];
+    if (optIds.length && !optIds.includes(orderOptionId)) return;
+    discount += c.discount_amount || 0;
   });
   return discount;
 }
