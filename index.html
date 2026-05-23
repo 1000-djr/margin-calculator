@@ -2263,64 +2263,52 @@ function renderAds() {
     return;
   }
 
-  // 상품별 그룹핑 (실제 컬럼명 '광고집행 상품명' 사용, 구버전 폴백)
+  // 옵션ID 기준 그룹핑
   const groupMap = new Map();
   filtered.forEach(r => {
-    const key = r[AD_PRODUCT_COL] || r['광고집행상품명'] || '(상품명 없음)';
-    if (!groupMap.has(key)) groupMap.set(key, []);
-    groupMap.get(key).push(r);
+    const optId = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '(옵션ID 없음)';
+    if (!groupMap.has(optId)) groupMap.set(optId, []);
+    groupMap.get(optId).push(r);
   });
 
-  // 원본 표시용 컬럼 (실광고비 포함)
-  const RAW_DISPLAY_COLS = [...AD_COLUMNS, '실광고비'];
+  // 날짜별 상세 표시용 컬럼 (실광고비 포함)
+  const DETAIL_COLS = ['날짜', '광고비', '실광고비', '노출수', '클릭수', '클릭률',
+    '총 주문수(1일)', '총 판매수량(1일)', '총 전환매출액(1일)',
+    '총 주문수(14일)', '총 판매수량(14일)', '총 전환매출액(14일)',
+    '총광고수익률(1일)', '총광고수익률(14일)', '키워드', '캠페인명', '광고그룹'];
 
   let html = '';
-  groupMap.forEach((rows, productName) => {
+  groupMap.forEach((rows, optId) => {
+    // 그룹 내 대표 상품명 (첫 번째 행에서)
+    const productName = rows[0]?.[AD_PRODUCT_COL] || rows[0]?.['광고집행상품명'] || '';
+
     const totalAdCost = rows.reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
     const realAdCost  = totalAdCost * 1.1;
     const totalImpr   = rows.reduce((s, r) => s + (parseFloat(r['노출수']) || 0), 0);
     const totalClk    = rows.reduce((s, r) => s + (parseFloat(r['클릭수']) || 0), 0);
-    const totalOrd    = rows.reduce((s, r) => s + (parseFloat(r['총 주문수(1일)']) || 0), 0);
-    const totalRev    = rows.reduce((s, r) => s + (parseFloat(r['총 전환매출액(1일)']) || 0), 0);
+    const totalOrd    = rows.reduce((s, r) => s + (parseFloat(r['총 주문수(1일)']) || parseFloat(r['총주문수(1일)']) || 0), 0);
+    const totalRev    = rows.reduce((s, r) => s + (parseFloat(r['총 전환매출액(1일)']) || parseFloat(r['총전환매출액(1일)']) || 0), 0);
 
-    const gid = 'adg_' + productName.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+    const gid = 'adg_' + optId.replace(/[^a-zA-Z0-9가-힣]/g, '_');
 
-    // 옵션별 집계 (요약용)
-    const optMap = new Map();
-    rows.forEach(r => {
-      const oid = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '(옵션 없음)';
-      if (!optMap.has(oid)) optMap.set(oid, { adCost: 0, impr: 0, clk: 0, clkRate: 0, cnt: 0 });
-      const g = optMap.get(oid);
-      g.adCost += parseFloat(r['광고비']) || 0;
-      g.impr   += parseFloat(r['노출수']) || 0;
-      g.clk    += parseFloat(r['클릭수']) || 0;
-      g.clkRate += parseFloat(r['클릭률']) || 0;
-      g.cnt++;
-    });
+    // 날짜 오름차순 정렬
+    const sortedRows = [...rows].sort((a, b) => (a['날짜'] || '').localeCompare(b['날짜'] || ''));
 
-    const summaryRows = [...optMap.entries()].map(([oid, d]) => `
-      <tr>
-        <td style="font-family:var(--mono);font-size:12px">${oid}</td>
-        <td>${Math.round(d.adCost).toLocaleString('ko-KR')}원</td>
-        <td style="color:var(--red)">${Math.round(d.adCost * 1.1).toLocaleString('ko-KR')}원</td>
-        <td>${Math.round(d.impr).toLocaleString('ko-KR')}</td>
-        <td>${Math.round(d.clk).toLocaleString('ko-KR')}</td>
-        <td>${d.cnt > 0 ? (d.clkRate / d.cnt).toFixed(2) : '-'}%</td>
-      </tr>`).join('');
-
-    // 원본 전체 데이터 행 (모든 컬럼)
-    const rawHeaderCols = RAW_DISPLAY_COLS.map(c => `<th style="white-space:nowrap">${c}</th>`).join('');
-    const rawDataRows = rows.map(r => {
+    // 날짜별 상세 행
+    const detailHeaderCols = DETAIL_COLS.map(c => `<th style="white-space:nowrap">${c}</th>`).join('');
+    const detailDataRows = sortedRows.map(r => {
       const adCost = parseFloat(r['광고비']) || 0;
       const rowData = { ...r, '실광고비': Math.round(adCost * 1.1).toLocaleString('ko-KR') + '원' };
-      return '<tr>' + RAW_DISPLAY_COLS.map(c => `<td style="white-space:nowrap">${rowData[c] ?? ''}</td>`).join('') + '</tr>';
+      return '<tr>' + DETAIL_COLS.map(c => `<td style="white-space:nowrap">${rowData[c] ?? ''}</td>`).join('') + '</tr>';
     }).join('');
 
     html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
       <table class="data-table" style="white-space:normal">
         <thead>
           <tr class="ad-group-row" onclick="toggleAdGroup('${gid}')">
-            <td colspan="7" style="padding:12px 14px;font-size:13px;font-weight:600">${productName}
+            <td colspan="7" style="padding:12px 14px">
+              <span style="font-size:13px;font-weight:600;font-family:var(--mono)">${optId}</span>
+              ${productName ? `<span style="font-size:12px;color:var(--text-dim);margin-left:10px">${productName}</span>` : ''}
               <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px">${rows.length}행</span>
             </td>
           </tr>
@@ -2339,21 +2327,14 @@ function renderAds() {
         </thead>
         <tbody class="ad-detail-rows" id="${gid}">
           <tr style="background:var(--surface2)">
-            <th colspan="7" style="padding:8px 14px;font-size:11px">옵션별 요약</th>
-          </tr>
-          <tr style="background:var(--surface2)">
-            <th>옵션ID</th><th>광고비</th><th>실광고비</th><th>노출수</th><th>클릭수</th><th>클릭률</th><th></th>
-          </tr>
-          ${summaryRows}
-          <tr style="background:var(--surface2)">
-            <th colspan="7" style="padding:8px 14px;font-size:11px">원본 데이터 전체 (${rows.length}행)</th>
+            <th colspan="7" style="padding:8px 14px;font-size:11px">날짜별 상세 (${sortedRows.length}행)</th>
           </tr>
           <tr>
             <td colspan="7" style="padding:0">
               <div class="data-table-wrap" style="max-height:320px;overflow:auto">
                 <table class="data-table">
-                  <thead><tr>${rawHeaderCols}</tr></thead>
-                  <tbody>${rawDataRows}</tbody>
+                  <thead><tr>${detailHeaderCols}</tr></thead>
+                  <tbody>${detailDataRows}</tbody>
                 </table>
               </div>
             </td>
