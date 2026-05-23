@@ -1902,10 +1902,10 @@ async function deleteB2BPrice(id) {
 }
 
 function downloadB2BTemplate() {
-  const headers = ['상품명', '단위', '공급처', '공급가(원)', '시작일(YYYY-MM-DD)', '종료일(YYYY-MM-DD)'];
-  const example = ['세척사과', '5kg', '공급처A', '12000', '2026-05-01', '2026-05-31'];
+  const headers = ['상품명', '단위', '공급처', '공급가(원)', '시작일(YYYY-MM-DD)', '종료일(YYYY-MM-DD, 선택사항-미입력시 진행중)'];
+  const example = ['세척사과', '5kg', '공급처A', '12000', '2026-05-01', ''];
   const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-  ws['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }];
+  ws['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 38 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'B2B매입가양식');
   XLSX.writeFile(wb, 'B2B_매입가_양식.xlsx');
