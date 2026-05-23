@@ -1981,9 +1981,9 @@ function deleteShortcut(idx) {
 }
 
 // ── 주문서 탭 ────────────────────────────────────────────────────────────────
-const ORDER_COLUMNS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송Y/N','분리배송출고예정일','주문시출고예정일','출고일','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','최초등록상품명','업체상품코드','바코드','결제액','배송비구분','배송비','도서산간추가배송비','구매수량','옵션판매가','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송메세지','상품별추가메시지','주문자추가메시지','배송완료일','구매확정일자','개인통관번호','통관용수취인전화번호','기타','결제위치','배송유형'];
+const ORDER_COLUMNS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송Y/N','분리배송출고예정일','주문시출고예정일','출고일','주문일','등록상품명','등록옵션명','노출상품명(옵션명)','노출상품ID','옵션ID','최초등록상품명','업체상품코드','바코드','결제액','배송비구분','배송비','도서산간추가배송비','구매수(수량)','옵션판매가(판매단가)','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송메세지','상품별추가메시지','주문자추가메시지','배송완료일','구매확정일자','개인통관번호','통관용수취인전화번호','기타','결제위치','배송유형'];
 const ORDER_MASK_COLS = new Set(['구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소']);
-const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','결제액','배송비','구매수량','옵션판매가','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송완료일','구매확정일자','결제위치','배송유형'];
+const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명(옵션명)','노출상품ID','옵션ID','결제액','배송비','구매수(수량)','옵션판매가(판매단가)','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송완료일','구매확정일자','결제위치','배송유형'];
 
 function maskValue(col, val) {
   if (!val || val === '***') return '***';
@@ -2043,22 +2043,42 @@ function handleOrdersUpload(input) {
         return obj;
       }).filter(o => o['주문번호']);
 
-      // 기존 주문과 합산 (주문번호 기준 중복 제거)
+      // 중복 체크
       const existingNums = new Set(orders.map(o => o['주문번호']));
-      const added = newOrders.filter(o => !existingNums.has(o['주문번호']));
-      orders = [...orders, ...added];
-      localStorage.setItem('ordersData', JSON.stringify(orders));
-      saveToServer('ordersData', orders);
+      const dupOrders = newOrders.filter(o => existingNums.has(o['주문번호']));
+      const freshOrders = newOrders.filter(o => !existingNums.has(o['주문번호']));
 
-      // 매칭 리뷰: 이미 optionMatchings에 있는 옵션ID 확인
-      const newOptionIds = [...new Set(newOrders.map(o => o['옵션ID']).filter(Boolean))];
-      const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
-      if (matchedIds.length > 0) {
-        showMatchingReviewModal(matchedIds, newOrders);
+      const doUpload = (toAdd) => {
+        orders = [...orders, ...toAdd];
+        localStorage.setItem('ordersData', JSON.stringify(orders));
+        saveToServer('ordersData', orders);
+        // 매칭 리뷰: 이미 optionMatchings에 있는 옵션ID 확인
+        const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
+        const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
+        if (matchedIds.length > 0) showMatchingReviewModal(matchedIds, toAdd);
+        renderOrders();
+        alert(`${toAdd.length}건 추가됨 (총 ${orders.length}건)`);
+      };
+
+      if (dupOrders.length === 0) {
+        doUpload(freshOrders);
+      } else if (freshOrders.length === 0) {
+        showConfirmModal({
+          icon: '⚠️',
+          title: '중복 데이터',
+          message: `이미 업로드된 데이터입니다.<br>중복 주문번호 <strong>${dupOrders.length}건</strong> — 업로드가 차단됩니다.`,
+          confirmText: '확인',
+          cancelText: '확인',
+        });
+      } else {
+        showConfirmModal({
+          icon: '⚠️',
+          title: '일부 중복 데이터',
+          message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 있습니다.<br>신규 <strong>${freshOrders.length}건</strong>만 업로드할까요?`,
+          confirmText: `신규 ${freshOrders.length}건만 업로드`,
+          cancelText: '취소',
+        }).then(ok => { if (ok) doUpload(freshOrders); });
       }
-
-      renderOrders();
-      alert(`${added.length}건 추가됨 (총 ${orders.length}건)`);
     } catch(err) {
       alert('파일 파싱 오류: ' + err.message);
     }
@@ -2151,14 +2171,39 @@ function handleAdsUpload(input) {
         return obj;
       });
 
-      // 중복 제거: 날짜+광고집행옵션ID+캠페인ID
-      const existingKeys = new Set(adReports.map(r => `${r['날짜']}|${r['광고집행옵션ID']}|${r['캠페인ID']}`));
-      const added = newReports.filter(r => !existingKeys.has(`${r['날짜']}|${r['광고집행옵션ID']}|${r['캠페인ID']}`));
-      adReports = [...adReports, ...added];
-      localStorage.setItem('adReportsData', JSON.stringify(adReports));
-      saveToServer('adReportsData', adReports);
-      renderAds();
-      alert(`${added.length}건 추가됨 (총 ${adReports.length}건)`);
+      // 중복 체크: 날짜+광고집행옵션ID+키워드
+      const adKey = r => `${r['날짜']}|${r['광고집행옵션ID']}|${r['키워드']}`;
+      const existingKeys = new Set(adReports.map(adKey));
+      const dupReports = newReports.filter(r => existingKeys.has(adKey(r)));
+      const freshReports = newReports.filter(r => !existingKeys.has(adKey(r)));
+
+      const doAdUpload = (toAdd) => {
+        adReports = [...adReports, ...toAdd];
+        localStorage.setItem('adReportsData', JSON.stringify(adReports));
+        saveToServer('adReportsData', adReports);
+        renderAds();
+        alert(`${toAdd.length}건 추가됨 (총 ${adReports.length}건)`);
+      };
+
+      if (dupReports.length === 0) {
+        doAdUpload(freshReports);
+      } else if (freshReports.length === 0) {
+        showConfirmModal({
+          icon: '⚠️',
+          title: '중복 데이터',
+          message: `이미 업로드된 광고 데이터입니다.<br>중복 항목 <strong>${dupReports.length}건</strong> — 업로드가 차단됩니다.`,
+          confirmText: '확인',
+          cancelText: '확인',
+        });
+      } else {
+        showConfirmModal({
+          icon: '⚠️',
+          title: '일부 중복 데이터',
+          message: `중복 항목 <strong>${dupReports.length}건</strong>이 있습니다.<br>신규 <strong>${freshReports.length}건</strong>만 업로드할까요?`,
+          confirmText: `신규 ${freshReports.length}건만 업로드`,
+          cancelText: '취소',
+        }).then(ok => { if (ok) doAdUpload(freshReports); });
+      }
     } catch(err) {
       alert('파일 파싱 오류: ' + err.message);
     }
@@ -2424,7 +2469,7 @@ function renderProfit() {
       });
     }
     const g = optionMap.get(key);
-    g.qty += parseFloat(o['구매수량']) || 1;
+    g.qty += parseFloat(o['구매수(수량)']) || 1;
     g.payment += parseFloat(o['결제액']) || 0;
     g.shipping += parseFloat(o['배송비']) || 0;
     g.couponDiscount += getCouponDiscountForOrder(o);
@@ -2619,7 +2664,7 @@ function renderProfit() {
     const realRev = (payment + shipping) - couponDisc;
     const fee = realRev * feeRate;
     const matching = oid ? optionMatchings[oid] : null;
-    const qty = parseFloat(o['구매수량']) || 1;
+    const qty = parseFloat(o['구매수(수량)']) || 1;
     const cost = matching ? (matching.cost || 0) * qty : 0;
     const adCostRaw = oid ? getOptionAdCost(oid) : 0;
     const realAdCost = adCostRaw * 1.1;
