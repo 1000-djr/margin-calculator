@@ -2324,7 +2324,7 @@ async function deleteShortcut(id) {
 // ── 주문서 탭 ────────────────────────────────────────────────────────────────
 const ORDER_COLUMNS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송Y/N','분리배송출고예정일','주문시출고예정일','출고일','주문일','등록상품명','등록옵션명','노출상품명(옵션명)','노출상품ID','옵션ID','최초등록상품명','업체상품코드','바코드','결제액','배송비구분','배송비','도서산간 추가배송비','구매수(수량)','옵션판매가(판매단가)','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인 주소','배송메세지','상품별추가메시지','주문자추가메시지','배송완료일','구매확정일자','개인통관번호','통관용수취인전화번호','기타','결제위치','배송유형'];
 const ORDER_MASK_COLS = new Set(['구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인 주소']);
-const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명(옵션명)','노출상품ID','옵션ID','결제액','배송비','구매수(수량)','옵션판매가(판매단가)','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인 주소','배송완료일','구매확정일자','결제위치','배송유형'];
+const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명(옵션명)','노출상품ID','옵션ID','결제액','배송비','쿠폰적용매출','구매수(수량)','옵션판매가(판매단가)','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인 주소','배송완료일','구매확정일자','결제위치','배송유형'];
 
 function maskValue(col, val) {
   if (!val || val === '***') return '***';
@@ -2632,7 +2632,19 @@ function renderOrders() {
     const btnLabel = isExcluded ? '✅인식' : '🚫미인식';
     const rowStyle = isExcluded ? ' style="opacity:0.4"' : '';
     const toggleBtn = `<td><button class="btn btn-ghost btn-xs" onclick="toggleOrderExclude('${(o['주문번호'] || '').replace(/'/g, "\\'")}')">${btnLabel}</button></td>`;
-    return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => `<td>${o[c] ?? ''}</td>`).join('') + '</tr>';
+    return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => {
+      if (c === '쿠폰적용매출') {
+        const pay  = parseFloat(o['결제액']) || 0;
+        const ship = parseFloat(o['배송비']) || 0;
+        const disc = getCouponDiscountForOrder(o);
+        const net  = pay + ship - disc;
+        if (disc > 0) {
+          return `<td style="font-family:var(--mono);white-space:nowrap"><span style="color:var(--red);font-size:11px">-${Math.round(disc).toLocaleString('ko-KR')}원</span><br><strong>${Math.round(net).toLocaleString('ko-KR')}원</strong></td>`;
+        }
+        return `<td style="font-family:var(--mono)">${Math.round(net).toLocaleString('ko-KR')}원</td>`;
+      }
+      return `<td>${o[c] ?? ''}</td>`;
+    }).join('') + '</tr>';
   }).join('');
 }
 
