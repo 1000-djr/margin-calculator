@@ -2622,16 +2622,19 @@ function renderOrders() {
   if (!thead || !tbody) return;
 
   const activeCols = ordersVisibleCols || ORDER_DISPLAY_COLS;
-  thead.innerHTML = '<tr><th>미인식</th>' + activeCols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  thead.innerHTML = '<tr><th>상태</th>' + activeCols.map(c => `<th>${c}</th>`).join('') + '</tr>';
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="${activeCols.length + 1}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(o => {
     const isExcluded = o.is_excluded;
-    const btnLabel = isExcluded ? '✅인식' : '🚫미인식';
+    const badge = isExcluded
+      ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;background:var(--red);color:#fff;margin-bottom:3px">미인식</span>`
+      : `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;background:var(--green);color:#fff;margin-bottom:3px">인식</span>`;
+    const btnLabel = isExcluded ? '↩ 인식으로' : '✕ 미인식';
     const rowStyle = isExcluded ? ' style="opacity:0.4"' : '';
-    const toggleBtn = `<td><button class="btn btn-ghost btn-xs" onclick="toggleOrderExclude('${(o['주문번호'] || '').replace(/'/g, "\\'")}')">${btnLabel}</button></td>`;
+    const toggleBtn = `<td style="text-align:center">${badge}<br><button class="btn btn-ghost btn-xs" onclick="toggleOrderExclude('${(o['주문번호'] || '').replace(/'/g, "\\'")}')">${btnLabel}</button></td>`;
     return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => {
       if (c === '쿠폰적용매출') {
         const pay  = parseFloat(o['결제액']) || 0;
