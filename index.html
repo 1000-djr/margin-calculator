@@ -1983,7 +1983,37 @@ function deleteShortcut(idx) {
 // ── 주문서 탭 ────────────────────────────────────────────────────────────────
 const ORDER_COLUMNS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송Y/N','분리배송출고예정일','주문시출고예정일','출고일','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','최초등록상품명','업체상품코드','바코드','결제액','배송비구분','배송비','도서산간추가배송비','구매수량','옵션판매가','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송메세지','상품별추가메시지','주문자추가메시지','배송완료일','구매확정일자','개인통관번호','통관용수취인전화번호','기타','결제위치','배송유형'];
 const ORDER_MASK_COLS = new Set(['구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소']);
-const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','결제액','배송비','구매수량','옵션판매가','배송완료일','구매확정일자','결제위치','배송유형'];
+const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','결제액','배송비','구매수량','옵션판매가','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송완료일','구매확정일자','결제위치','배송유형'];
+
+function maskValue(col, val) {
+  if (!val || val === '***') return '***';
+  if (col === '구매자' || col === '수취인이름') {
+    // 이름: 첫글자 + * (2글자) 또는 첫글자 + * + 끝글자 (3글자 이상)
+    const chars = [...val];
+    if (chars.length <= 1) return chars[0] + '*';
+    if (chars.length === 2) return chars[0] + '*';
+    return chars[0] + '*'.repeat(chars.length - 2) + chars[chars.length - 1];
+  }
+  if (col === '구매자전화번호' || col === '수취인전화번호') {
+    // 전화번호: 앞 3자리 + **** + 뒷 4자리
+    const digits = val.replace(/\D/g, '');
+    if (digits.length >= 10) {
+      const prefix = digits.slice(0, 3);
+      const suffix = digits.slice(-4);
+      return prefix + '-****-' + suffix;
+    }
+    return val.slice(0, 3) + '-****-' + val.slice(-4);
+  }
+  if (col === '우편번호') return '***';
+  if (col === '수취인주소') {
+    // 시/도 + 시/군/구만 표시, 이후 **
+    const parts = val.trim().split(/\s+/);
+    if (parts.length >= 2) return parts[0] + ' ' + parts[1] + ' **';
+    if (parts.length === 1) return parts[0] + ' **';
+    return '**';
+  }
+  return '***';
+}
 
 function handleOrdersUpload(input) {
   const file = input.files[0];
@@ -2007,7 +2037,7 @@ function handleOrdersUpload(input) {
         ORDER_COLUMNS.forEach(col => {
           const i = colIdx[col];
           let val = i >= 0 ? String(row[i] ?? '').trim() : '';
-          if (ORDER_MASK_COLS.has(col) && val) val = '***';
+          if (ORDER_MASK_COLS.has(col) && val) val = maskValue(col, val);
           obj[col] = val;
         });
         return obj;
