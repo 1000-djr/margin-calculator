@@ -2632,12 +2632,20 @@ function renderOrders() {
   }
   tbody.innerHTML = filtered.map(o => {
     const isExcluded = o.is_excluded;
-    const badge = isExcluded
-      ? `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;background:var(--red);color:#fff;margin-bottom:3px">미인식</span>`
-      : `<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:600;background:var(--green);color:#fff;margin-bottom:3px">인식</span>`;
-    const btnLabel = isExcluded ? '↩ 인식으로' : '✕ 미인식';
+    const safeNum = (o['주문번호'] || '').replace(/'/g, "\\'");
+    const trackBg   = isExcluded ? '#9ca3af' : 'var(--green)';
+    const thumbLeft = isExcluded ? '2px' : 'calc(100% - 18px)';
+    const label     = isExcluded ? '미인식' : '인식';
+    const labelColor = isExcluded ? '#9ca3af' : 'var(--green)';
     const rowStyle = isExcluded ? ' style="opacity:0.4"' : '';
-    const toggleBtn = `<td style="text-align:center">${badge}<br><button class="btn btn-ghost btn-xs" onclick="toggleOrderExclude('${(o['주문번호'] || '').replace(/'/g, "\\'")}')">${btnLabel}</button></td>`;
+    const toggleBtn = `<td style="text-align:center;white-space:nowrap">
+      <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer" onclick="toggleOrderExclude('${safeNum}')">
+        <div style="width:36px;height:20px;background:${trackBg};border-radius:10px;position:relative;transition:background .2s;flex-shrink:0">
+          <div style="position:absolute;top:2px;left:${thumbLeft};width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s;box-shadow:0 1px 3px #0004"></div>
+        </div>
+        <span style="font-size:10px;font-weight:600;color:${labelColor}">${label}</span>
+      </div>
+    </td>`;
     return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => {
       if (c === '쿠폰적용매출') {
         const pay  = parseFloat(o['결제액']) || 0;
