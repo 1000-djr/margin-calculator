@@ -3685,7 +3685,7 @@ async function renderProfit() {
         const taxTyp = resolved.taxType;
         let vat = 0;
         if (taxTyp === 'exempt') {
-          vat = (fee / 11) + (adCostRaw / 11);
+          vat = -(fee / 11) - (adCostRaw / 11);
         } else {
           vat = (realRevenue / 11) - ((cost || 0) / 11) - (fee / 11) - (adCostRaw / 11);
         }
@@ -3720,7 +3720,7 @@ async function renderProfit() {
     const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
     const realAdCost = adCostRaw * 1.1;
     const taxTyp = resolved.taxType;
-    let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRevenue / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
+    let vat = taxTyp === 'exempt' ? -(fee / 11) - (adCostRaw / 11) : (realRevenue / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
     const netProfit = resolved.source ? realRevenue - fee - cost - realAdCost - vat : 0;
     totalRevenue += realRevenue;
     totalFee += fee;
@@ -3764,10 +3764,10 @@ async function renderProfit() {
     const resolved   = resolveUnitCost(o['등록상품명'], o['등록옵션명'], oid, orderDateStr);
     const cost       = resolved.unitCost !== null ? resolved.unitCost * qty : 0;
     // 부가세 주문분 (광고비 제외 부분)
-    // 면세: fee/11  / 과세: (rev - cost - fee) / 11
+    // 면세: -(fee/11)  / 과세: (rev - cost - fee) / 11
     const vatOrderPart = resolved.taxType === 'taxable'
       ? (realRev - cost - fee) / 11
-      : fee / 11;
+      : -(fee / 11);
     p.revenue   += realRev;
     p.fee       += fee;
     p.cost      += cost;
@@ -3785,11 +3785,11 @@ async function renderProfit() {
   });
 
   // 기간별 순이익 계산
-  // vat = 주문분(vatOrders) + 광고비분(adCostRaw/11 면세 기준)
+  // vat = 주문분(vatOrders) - 광고비분(adCostRaw/11) — 면세·과세 모두 광고비는 vat 차감
   // 순이익 = 실매출 - 수수료 - 원가 - 실광고비(×1.1) - 부가세
   periodMap.forEach(p => {
     const realAdCost = p.adCostRaw * 1.1;
-    const vat = p.vatOrders + (p.adCostRaw / 11);
+    const vat = p.vatOrders - (p.adCostRaw / 11);
     p.realAdCost = realAdCost;
     p.vat = vat;
     p.net = p.revenue - p.fee - p.cost - realAdCost - vat;
