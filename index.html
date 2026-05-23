@@ -3428,6 +3428,18 @@ async function renderProfit() {
     if (Array.isArray(arData)) pAdReports = arData;
     if (Array.isArray(cData))  pCoupons   = cData;
     if (Array.isArray(bData))  pB2b       = bData;
+
+    // ── 디버그 로그 ──────────────────────────────────────────────────────
+    console.log(`[profit] 파라미터: start=${from||'없음'} end=${to||'없음'}`);
+    console.log(`[profit] 주문=${pOrders.length}건 / 광고=${pAdReports.length}건 / 쿠폰=${pCoupons.length}건 / B2B=${pB2b.length}건`);
+    if (pOrders.length > 0) {
+      const s = pOrders[0];
+      console.log('[profit] 주문 샘플:', { 주문일: s['주문일'], 결제액: s['결제액'], 배송비: s['배송비'], 옵션ID: s['옵션ID'], type결제액: typeof s['결제액'] });
+    }
+    if (pAdReports.length > 0) {
+      const s = pAdReports[0];
+      console.log('[profit] 광고 샘플:', { 날짜: s['날짜'], 광고비: s['광고비'], 옵션ID: s[AD_OPTION_COL], type광고비: typeof s['광고비'] });
+    }
   }
 
   // ── 로컬 헬퍼 (전역 변수 대신 fetch된 데이터 사용) ───────────────────────
@@ -3477,6 +3489,7 @@ async function renderProfit() {
   });
   const excludedInRange = allInRange.filter(o => o.is_excluded).length;
   let filtered = allInRange.filter(o => !o.is_excluded);
+  console.log(`[profit] 필터 후: 전체=${allInRange.length}건 / 미인식제외=${excludedInRange}건 / 집계대상=${filtered.length}건`);
 
   const feeRate = getPlatformRate();
 

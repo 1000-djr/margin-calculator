@@ -159,12 +159,21 @@ router.get('/crawl/status', (req, res) => {
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
+    console.log(`[GET /orders] user=${req.user.id} start=${start_date||'none'} end=${end_date||'none'}`);
     let q = 'SELECT * FROM orders WHERE user_id=$1';
     const params = [req.user.id];
-    if (start_date) { params.push(start_date);              q += ` AND order_date >= $${params.length}`; }
-    if (end_date)   { params.push(end_date + ' 23:59:59');  q += ` AND order_date <= $${params.length}`; }
+    // order_date는 VARCHAR(50), 'YYYY-MM-DD HH:mm' 또는 'YYYY.MM.DD' 혼용 → 앞 10자리 추출 후 점을 하이픈으로 변환해 비교
+    if (start_date) {
+      params.push(start_date);
+      q += ` AND REPLACE(LEFT(order_date, 10), '.', '-') >= $${params.length}`;
+    }
+    if (end_date) {
+      params.push(end_date);
+      q += ` AND REPLACE(LEFT(order_date, 10), '.', '-') <= $${params.length}`;
+    }
     q += ' ORDER BY order_date DESC, created_at DESC';
     const { rows } = await pool.query(q, params);
+    console.log(`[GET /orders] 결과=${rows.length}건`);
     res.json(rows.map(r => ({
       '번호':                r.id,
       '주문번호':            r.order_number,
@@ -292,12 +301,14 @@ router.delete('/orders', requireAuth, async (req, res) => {
 router.get('/ad-reports', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
+    console.log(`[GET /ad-reports] user=${req.user.id} start=${start_date||'none'} end=${end_date||'none'}`);
     let q = 'SELECT * FROM ad_reports WHERE user_id=$1';
     const params = [req.user.id];
     if (start_date) { params.push(start_date); q += ` AND report_date >= $${params.length}`; }
     if (end_date)   { params.push(end_date);   q += ` AND report_date <= $${params.length}`; }
     q += ' ORDER BY report_date DESC, created_at DESC';
     const { rows } = await pool.query(q, params);
+    console.log(`[GET /ad-reports] 결과=${rows.length}건`);
     res.json(rows.map(r => {
       // raw_data가 있으면 원본 그대로 반환, 없으면 구 컬럼으로 재구성
       if (r.raw_data) {
