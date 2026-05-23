@@ -3405,8 +3405,8 @@ async function renderProfit() {
   const to   = document.getElementById('profitDateTo')?.value;
 
   // 로딩 표시
-  const summaryEl = document.getElementById('profitSummaryCards');
-  if (summaryEl) summaryEl.innerHTML = '<div style="color:var(--text-dim);padding:8px 0">데이터 불러오는 중...</div>';
+  const profitSummaryEl = document.getElementById('profitSummaryCards');
+  if (profitSummaryEl) profitSummaryEl.innerHTML = '<div style="color:var(--text-dim);padding:8px 0">데이터 불러오는 중...</div>';
 
   // ── API에서 기간 기반 fresh 데이터 fetch ─────────────────────────────────
   let pOrders = orders, pAdReports = adReports, pCoupons = coupons, pB2b = b2bPriceHistory;
