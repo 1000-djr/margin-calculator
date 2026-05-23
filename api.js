@@ -155,4 +155,283 @@ router.get('/crawl/status', (req, res) => {
   res.json(crawlStatus);
 });
 
+// ─── 주문서 ───────────────────────────────────────────────────────────────────
+router.get('/orders', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM orders WHERE user_id=$1 ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    res.json(rows.map(r => ({
+      '주문번호':            r.order_number,
+      '묶음배송번호':        r.bundle_number,
+      '주문일':              r.order_date,
+      '등록상품명':          r.product_name,
+      '등록옵션명':          r.option_name,
+      '노출상품명(옵션명)':  r.display_name,
+      '노출상품ID':          r.display_product_id,
+      '옵션ID':              r.option_id,
+      '결제액':              r.payment_amount,
+      '배송비':              r.shipping_fee,
+      '구매수(수량)':        r.quantity,
+      '옵션판매가(판매단가)': r.unit_price,
+      '택배사':              r.courier,
+      '운송장번호':          r.tracking_number,
+      '출고일':              r.shipped_date,
+      '배송완료일':          r.delivered_date,
+      '구매확정일자':        r.confirmed_date,
+      '결제위치':            r.payment_location,
+      '배송유형':            r.delivery_type,
+      '구매자':              r.buyer_masked,
+      '구매자전화번호':      '',
+      '수취인이름':          r.recipient_name_masked,
+      '수취인전화번호':      r.recipient_phone_masked,
+      '우편번호':            '',
+      '수취인 주소':         r.recipient_address_masked,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/orders/bulk', requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.json({ inserted: 0 });
+  let inserted = 0;
+  try {
+    for (const o of items) {
+      const r = await pool.query(
+        `INSERT INTO orders
+         (user_id,order_number,bundle_number,order_date,product_name,option_name,
+          display_name,display_product_id,option_id,payment_amount,shipping_fee,
+          quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
+          confirmed_date,payment_location,delivery_type,buyer_masked,
+          recipient_name_masked,recipient_phone_masked,recipient_address_masked)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+         ON CONFLICT (user_id, order_number) DO NOTHING`,
+        [
+          req.user.id,
+          o['주문번호'] || '',
+          o['묶음배송번호'] || '',
+          o['주문일'] || '',
+          o['등록상품명'] || '',
+          o['등록옵션명'] || '',
+          o['노출상품명(옵션명)'] || o['노출상품명'] || '',
+          o['노출상품ID'] || '',
+          o['옵션ID'] || '',
+          parseInt(o['결제액']) || 0,
+          parseInt(o['배송비']) || 0,
+          parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,
+          parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0,
+          o['택배사'] || '',
+          o['운송장번호'] || '',
+          o['출고일'] || '',
+          o['배송완료일'] || '',
+          o['구매확정일자'] || '',
+          o['결제위치'] || '',
+          o['배송유형'] || '',
+          o['구매자'] || '',
+          o['수취인이름'] || '',
+          o['수취인전화번호'] || '',
+          o['수취인 주소'] || o['수취인주소'] || '',
+        ]
+      );
+      if (r.rowCount > 0) inserted++;
+    }
+    res.json({ inserted });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/orders', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM orders WHERE user_id=$1', [req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 광고보고서 ───────────────────────────────────────────────────────────────
+router.get('/ad-reports', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM ad_reports WHERE user_id=$1 ORDER BY report_date DESC, created_at DESC',
+      [req.user.id]
+    );
+    res.json(rows.map(r => ({
+      '날짜':               r.report_date,
+      '캠페인ID':           r.campaign_id,
+      '캠페인명':           r.campaign_name,
+      '광고그룹':           r.ad_group,
+      '광고집행상품명':     r.product_name,
+      '광고집행옵션ID':     r.option_id,
+      '키워드':             r.keyword,
+      '노출수':             r.impressions,
+      '클릭수':             r.clicks,
+      '광고비':             r.ad_cost,
+      '실광고비':           r.actual_ad_cost,
+      '총주문수(1일)':      r.orders_1d,
+      '총판매수량(1일)':    r.quantity_1d,
+      '총전환매출액(1일)':  r.revenue_1d,
+      '총주문수(14일)':     r.orders_14d,
+      '총판매수량(14일)':   r.quantity_14d,
+      '총전환매출액(14일)': r.revenue_14d,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.json({ inserted: 0 });
+  let inserted = 0;
+  try {
+    for (const r of items) {
+      const adCost = parseFloat(r['광고비']) || 0;
+      const result = await pool.query(
+        `INSERT INTO ad_reports
+         (user_id,report_date,campaign_id,campaign_name,ad_group,product_name,
+          option_id,keyword,impressions,clicks,ad_cost,actual_ad_cost,
+          orders_1d,quantity_1d,revenue_1d,orders_14d,quantity_14d,revenue_14d)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         ON CONFLICT (user_id, report_date, option_id, keyword) DO NOTHING`,
+        [
+          req.user.id,
+          r['날짜'] || '',
+          r['캠페인ID'] || '',
+          r['캠페인명'] || '',
+          r['광고그룹'] || '',
+          r['광고집행상품명'] || '',
+          r['광고집행옵션ID'] || '',
+          r['키워드'] || '',
+          parseInt(r['노출수']) || 0,
+          parseInt(r['클릭수']) || 0,
+          adCost,
+          Math.round(adCost * 1.1 * 100) / 100,
+          parseInt(r['총주문수(1일)']) || 0,
+          parseInt(r['총판매수량(1일)']) || 0,
+          parseFloat(r['총전환매출액(1일)']) || 0,
+          parseInt(r['총주문수(14일)']) || 0,
+          parseInt(r['총판매수량(14일)']) || 0,
+          parseFloat(r['총전환매출액(14일)']) || 0,
+        ]
+      );
+      if (result.rowCount > 0) inserted++;
+    }
+    res.json({ inserted });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/ad-reports', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM ad_reports WHERE user_id=$1', [req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 쿠폰 ────────────────────────────────────────────────────────────────────
+router.get('/coupons', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM coupons WHERE user_id=$1 ORDER BY created_at ASC',
+      [req.user.id]
+    );
+    res.json(rows.map(r => ({
+      id:        r.id,
+      name:      r.name,
+      discount:  parseFloat(r.discount),
+      startDate: r.start_date,
+      endDate:   r.end_date,
+      products:  r.products || '',
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/coupons', requireAuth, async (req, res) => {
+  const { name, discount, startDate, endDate, products } = req.body;
+  if (!name) return res.status(400).json({ error: 'name 필수' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO coupons (user_id,name,discount,start_date,end_date,products)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.id, name, discount || 0, startDate || '', endDate || '', products || '']
+    );
+    const r = rows[0];
+    res.status(201).json({ id: r.id, name: r.name, discount: parseFloat(r.discount), startDate: r.start_date, endDate: r.end_date, products: r.products });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/coupons/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM coupons WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 바로가기 ─────────────────────────────────────────────────────────────────
+router.get('/shortcuts', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM shortcuts WHERE user_id=$1 ORDER BY created_at ASC',
+      [req.user.id]
+    );
+    res.json(rows.map(r => ({ id: r.id, name: r.name, url: r.url })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/shortcuts', requireAuth, async (req, res) => {
+  const { name, url } = req.body;
+  if (!name || !url) return res.status(400).json({ error: 'name, url 필수' });
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO shortcuts (user_id,name,url) VALUES ($1,$2,$3) RETURNING *',
+      [req.user.id, name, url]
+    );
+    res.status(201).json({ id: rows[0].id, name: rows[0].name, url: rows[0].url });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/shortcuts/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM shortcuts WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 원가매칭 ─────────────────────────────────────────────────────────────────
+router.get('/cost-mappings', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM cost_mapping WHERE user_id=$1 ORDER BY created_at ASC',
+      [req.user.id]
+    );
+    res.json(rows.map(r => ({
+      option_id:    r.option_id,
+      product_name: r.product_name,
+      supplier:     r.supplier,
+      cost:         parseFloat(r.cost),
+      tax_type:     r.tax_type,
+      applied_date: r.applied_date,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/cost-mappings/:optionId', requireAuth, async (req, res) => {
+  const { supplierName, cost, taxType, productName } = req.body;
+  const optionId = req.params.optionId;
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    await pool.query(
+      `INSERT INTO cost_mapping (user_id,option_id,product_name,supplier,cost,tax_type,applied_date)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (user_id, option_id)
+       DO UPDATE SET product_name=$3, supplier=$4, cost=$5, tax_type=$6, applied_date=$7`,
+      [req.user.id, optionId, productName || '', supplierName || '', cost || 0, taxType || 'exempt', today]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/cost-mappings/:optionId', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM cost_mapping WHERE option_id=$1 AND user_id=$2', [req.params.optionId, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

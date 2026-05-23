@@ -67,6 +67,95 @@ async function initDB() {
     ALTER TABLE price_history ADD COLUMN IF NOT EXISTS shipping_fee INTEGER;
   `);
 
+  // 신규 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS orders (
+      id                       SERIAL PRIMARY KEY,
+      user_id                  INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      order_number             VARCHAR(100) NOT NULL,
+      bundle_number            VARCHAR(100),
+      order_date               VARCHAR(50),
+      product_name             TEXT,
+      option_name              TEXT,
+      display_name             TEXT,
+      display_product_id       VARCHAR(100),
+      option_id                VARCHAR(100),
+      payment_amount           INTEGER DEFAULT 0,
+      shipping_fee             INTEGER DEFAULT 0,
+      quantity                 INTEGER DEFAULT 1,
+      unit_price               INTEGER DEFAULT 0,
+      courier                  VARCHAR(100),
+      tracking_number          VARCHAR(100),
+      shipped_date             VARCHAR(50),
+      delivered_date           VARCHAR(50),
+      confirmed_date           VARCHAR(50),
+      payment_location         VARCHAR(100),
+      delivery_type            VARCHAR(100),
+      buyer_masked             VARCHAR(100),
+      recipient_name_masked    VARCHAR(100),
+      recipient_phone_masked   VARCHAR(50),
+      recipient_address_masked TEXT,
+      created_at               TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, order_number)
+    );
+
+    CREATE TABLE IF NOT EXISTS ad_reports (
+      id               SERIAL PRIMARY KEY,
+      user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      report_date      VARCHAR(50),
+      campaign_id      VARCHAR(100),
+      campaign_name    TEXT,
+      ad_group         TEXT,
+      product_name     TEXT,
+      option_id        VARCHAR(100),
+      keyword          TEXT DEFAULT '',
+      impressions      INTEGER DEFAULT 0,
+      clicks           INTEGER DEFAULT 0,
+      ad_cost          NUMERIC(12,2) DEFAULT 0,
+      actual_ad_cost   NUMERIC(12,2) DEFAULT 0,
+      orders_1d        INTEGER DEFAULT 0,
+      quantity_1d      INTEGER DEFAULT 0,
+      revenue_1d       NUMERIC(14,2) DEFAULT 0,
+      orders_14d       INTEGER DEFAULT 0,
+      quantity_14d     INTEGER DEFAULT 0,
+      revenue_14d      NUMERIC(14,2) DEFAULT 0,
+      created_at       TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, report_date, option_id, keyword)
+    );
+
+    CREATE TABLE IF NOT EXISTS coupons (
+      id          SERIAL PRIMARY KEY,
+      user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      discount    NUMERIC(12,2) DEFAULT 0,
+      start_date  VARCHAR(20),
+      end_date    VARCHAR(20),
+      products    TEXT DEFAULT '',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS shortcuts (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name       TEXT NOT NULL,
+      url        TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS cost_mapping (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      option_id    VARCHAR(100) NOT NULL,
+      product_name TEXT,
+      supplier     TEXT,
+      cost         NUMERIC(12,2) DEFAULT 0,
+      tax_type     VARCHAR(20) DEFAULT 'exempt',
+      applied_date VARCHAR(20),
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, option_id)
+    );
+  `);
+
   console.log('[db] Tables ready');
 }
 
