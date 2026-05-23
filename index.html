@@ -945,7 +945,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
-            <th>기간</th><th>총매출</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>마진율</th>
+            <th>기간</th><th>매출(쿠폰전)</th><th>매출(쿠폰후)</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>마진율</th>
           </tr></thead>
           <tbody id="profitPeriodTbody"></tbody>
         </table>
@@ -3781,7 +3781,7 @@ async function renderProfit() {
   filtered.forEach(o => {
     const pk  = getPeriodKey(o['주문일']);
     const oid = o['옵션ID'] || '';
-    if (!periodMap.has(pk)) periodMap.set(pk, { revenue: 0, fee: 0, cost: 0, adCostRaw: 0, vatOrders: 0 });
+    if (!periodMap.has(pk)) periodMap.set(pk, { revenueGross: 0, revenue: 0, fee: 0, cost: 0, adCostRaw: 0, vatOrders: 0 });
     const p = periodMap.get(pk);
 
     const payment    = parseFloat(o['결제액']) || 0;
@@ -3799,6 +3799,7 @@ async function renderProfit() {
       ? (realRev - cost - fee) / 11
       : -(fee / 11);
 
+    p.revenueGross += (payment + shipping);
     p.revenue   += realRev;
     p.fee       += fee;
     p.cost      += cost;
@@ -3827,12 +3828,13 @@ async function renderProfit() {
   if (periodTbody) {
     const sortedPeriods = [...periodMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     if (!sortedPeriods.length) {
-      periodTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+      periodTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
       periodTbody.innerHTML = sortedPeriods.map(([period, d]) => {
         const rate = d.revenue > 0 ? (d.net / d.revenue * 100) : 0;
         return `<tr>
           <td style="font-family:var(--mono)">${period}</td>
+          <td style="font-family:var(--mono)">${Math.round(d.revenueGross).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono)">${Math.round(d.revenue).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);color:var(--red)">${Math.round(d.fee).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono)">${Math.round(d.cost).toLocaleString('ko-KR')}원</td>
