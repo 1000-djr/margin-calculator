@@ -163,6 +163,7 @@ router.get('/orders', requireAuth, async (req, res) => {
       [req.user.id]
     );
     res.json(rows.map(r => ({
+      '번호':                r.id,
       '주문번호':            r.order_number,
       '묶음배송번호':        r.bundle_number,
       '주문일':              r.order_date,
@@ -221,6 +222,7 @@ router.put('/orders/:orderNumber/exclude', requireAuth, async (req, res) => {
 router.post('/orders/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
   if (!items.length) return res.json({ inserted: 0 });
+  console.log(`[orders/bulk] user=${req.user.id} items=${items.length}`);
   let inserted = 0;
   try {
     for (const o of items) {
@@ -262,8 +264,12 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
       );
       if (r.rowCount > 0) inserted++;
     }
+    console.log(`[orders/bulk] 삽입=${inserted} / 전체=${items.length}`);
     res.json({ inserted });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[orders/bulk] DB 오류:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.delete('/orders', requireAuth, async (req, res) => {

@@ -1010,19 +1010,28 @@ async function loadUserData() {
     }
     if (hData && Array.isArray(hData)) history = hData;
 
-    // 전용 테이블 엔드포인트
+    // 전용 테이블 엔드포인트 (응답이 배열이 아니면 localStorage 폴백)
+    async function safeFetch(url) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) { console.warn('[loadUserData]', url, r.status); return null; }
+        const d = await r.json();
+        return Array.isArray(d) ? d : null;
+      } catch(e) { console.warn('[loadUserData] 네트워크 오류', url, e); return null; }
+    }
     const [scData, oData, arData, cData, cmData] = await Promise.all([
-      fetch('/api/shortcuts').then(r => r.json()).catch(() => []),
-      fetch('/api/orders').then(r => r.json()).catch(() => []),
-      fetch('/api/ad-reports').then(r => r.json()).catch(() => []),
-      fetch('/api/coupons').then(r => r.json()).catch(() => []),
-      fetch('/api/cost-mappings').then(r => r.json()).catch(() => []),
+      safeFetch('/api/shortcuts'),
+      safeFetch('/api/orders'),
+      safeFetch('/api/ad-reports'),
+      safeFetch('/api/coupons'),
+      safeFetch('/api/cost-mappings'),
     ]);
-    if (Array.isArray(scData)) { shortcuts = scData; localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts)); }
-    if (Array.isArray(oData)) { orders = oData; localStorage.setItem('ordersData', JSON.stringify(orders)); }
-    if (Array.isArray(arData)) { adReports = arData; localStorage.setItem('adReportsData', JSON.stringify(adReports)); }
-    if (Array.isArray(cData)) { coupons = cData; localStorage.setItem('couponsData', JSON.stringify(coupons)); }
-    if (Array.isArray(cmData)) {
+    if (scData) { shortcuts = scData; localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts)); }
+    if (oData)  { orders = oData;     localStorage.setItem('ordersData',   JSON.stringify(orders));    }
+    else { console.log('[orders] DB 로드 실패 → localStorage 유지 (', orders.length, '건)'); }
+    if (arData) { adReports = arData; localStorage.setItem('adReportsData', JSON.stringify(adReports)); }
+    if (cData)  { coupons = cData;    localStorage.setItem('couponsData',   JSON.stringify(coupons));   }
+    if (cmData) {
       optionMatchings = {};
       cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt', productName: m.product_name || '' }; });
       localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
@@ -2391,7 +2400,24 @@ function handleOrdersUpload(input) {
         orders = [...orders, ...toAdd];
         localStorage.setItem('ordersData', JSON.stringify(orders));
         if (currentUser) {
-          try { await fetch('/api/orders/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) }); } catch(e) {}
+          try {
+            const res = await fetch('/api/orders/bulk', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(toAdd)
+            });
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              console.error('[orders] DB 저장 실패:', res.status, err);
+              alert(`⚠️ DB 저장 실패 (${res.status}: ${err.error || '알 수 없는 오류'})\n로컬에는 저장됐습니다. 로그인 상태를 확인해주세요.`);
+            } else {
+              const result = await res.json().catch(() => ({}));
+              console.log('[orders] DB 저장 완료:', result.inserted, '건 삽입');
+            }
+          } catch(e) {
+            console.error('[orders] 네트워크 오류:', e);
+            alert(`⚠️ DB 저장 중 네트워크 오류: ${e.message}\n로컬에는 저장됐습니다.`);
+          }
         }
         // 매칭 리뷰: 이미 optionMatchings에 있는 옵션ID 확인
         const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
