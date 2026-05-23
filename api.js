@@ -158,10 +158,11 @@ router.get('/crawl/status', (req, res) => {
 // ─── 주문서 ───────────────────────────────────────────────────────────────────
 router.get('/orders', requireAuth, async (req, res) => {
   try {
-    const { start_date, end_date } = req.query;
-    console.log(`[GET /orders] user=${req.user.id} start=${start_date||'none'} end=${end_date||'none'}`);
+    const { start_date, end_date, exclude_excluded } = req.query;
+    console.log(`[GET /orders] user=${req.user.id} start=${start_date||'none'} end=${end_date||'none'} exclude_excluded=${exclude_excluded||'false'}`);
     let q = 'SELECT * FROM orders WHERE user_id=$1';
     const params = [req.user.id];
+    if (exclude_excluded === 'true') q += ' AND (is_excluded IS NULL OR is_excluded = false)';
     // order_date는 VARCHAR(50), 'YYYY-MM-DD HH:mm' 또는 'YYYY.MM.DD' 혼용 → 앞 10자리 추출 후 점을 하이픈으로 변환해 비교
     if (start_date) {
       params.push(start_date);

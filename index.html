@@ -3417,6 +3417,7 @@ async function renderProfit() {
     const qs = new URLSearchParams();
     if (from) qs.set('start_date', from);
     if (to)   qs.set('end_date',   to);
+    qs.set('exclude_excluded', 'true');
     const qstr = qs.toString() ? '?' + qs.toString() : '';
     const safeFetch = async url => {
       try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch { return null; }
@@ -3483,15 +3484,23 @@ async function renderProfit() {
     return matches.reduce((best, p) => (!best || p.id > best.id) ? p : best, null);
   }
 
-  // ── 필터링 (API가 날짜 필터했어도 클라이언트 측 재확인 + 미인식 제외) ───
+  // ── 필터링 (API가 날짜 필터했어도 클라이언트 측 재확인 + 미인식 완전 제외) ───
   let allInRange = pOrders.filter(o => {
+    if (o.is_excluded) return false;   // 미인식 완전 제외 (서버 필터 + 로컬 fallback 이중 처리)
     const d = parseOrderDate(o['주문일']);
     if (from && d && d < new Date(from)) return false;
     if (to   && d && d > new Date(to + 'T23:59:59')) return false;
     return true;
   });
-  const excludedInRange = allInRange.filter(o => o.is_excluded).length;
-  let filtered = allInRange.filter(o => !o.is_excluded);
+  // 미인식 제외 건수: 날짜 범위 내에서 is_excluded=true 인 원본 주문 수 (로컬 데이터 기준)
+  const excludedInRange = pOrders.filter(o => {
+    if (!o.is_excluded) return false;
+    const d = parseOrderDate(o['주문일']);
+    if (from && d && d < new Date(from)) return false;
+    if (to   && d && d > new Date(to + 'T23:59:59')) return false;
+    return true;
+  }).length;
+  let filtered = allInRange; // allInRange 자체가 이미 미인식 제외된 목록
   console.log(`[profit] 필터 후: 전체=${allInRange.length}건 / 미인식제외=${excludedInRange}건 / 집계대상=${filtered.length}건`);
 
   const feeRate = getPlatformRate();
