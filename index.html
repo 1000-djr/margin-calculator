@@ -3474,17 +3474,46 @@ async function renderProfit() {
     });
     return applicable[0].discount_amount || 0;
   }
-  function localB2bCost(productName, dateStr) {
+  function localB2bCost(productName, dateStr, unit) {
     if (!productName || !dateStr) return null;
     const d = String(dateStr).replace(/\./g, '-').slice(0, 10);
     const matches = pB2b.filter(p => {
       if (p.product_name !== productName) return false;
+      if (unit !== undefined && unit !== '' && (p.unit || '') !== unit) return false;
       if (p.start_date && d < p.start_date) return false;
       if (p.end_date   && d > p.end_date)   return false;
       return true;
     });
     if (!matches.length) return null;
     return matches.reduce((best, p) => (!best || p.id > best.id) ? p : best, null);
+  }
+
+  // product_name_mapping 조회: registered_name+option_name 우선, 없으면 option_name='' fallback
+  function findPNM(productName, optionName) {
+    return productNameMappings.find(m =>
+      m.registered_name === productName && (m.option_name || '') === (optionName || '')
+    ) || productNameMappings.find(m =>
+      m.registered_name === productName && !m.option_name
+    ) || null;
+  }
+
+  // 원가 단가 계산: PNM 자동 → optionMatchings 수동 → null 순서로 조회
+  // returns { unitCost, taxType, source: 'auto'|'manual'|null }
+  function resolveUnitCost(productName, optionName, optionId, orderDateStr) {
+    const pnm = findPNM(productName, optionName);
+    if (pnm) {
+      const b2b = localB2bCost(pnm.b2b_name, orderDateStr, pnm.b2b_unit || undefined);
+      if (b2b) return { unitCost: parseFloat(b2b.cost), taxType: 'exempt', source: 'auto', pnm, b2b };
+      return { unitCost: null, taxType: 'exempt', source: 'auto_no_price', pnm };
+    }
+    const manual = optionId ? optionMatchings[optionId] : null;
+    if (manual) {
+      const repDate = orderDateStr;
+      const b2b = manual.productName ? localB2bCost(manual.productName, repDate) : null;
+      const unitCost = b2b ? parseFloat(b2b.cost) : (parseFloat(manual.cost) || 0);
+      return { unitCost, taxType: manual.taxType || 'exempt', source: 'manual', pnm: null, b2b: b2b || null };
+    }
+    return { unitCost: null, taxType: 'exempt', source: null, pnm: null };
   }
 
   // ── 필터링 (API가 날짜 필터했어도 클라이언트 측 재확인 + 미인식 완전 제외) ───
@@ -3530,119 +3559,109 @@ async function renderProfit() {
     if (od > g.lastOrderDate) g.lastOrderDate = od;
   });
 
-  // 매칭 현황
+  // 매칭 현황: PNM 자동매칭 우선, 없으면 optionMatchings 수동, 없으면 미매칭
   let matchedCount = 0, unmatchedCount = 0;
-  const unmatchedItems = [];
-  optionMap.forEach((g, key) => {
-    if (g.optionId && optionMatchings[g.optionId]) matchedCount++;
-    else { unmatchedCount++; unmatchedItems.push(g); }
+  const unmatchedItems = [], autoItems = [], manualItems = [];
+  optionMap.forEach((g) => {
+    const pnm = findPNM(g.productName, g.optionName);
+    if (pnm) {
+      matchedCount++;
+      autoItems.push({ ...g, pnm });
+    } else if (g.optionId && optionMatchings[g.optionId]) {
+      matchedCount++;
+      manualItems.push(g);
+    } else {
+      unmatchedCount++;
+      unmatchedItems.push(g);
+    }
   });
+
+  // ── 매칭 폼 공통 HTML 생성 헬퍼 ────────────────────────────────────────────
+  function matchFormHtml(g, colspan) {
+    const m = g.optionId ? optionMatchings[g.optionId] : null;
+    return `<tr id="matchform_${g.optionId}" style="display:none">
+      <td colspan="${colspan}">
+        <div style="padding:8px 0">
+          <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:6px"></div>
+          <div id="matchB2BMapRow_${g.optionId}" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <label style="font-size:12px;white-space:nowrap">B2B 상품 연결</label>
+            <select style="flex:1;min-width:180px;font-size:12px"></select>
+            <input type="hidden" id="matchB2BName_${g.optionId}" value="">
+          </div>
+          <div class="match-inline-form">
+            <div><label>공급처명</label>
+              <select id="matchSupplier_${g.optionId}">
+                ${suppliers.map(s => `<option value="${s.name}"${m && s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
+              </select>
+            </div>
+            <div><label>공급가 (원)</label>
+              <input type="number" id="matchCost_${g.optionId}" ${m ? `value="${m.cost||0}"` : 'placeholder="0"'}>
+            </div>
+            <div><label>과세구분</label>
+              <select id="matchTax_${g.optionId}">
+                <option value="exempt"${!m || m.taxType==='exempt' ? ' selected' : ''}>면세</option>
+                <option value="taxable"${m && m.taxType==='taxable' ? ' selected' : ''}>과세</option>
+              </select>
+            </div>
+            <div><label>&nbsp;</label>
+              <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}','${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">저장</button>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }
 
   // 매칭 섹션 렌더링
   const matchContent = document.getElementById('profitMatchContent');
   if (matchContent) {
-    let matchHtml = `<div style="font-size:13px;margin-bottom:12px">매칭완료 <strong style="color:var(--green)">${matchedCount}건</strong> / 미매칭 <strong style="color:var(--red)">${unmatchedCount}건</strong></div>`;
+    let matchHtml = `<div style="font-size:13px;margin-bottom:12px">자동매칭 <strong style="color:var(--green)">${autoItems.length}건</strong> · 수동매칭 <strong style="color:var(--text-dim)">${manualItems.length}건</strong> · 미매칭 <strong style="color:var(--red)">${unmatchedCount}건</strong></div>`;
+
+    // 미매칭 — "공급처 지정" 버튼
     if (unmatchedItems.length) {
-      matchHtml += `<table class="profit-table"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>수량</th><th>공급처 지정</th></tr></thead><tbody>`;
+      matchHtml += `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:4px">미매칭 항목 — B2B 상품 연결 필요</div>
+        <table class="profit-table"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>수량</th><th></th></tr></thead><tbody>`;
       unmatchedItems.forEach(g => {
         matchHtml += `<tr>
-          <td>${g.productName}</td>
-          <td>${g.optionName}</td>
-          <td style="font-family:var(--mono)">${g.optionId || '-'}</td>
+          <td>${g.productName}</td><td>${g.optionName}</td>
+          <td style="font-family:var(--mono)">${g.optionId||'-'}</td>
           <td style="font-family:var(--mono)">${g.qty}</td>
-          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}', this, '${g.productName.replace(/'/g, "\\'")}', '${(g.optionName||'').replace(/'/g, "\\'")}')">공급처 지정</button></td>
-        </tr>
-        <tr id="matchform_${g.optionId}" style="display:none">
-          <td colspan="5">
-            <div style="padding:8px 0">
-              <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:6px"></div>
-              <div id="matchB2BMapRow_${g.optionId}" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-                <label style="font-size:12px;white-space:nowrap">B2B 상품명 연결</label>
-                <select style="flex:1;min-width:180px;font-size:12px"></select>
-                <input type="hidden" id="matchB2BName_${g.optionId}" value="">
-              </div>
-              <div class="match-inline-form">
-                <div>
-                  <label>공급처명</label>
-                  <select id="matchSupplier_${g.optionId}">
-                    ${suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
-                  </select>
-                </div>
-                <div>
-                  <label>공급가 (원)</label>
-                  <input type="number" id="matchCost_${g.optionId}" placeholder="0">
-                </div>
-                <div>
-                  <label>과세구분</label>
-                  <select id="matchTax_${g.optionId}">
-                    <option value="exempt">면세</option>
-                    <option value="taxable">과세</option>
-                  </select>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}', '${g.productName.replace(/'/g, "\\'")}', '${(g.optionName||'').replace(/'/g, "\\'")}')">저장</button>
-                </div>
-              </div>
-            </div>
-          </td>
-        </tr>`;
+          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}',this,'${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">공급처 지정</button></td>
+        </tr>${matchFormHtml(g, 5)}`;
       });
       matchHtml += '</tbody></table>';
     }
 
-    // 이미 매칭된 항목도 표시
-    const matchedItems = [];
-    optionMap.forEach(g => { if (g.optionId && optionMatchings[g.optionId]) matchedItems.push(g); });
-    if (matchedItems.length) {
-      matchHtml += `<div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-dim)">매칭 완료 항목</div>
-        <table class="profit-table" style="margin-top:6px"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>공급처</th><th>공급가</th><th>과세구분</th><th></th></tr></thead><tbody>`;
-      matchedItems.forEach(g => {
+    // 자동매칭 — PNM 기반, 버튼 없음 (연결 변경만)
+    if (autoItems.length) {
+      matchHtml += `<div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--green);margin-bottom:4px">자동매칭 항목 (B2B 상품명 연결됨)</div>
+        <table class="profit-table" style="margin-top:4px"><thead><tr><th>등록상품명</th><th>옵션명</th><th>B2B상품</th><th>단위</th><th></th></tr></thead><tbody>`;
+      autoItems.forEach(g => {
+        const pnm = g.pnm;
+        const b2bLabel = pnm.b2b_unit ? `${pnm.b2b_name} ${pnm.b2b_unit}` : pnm.b2b_name;
+        matchHtml += `<tr>
+          <td>${g.productName}</td><td>${g.optionName||'-'}</td>
+          <td style="font-family:var(--mono)">${pnm.b2b_name}</td>
+          <td style="font-family:var(--mono)">${pnm.b2b_unit||'-'}</td>
+          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}',this,'${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">연결 변경</button></td>
+        </tr>${matchFormHtml(g, 5)}`;
+      });
+      matchHtml += '</tbody></table>';
+    }
+
+    // 수동매칭 — optionMatchings 기반
+    if (manualItems.length) {
+      matchHtml += `<div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:4px">수동매칭 항목</div>
+        <table class="profit-table" style="margin-top:4px"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>공급처</th><th>공급가</th><th></th></tr></thead><tbody>`;
+      manualItems.forEach(g => {
         const m = optionMatchings[g.optionId];
         matchHtml += `<tr>
-          <td>${g.productName}</td>
-          <td>${g.optionName}</td>
+          <td>${g.productName}</td><td>${g.optionName||'-'}</td>
           <td style="font-family:var(--mono)">${g.optionId}</td>
           <td>${m.supplierName}</td>
-          <td style="font-family:var(--mono)">${(m.cost || 0).toLocaleString('ko-KR')}원</td>
-          <td>${m.taxType === 'taxable' ? '과세' : '면세'}</td>
-          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}', this, '${g.productName.replace(/'/g, "\\'")}', '${(g.optionName||'').replace(/'/g, "\\'")}')">변경</button></td>
-        </tr>
-        <tr id="matchform_${g.optionId}" style="display:none">
-          <td colspan="7">
-            <div style="padding:8px 0">
-              <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:6px"></div>
-              <div id="matchB2BMapRow_${g.optionId}" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-                <label style="font-size:12px;white-space:nowrap">B2B 상품명 연결</label>
-                <select style="flex:1;min-width:180px;font-size:12px"></select>
-                <input type="hidden" id="matchB2BName_${g.optionId}" value="">
-              </div>
-              <div class="match-inline-form">
-                <div>
-                  <label>공급처명</label>
-                  <select id="matchSupplier_${g.optionId}">
-                    ${suppliers.map(s => `<option value="${s.name}"${s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
-                  </select>
-                </div>
-                <div>
-                  <label>공급가 (원)</label>
-                  <input type="number" id="matchCost_${g.optionId}" value="${m.cost || 0}">
-                </div>
-                <div>
-                  <label>과세구분</label>
-                  <select id="matchTax_${g.optionId}">
-                    <option value="exempt"${m.taxType === 'exempt' ? ' selected' : ''}>면세</option>
-                    <option value="taxable"${m.taxType === 'taxable' ? ' selected' : ''}>과세</option>
-                  </select>
-                </div>
-                <div>
-                  <label>&nbsp;</label>
-                  <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}', '${g.productName.replace(/'/g, "\\'")}', '${(g.optionName||'').replace(/'/g, "\\'")}')">저장</button>
-                </div>
-              </div>
-            </div>
-          </td>
-        </tr>`;
+          <td style="font-family:var(--mono)">${(m.cost||0).toLocaleString('ko-KR')}원</td>
+          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}',this,'${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">변경</button></td>
+        </tr>${matchFormHtml(g, 6)}`;
       });
       matchHtml += '</tbody></table>';
     }
@@ -3658,16 +3677,12 @@ async function renderProfit() {
       productTbody.innerHTML = [...optionMap.values()].map(g => {
         const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
         const fee = realRevenue * feeRate;
-        const matching = g.optionId ? optionMatchings[g.optionId] : null;
-        let cost = null;
-        if (matching) {
-          const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
-          const b2bMatch = matching.productName ? localB2bCost(matching.productName, repDate) : null;
-          cost = (b2bMatch ? b2bMatch.cost : (matching.cost || 0)) * g.qty;
-        }
+        const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
+        const resolved = resolveUnitCost(g.productName, g.optionName, g.optionId, repDate);
+        const cost = resolved.unitCost !== null ? resolved.unitCost * g.qty : null;
         const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
         const realAdCost = adCostRaw * 1.1;
-        const taxTyp = matching ? matching.taxType : 'exempt';
+        const taxTyp = resolved.taxType;
         let vat = 0;
         if (taxTyp === 'exempt') {
           vat = (fee / 11) + (adCostRaw / 11);
@@ -3676,7 +3691,7 @@ async function renderProfit() {
         }
         const netProfit = cost !== null ? realRevenue - fee - cost - realAdCost - vat : null;
         const marginRate = (netProfit !== null && realRevenue > 0) ? (netProfit / realRevenue * 100) : null;
-        const isUnmatched = !matching;
+        const isUnmatched = resolved.source === null;
 
         return `<tr class="${isUnmatched ? 'unmatched-row' : ''}">
           <td>${g.productName}</td>
@@ -3699,18 +3714,14 @@ async function renderProfit() {
   optionMap.forEach(g => {
     const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
     const fee = realRevenue * feeRate;
-    const matching = g.optionId ? optionMatchings[g.optionId] : null;
-    let cost = 0;
-    if (matching) {
-      const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
-      const b2bMatch = matching.productName ? localB2bCost(matching.productName, repDate) : null;
-      cost = (b2bMatch ? b2bMatch.cost : (matching.cost || 0)) * g.qty;
-    }
+    const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
+    const resolved = resolveUnitCost(g.productName, g.optionName, g.optionId, repDate);
+    const cost = resolved.unitCost !== null ? resolved.unitCost * g.qty : 0;
     const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
     const realAdCost = adCostRaw * 1.1;
-    const taxTyp = matching ? matching.taxType : 'exempt';
+    const taxTyp = resolved.taxType;
     let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRevenue / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
-    const netProfit = matching ? realRevenue - fee - cost - realAdCost - vat : 0;
+    const netProfit = resolved.source ? realRevenue - fee - cost - realAdCost - vat : 0;
     totalRevenue += realRevenue;
     totalFee += fee;
     totalCost += cost;
@@ -3745,15 +3756,10 @@ async function renderProfit() {
     const couponDisc = localCouponDiscount(o);
     const realRev = (payment + shipping) - couponDisc;
     const fee = realRev * feeRate;
-    const matching = oid ? optionMatchings[oid] : null;
     const qty = parseFloat(o['구매수(수량)']) || 1;
-    let unitCost = matching ? (matching.cost || 0) : 0;
-    if (matching && matching.productName) {
-      const orderDateStr = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
-      const b2bMatch = localB2bCost(matching.productName, orderDateStr);
-      if (b2bMatch) unitCost = b2bMatch.cost;
-    }
-    const cost = unitCost * qty;
+    const orderDateStr = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
+    const resolved = resolveUnitCost(o['등록상품명'], o['등록옵션명'], oid, orderDateStr);
+    const cost = resolved.unitCost !== null ? resolved.unitCost * qty : 0;
     p.revenue += realRev;
     p.fee     += fee;
     p.cost    += cost;

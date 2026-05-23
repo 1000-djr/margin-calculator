@@ -655,6 +655,31 @@ async function upsertB2BSupplier(userId, supplierName, client) {
   return rows[0].id;
 }
 
+router.get('/b2b-prices/match', requireAuth, async (req, res) => {
+  const { b2b_name, unit = '', order_date } = req.query;
+  if (!b2b_name || !order_date) return res.status(400).json({ error: 'b2b_name, order_date 필수' });
+  try {
+    const { rows } = await pool.query(`
+      SELECT bp.id, bp.cost,
+             bp.start_date::text, bp.end_date::text,
+             p.name AS product_name, p.unit,
+             s.name AS supplier_name
+      FROM b2b_prices bp
+      JOIN b2b_products p ON p.id = bp.b2b_product_id
+      JOIN b2b_suppliers s ON s.id = bp.supplier_id
+      WHERE bp.user_id = $1
+        AND p.name = $2
+        AND ($3 = '' OR p.unit = $3)
+        AND bp.start_date <= $4::date
+        AND (bp.end_date IS NULL OR bp.end_date >= $4::date)
+      ORDER BY bp.id DESC
+      LIMIT 1
+    `, [req.user.id, b2b_name, unit, order_date]);
+    if (!rows.length) return res.json(null);
+    res.json(b2bPriceRow(rows[0]));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/b2b-prices', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
