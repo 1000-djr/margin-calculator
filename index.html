@@ -1062,6 +1062,8 @@ async function loadUserData() {
       aomData.forEach(m => { adOptionMappings[m.ad_option_id] = { productId: m.product_id, productName: m.product_name }; });
       localStorage.setItem('adOptionMappings', JSON.stringify(adOptionMappings));
     }
+    const pnmData = await fetch('/api/product-name-mappings').then(r => r.json()).catch(() => []);
+    if (Array.isArray(pnmData)) productNameMappings = pnmData;
   } catch (e) {
     console.warn('[auth] 유저 데이터 불러오기 실패', e);
   }
@@ -1138,7 +1140,8 @@ let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
-// { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
+// { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable', productName } }
+let productNameMappings = []; // [{ id, registered_name, b2b_name }] — DB 동기화
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
 // { [ad_option_id]: { productId, productName } }
 let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
@@ -3549,28 +3552,35 @@ async function renderProfit() {
         </tr>
         <tr id="matchform_${g.optionId}" style="display:none">
           <td colspan="5">
-            <div class="match-inline-form">
-              <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;color:var(--green);margin-bottom:4px"></div>
-              <div>
-                <label>공급처명</label>
-                <select id="matchSupplier_${g.optionId}">
-                  ${suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
-                </select>
+            <div style="padding:8px 0">
+              <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:6px"></div>
+              <div id="matchB2BMapRow_${g.optionId}" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <label style="font-size:12px;white-space:nowrap">B2B 상품명 연결</label>
+                <select style="flex:1;min-width:180px;font-size:12px"></select>
+                <input type="hidden" id="matchB2BName_${g.optionId}" value="">
               </div>
-              <div>
-                <label>공급가 (원)</label>
-                <input type="number" id="matchCost_${g.optionId}" placeholder="0">
-              </div>
-              <div>
-                <label>과세구분</label>
-                <select id="matchTax_${g.optionId}">
-                  <option value="exempt">면세</option>
-                  <option value="taxable">과세</option>
-                </select>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}', '${g.productName.replace(/'/g, "\\'")}')">저장</button>
+              <div class="match-inline-form">
+                <div>
+                  <label>공급처명</label>
+                  <select id="matchSupplier_${g.optionId}">
+                    ${suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label>공급가 (원)</label>
+                  <input type="number" id="matchCost_${g.optionId}" placeholder="0">
+                </div>
+                <div>
+                  <label>과세구분</label>
+                  <select id="matchTax_${g.optionId}">
+                    <option value="exempt">면세</option>
+                    <option value="taxable">과세</option>
+                  </select>
+                </div>
+                <div>
+                  <label>&nbsp;</label>
+                  <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}', '${g.productName.replace(/'/g, "\\'")}')">저장</button>
+                </div>
               </div>
             </div>
           </td>
@@ -3598,28 +3608,35 @@ async function renderProfit() {
         </tr>
         <tr id="matchform_${g.optionId}" style="display:none">
           <td colspan="7">
-            <div class="match-inline-form">
-              <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;color:var(--green);margin-bottom:4px"></div>
-              <div>
-                <label>공급처명</label>
-                <select id="matchSupplier_${g.optionId}">
-                  ${suppliers.map(s => `<option value="${s.name}"${s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
-                </select>
+            <div style="padding:8px 0">
+              <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:6px"></div>
+              <div id="matchB2BMapRow_${g.optionId}" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <label style="font-size:12px;white-space:nowrap">B2B 상품명 연결</label>
+                <select style="flex:1;min-width:180px;font-size:12px"></select>
+                <input type="hidden" id="matchB2BName_${g.optionId}" value="">
               </div>
-              <div>
-                <label>공급가 (원)</label>
-                <input type="number" id="matchCost_${g.optionId}" value="${m.cost || 0}">
-              </div>
-              <div>
-                <label>과세구분</label>
-                <select id="matchTax_${g.optionId}">
-                  <option value="exempt"${m.taxType === 'exempt' ? ' selected' : ''}>면세</option>
-                  <option value="taxable"${m.taxType === 'taxable' ? ' selected' : ''}>과세</option>
-                </select>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}', '${g.productName.replace(/'/g, "\\'")}')">저장</button>
+              <div class="match-inline-form">
+                <div>
+                  <label>공급처명</label>
+                  <select id="matchSupplier_${g.optionId}">
+                    ${suppliers.map(s => `<option value="${s.name}"${s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
+                  </select>
+                </div>
+                <div>
+                  <label>공급가 (원)</label>
+                  <input type="number" id="matchCost_${g.optionId}" value="${m.cost || 0}">
+                </div>
+                <div>
+                  <label>과세구분</label>
+                  <select id="matchTax_${g.optionId}">
+                    <option value="exempt"${m.taxType === 'exempt' ? ' selected' : ''}>면세</option>
+                    <option value="taxable"${m.taxType === 'taxable' ? ' selected' : ''}>과세</option>
+                  </select>
+                </div>
+                <div>
+                  <label>&nbsp;</label>
+                  <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}', '${g.productName.replace(/'/g, "\\'")}')">저장</button>
+                </div>
               </div>
             </div>
           </td>
@@ -3766,37 +3783,101 @@ function showMatchForm(optionId, btn, productName) {
   row.style.display = isHidden ? 'table-row' : 'none';
   if (!isHidden) return; // closing — skip auto-fill
 
-  // 자동 매칭 시도: B2B 매입가 이력에서 상품명 기준 조회
-  if (productName) {
-    const refDate = document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0, 10);
-    const d = String(refDate).replace(/\./g, '-').slice(0, 10);
-    const matches = b2bPriceHistory.filter(p => {
-      if (p.product_name !== productName) return false;
-      if (p.start_date && d < p.start_date) return false;
-      if (p.end_date   && d > p.end_date)   return false;
-      return true;
-    });
-    const best = matches.length ? matches.reduce((a, b) => b.id > a.id ? b : a) : null;
-    const hintEl = document.getElementById('matchAutoHint_' + optionId);
-    const supplierEl = document.getElementById('matchSupplier_' + optionId);
-    const costEl = document.getElementById('matchCost_' + optionId);
-    if (best) {
-      if (supplierEl) {
-        const opt = [...supplierEl.options].find(o => o.value === best.supplier_name);
-        if (opt) supplierEl.value = best.supplier_name;
+  const hintEl     = document.getElementById('matchAutoHint_'   + optionId);
+  const supplierEl = document.getElementById('matchSupplier_'   + optionId);
+  const costEl     = document.getElementById('matchCost_'       + optionId);
+  const b2bMapEl   = document.getElementById('matchB2BMapRow_'  + optionId);
+
+  if (!productName) return;
+
+  const refDate = document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0, 10);
+  const d = String(refDate).replace(/\./g, '-').slice(0, 10);
+
+  // 1단계: product_name_mapping에서 등록상품명 → B2B 상품명 매핑 확인
+  const pnm = productNameMappings.find(m => m.registered_name === productName);
+  const lookupName = pnm ? pnm.b2b_name : productName;
+
+  // 2단계: B2B 매입가 이력에서 lookupName 기준 조회
+  const matches = b2bPriceHistory.filter(p => {
+    if (p.product_name !== lookupName) return false;
+    if (p.start_date && d < p.start_date) return false;
+    if (p.end_date   && d > p.end_date)   return false;
+    return true;
+  });
+  const best = matches.length ? matches.reduce((a, b) => b.id > a.id ? b : a) : null;
+
+  if (best) {
+    // 자동 매칭 성공
+    if (supplierEl) {
+      const opt = [...supplierEl.options].find(o => o.value === best.supplier_name);
+      if (opt) supplierEl.value = best.supplier_name;
+    }
+    if (costEl) costEl.value = best.cost;
+    if (hintEl) {
+      hintEl.innerHTML = `✓ B2B 이력 자동 불러옴${pnm ? ` (<em>${productName}</em> → <em>${pnm.b2b_name}</em>)` : ''} — <strong>${best.supplier_name}</strong> / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong> (${best.start_date}~${best.end_date || '진행중'})`;
+      hintEl.style.color = 'var(--green)';
+      hintEl.style.display = 'block';
+    }
+    if (b2bMapEl) b2bMapEl.style.display = 'none';
+  } else {
+    // 자동 매칭 실패 — B2B 상품명 연결 드롭다운 표시
+    if (hintEl) {
+      hintEl.textContent = pnm
+        ? `매핑된 B2B 상품명 "${pnm.b2b_name}"의 ${d} 기준 이력 없음 — 아래에서 다시 연결하세요`
+        : `등록상품명 "${productName}"과 일치하는 B2B 이력 없음 — 아래에서 B2B 상품명을 연결하세요`;
+      hintEl.style.color = 'var(--text-dim)';
+      hintEl.style.display = 'block';
+    }
+    if (b2bMapEl) {
+      // B2B 상품명 고유 목록 생성
+      const b2bNames = [...new Set(b2bPriceHistory.map(p => p.product_name).filter(Boolean))].sort();
+      const selectEl = b2bMapEl.querySelector('select');
+      if (selectEl) {
+        selectEl.innerHTML = `<option value="">-- B2B 상품명 선택 --</option>` +
+          b2bNames.map(n => `<option value="${n.replace(/"/g, '&quot;')}"${pnm && pnm.b2b_name === n ? ' selected' : ''}>${n}</option>`).join('');
+        selectEl.onchange = () => applyB2BSelection(optionId, selectEl.value, d, supplierEl, costEl, hintEl);
+        if (pnm) applyB2BSelection(optionId, pnm.b2b_name, d, supplierEl, costEl, hintEl);
       }
-      if (costEl) costEl.value = best.cost;
-      if (hintEl) { hintEl.textContent = `✓ B2B 이력에서 자동 불러옴 — ${best.supplier_name} / ${Number(best.cost).toLocaleString('ko-KR')}원 (${best.start_date}~${best.end_date || '진행중'})`; hintEl.style.display = 'block'; }
-    } else {
-      if (hintEl) { hintEl.textContent = `B2B 이력에서 "${productName}" 매칭 없음 — 직접 입력하세요`; hintEl.style.display = 'block'; hintEl.style.color = 'var(--text-dim)'; }
+      b2bMapEl.style.display = 'flex';
     }
   }
 }
 
+function applyB2BSelection(optionId, b2bName, refDate, supplierEl, costEl, hintEl) {
+  if (!b2bName) return;
+  const d = String(refDate).replace(/\./g, '-').slice(0, 10);
+  const matches = b2bPriceHistory.filter(p => {
+    if (p.product_name !== b2bName) return false;
+    if (p.start_date && d < p.start_date) return false;
+    if (p.end_date   && d > p.end_date)   return false;
+    return true;
+  });
+  const best = matches.length ? matches.reduce((a, b) => b.id > a.id ? b : a) : null;
+  if (best) {
+    if (supplierEl) {
+      const opt = [...supplierEl.options].find(o => o.value === best.supplier_name);
+      if (opt) supplierEl.value = best.supplier_name;
+    }
+    if (costEl) costEl.value = best.cost;
+    if (hintEl) {
+      hintEl.innerHTML = `✓ <strong>${b2bName}</strong> 선택 — <strong>${best.supplier_name}</strong> / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong>`;
+      hintEl.style.color = 'var(--green)';
+    }
+  } else {
+    if (hintEl) {
+      hintEl.textContent = `"${b2bName}" 기준 ${refDate} 이력 없음`;
+      hintEl.style.color = 'var(--text-dim)';
+    }
+  }
+  // 선택된 B2B 상품명을 optionId 폼에 기억해두기 (저장 시 매핑에 활용)
+  const mapHiddenEl = document.getElementById('matchB2BName_' + optionId);
+  if (mapHiddenEl) mapHiddenEl.value = b2bName;
+}
+
 async function saveOptionMatching(optionId, productName) {
   const supplierEl = document.getElementById('matchSupplier_' + optionId);
-  const costEl = document.getElementById('matchCost_' + optionId);
-  const taxEl = document.getElementById('matchTax_' + optionId);
+  const costEl     = document.getElementById('matchCost_'     + optionId);
+  const taxEl      = document.getElementById('matchTax_'      + optionId);
   if (!supplierEl || !costEl || !taxEl) return;
   const supplierName = supplierEl.value;
   const cost = parseFloat(costEl.value) || 0;
@@ -3809,8 +3890,28 @@ async function saveOptionMatching(optionId, productName) {
   }
   optionMatchings[optionId] = { supplierName, cost, taxType, productName };
   localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
+
   if (currentUser) {
     try { await fetch('/api/cost-mappings/' + encodeURIComponent(optionId), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ supplierName, cost, taxType, productName }) }); } catch(e) {}
+
+    // B2B 상품명 연결 선택값이 있으면 product_name_mapping 저장
+    const b2bNameEl = document.getElementById('matchB2BName_' + optionId);
+    const b2bName = b2bNameEl ? b2bNameEl.value.trim() : '';
+    if (b2bName && productName) {
+      try {
+        const r = await fetch('/api/product-name-mappings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registered_name: productName, b2b_name: b2bName }),
+        });
+        if (r.ok) {
+          const saved = await r.json();
+          const idx = productNameMappings.findIndex(m => m.registered_name === productName);
+          if (idx >= 0) productNameMappings[idx] = saved;
+          else productNameMappings.push(saved);
+        }
+      } catch(e) {}
+    }
   }
 
   // B2B 매입가 이력도 업데이트

@@ -735,4 +735,40 @@ router.delete('/b2b-prices/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── product-name-mappings ──────────────────────────────────────────────────────
+router.get('/product-name-mappings', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM product_name_mapping WHERE user_id=$1 ORDER BY registered_name',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/product-name-mappings', requireAuth, async (req, res) => {
+  const { registered_name, b2b_name } = req.body;
+  if (!registered_name || !b2b_name) return res.status(400).json({ error: '필수값 누락' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO product_name_mapping (user_id, registered_name, b2b_name)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (user_id, registered_name) DO UPDATE SET b2b_name = EXCLUDED.b2b_name
+       RETURNING *`,
+      [req.user.id, registered_name, b2b_name]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/product-name-mappings/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM product_name_mapping WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

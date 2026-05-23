@@ -245,6 +245,17 @@ async function initDB() {
     ALTER TABLE orders     ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT FALSE;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS product_name_mapping (
+      id                SERIAL PRIMARY KEY,
+      user_id           INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      registered_name   TEXT NOT NULL,
+      b2b_name          TEXT NOT NULL,
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, registered_name)
+    );
+  `);
+
   console.log('[db] Tables ready');
 }
 
