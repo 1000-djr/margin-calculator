@@ -802,6 +802,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <!-- ══ 쿠폰 탭 ════════════════════════════════════════════════════ -->
   <div class="panel" id="tab-coupons">
     <div class="section-label">쿠폰 등록</div>
+    <div class="btn-row" style="margin-bottom:14px">
+      <button class="btn" onclick="downloadCouponTemplate()">📥 엑셀 양식 다운로드</button>
+      <button class="btn btn-primary" onclick="document.getElementById('couponBulkFileInput').click()">📤 엑셀 대량 등록</button>
+      <input type="file" id="couponBulkFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleCouponBulkUpload(this)">
+    </div>
     <div class="card">
       <div class="card-title"><span class="dot"></span><span id="couponFormTitle">새 쿠폰 추가</span></div>
       <div class="field-row">
@@ -1493,7 +1498,10 @@ function showConfirmModal({ icon = '📦', title, message, confirmText = '확인
     document.getElementById('modalTitle').textContent      = title;
     document.getElementById('modalMessage').innerHTML      = message;
     document.getElementById('modalConfirmBtn').textContent = confirmText;
-    document.getElementById('modalCancelBtn').textContent  = cancelText;
+    const modalCancelBtn = document.getElementById('modalCancelBtn');
+    modalCancelBtn.textContent  = cancelText;
+    modalCancelBtn.style.display = cancelText ? '' : 'none';
+    modalCancelBtn.closest('.modal-actions').style.gridTemplateColumns = cancelText ? '1fr 1fr' : '1fr';
 
     if (selectOptions && selectOptions.length) {
       const extraOption = enableNewOption
@@ -2563,6 +2571,109 @@ function openAdMappingForOid(oid) {
 }
 
 // ── 쿠폰 탭 ──────────────────────────────────────────────────────────────────
+function downloadCouponTemplate() {
+  const headers = ['쿠폰명', '쿠폰ID', '할인금액(원)', '시작일시(YYYY-MM-DD HH:mm)', '종료일시(YYYY-MM-DD HH:mm)', '적용옵션ID(쉼표구분)'];
+  const example = ['신규가입 할인쿠폰', '123456789', '3000', '2026-05-01 00:00', '2026-05-31 23:59', '111111111,222222222,333333333'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 26 }, { wch: 26 }, { wch: 40 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '쿠폰등록양식');
+  XLSX.writeFile(wb, '쿠폰_대량등록_양식.xlsx');
+}
+
+async function handleCouponBulkUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) { alert('데이터가 없습니다'); return; }
+
+      const headers  = rows[0].map(h => String(h).trim());
+      const colName  = headers.indexOf('쿠폰명');
+      const colCid   = headers.indexOf('쿠폰ID');
+      const colAmt   = headers.indexOf('할인금액(원)');
+      const colStart = headers.indexOf('시작일시(YYYY-MM-DD HH:mm)');
+      const colEnd   = headers.indexOf('종료일시(YYYY-MM-DD HH:mm)');
+      const colOpts  = headers.indexOf('적용옵션ID(쉼표구분)');
+
+      let successCount = 0, dupCount = 0;
+      const errorRows = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.every(c => String(c).trim() === '')) continue; // 빈 행 skip
+
+        const name      = String(colName  >= 0 ? row[colName]  : '').trim();
+        const coupon_id = String(colCid   >= 0 ? row[colCid]   : '').trim();
+        const amt       = parseFloat(colAmt >= 0 ? row[colAmt] : '') || 0;
+        const startRaw  = String(colStart >= 0 ? row[colStart] : '').trim();
+        const endRaw    = String(colEnd   >= 0 ? row[colEnd]   : '').trim();
+        const optsRaw   = String(colOpts  >= 0 ? row[colOpts]  : '').trim();
+
+        // 필수값 검사
+        if (!name)              { errorRows.push(`${i + 1}행: 쿠폰명 없음`); continue; }
+        if (!amt || amt <= 0)   { errorRows.push(`${i + 1}행 (${name}): 할인금액 오류`); continue; }
+        if (!startRaw || !endRaw) { errorRows.push(`${i + 1}행 (${name}): 기간 없음`); continue; }
+
+        // 날짜 파싱 ("2026-05-01 00:00" → ISO)
+        const start_at = startRaw.replace(' ', 'T');
+        const end_at   = endRaw.replace(' ', 'T');
+        if (isNaN(new Date(start_at).getTime()) || isNaN(new Date(end_at).getTime())) {
+          errorRows.push(`${i + 1}행 (${name}): 날짜 형식 오류 (YYYY-MM-DD HH:mm 사용)`); continue;
+        }
+
+        // 쿠폰ID 기준 중복 체크
+        if (coupon_id && coupons.some(c => String(c.coupon_id) === coupon_id)) {
+          dupCount++; continue;
+        }
+
+        const option_ids = optsRaw ? optsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+        const payload = { coupon_id: coupon_id || null, name, discount_amount: amt, start_at, end_at, option_ids };
+
+        if (currentUser) {
+          try {
+            const data = await fetch('/api/coupons', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            }).then(r => r.json());
+            if (data.error) throw new Error(data.error);
+            coupons.push(data);
+            successCount++;
+          } catch(err) {
+            errorRows.push(`${i + 1}행 (${name}): 저장 실패 — ${err.message}`);
+          }
+        } else {
+          coupons.push({ id: Date.now() + i, ...payload });
+          successCount++;
+        }
+      }
+
+      localStorage.setItem('couponsData', JSON.stringify(coupons));
+      renderCoupons();
+
+      const errDetail = errorRows.length
+        ? `<div style="text-align:left;font-size:12px;color:var(--red);max-height:120px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:8px 10px;margin-top:10px;font-family:var(--mono)">${errorRows.join('<br>')}</div>`
+        : '';
+      await showConfirmModal({
+        icon: '🎟',
+        title: '쿠폰 대량 등록 완료',
+        message: `<strong>성공 ${successCount}건</strong> &nbsp;·&nbsp; 중복 ${dupCount}건 &nbsp;·&nbsp; 오류 ${errorRows.length}건${errDetail}`,
+        confirmText: '확인',
+        cancelText: '',
+      });
+    } catch(err) {
+      alert('파일 읽기 오류: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function parseOptionIds(raw) {
   return raw.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
 }
