@@ -459,6 +459,21 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 주문번호 일괄 미인식 모달 ══════════════════════════════════════════ -->
+<div id="bulkExcludeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface1);border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 8px 40px #0008">
+    <div style="font-size:20px;font-weight:700;margin-bottom:8px">🚫 주문번호 일괄 미인식</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">미인식 처리할 주문번호를 입력하세요.<br>여러 개는 줄바꿈 또는 쉼표로 구분합니다.</div>
+    <textarea id="bulkExcludeTextarea" rows="8"
+      style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:var(--mono);resize:vertical"
+      placeholder="예시:&#10;11234567890&#10;11234567891&#10;11234567892"></textarea>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeBulkExcludeModal()">취소</button>
+      <button class="btn btn-primary" onclick="confirmBulkExclude()">미인식 처리</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 로그인 화면 ══════════════════════════════════════════════════════ -->
 <div id="loginScreen" style="display:none">
   <div class="login-card">
@@ -770,9 +785,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="upload-area-text">클릭하여 주문서 엑셀 파일 선택 (.xlsx, .xls)<br>기존 주문과 합산되며 주문번호 기준 중복 제거됩니다</div>
       </div>
       <input type="file" id="ordersFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleOrdersUpload(this)">
+      <div class="btn-row" style="margin-top:10px;margin-bottom:0">
+        <button class="btn btn-ghost btn-sm" onclick="openBulkExcludeModal()">🚫 주문번호 일괄 미인식</button>
+      </div>
     </div>
     <div class="section-label">필터</div>
     <div class="card">
+      <div class="btn-row" style="margin-bottom:10px">
+        <button class="btn btn-sm active" id="ordersFilterAll"      onclick="setOrdersFilter('all')">전체</button>
+        <button class="btn btn-sm"        id="ordersFilterIncluded" onclick="setOrdersFilter('included')">인식</button>
+        <button class="btn btn-sm"        id="ordersFilterExcluded" onclick="setOrdersFilter('excluded')">미인식</button>
+      </div>
       <div class="filter-row">
         <div class="field"><label>주문일 시작</label><input type="date" id="ordersDateFrom"></div>
         <div class="field"><label>주문일 종료</label><input type="date" id="ordersDateTo"></div>
@@ -1083,6 +1106,7 @@ let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let editingCouponId = null;
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
 let editingB2BPriceId = null;
+let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -2343,12 +2367,81 @@ function parseOrderDate(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function setOrdersFilter(mode) {
+  ordersExcludeFilter = mode;
+  ['All','Included','Excluded'].forEach(m => {
+    const btn = document.getElementById('ordersFilter' + m);
+    if (btn) btn.classList.toggle('active', mode === m.toLowerCase());
+  });
+  renderOrders();
+}
+
+async function toggleOrderExclude(orderNumber) {
+  const idx = orders.findIndex(o => o['주문번호'] === orderNumber);
+  if (idx === -1) return;
+  const newVal = !orders[idx].is_excluded;
+  orders[idx].is_excluded = newVal;
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+  if (currentUser) {
+    try {
+      await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/exclude`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_excluded: newVal })
+      });
+    } catch(e) {}
+  }
+  renderOrders();
+}
+
+function openBulkExcludeModal() {
+  document.getElementById('bulkExcludeTextarea').value = '';
+  document.getElementById('bulkExcludeModal').style.display = 'flex';
+}
+
+function closeBulkExcludeModal() {
+  document.getElementById('bulkExcludeModal').style.display = 'none';
+}
+
+async function confirmBulkExclude() {
+  const raw = document.getElementById('bulkExcludeTextarea').value;
+  const numbers = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+  if (!numbers.length) { alert('주문번호를 입력해주세요'); return; }
+
+  let updatedCount = 0;
+  numbers.forEach(num => {
+    const o = orders.find(x => x['주문번호'] === num);
+    if (o) { o.is_excluded = true; updatedCount++; }
+  });
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+
+  if (currentUser) {
+    try {
+      await fetch('/api/orders/exclude-bulk', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_numbers: numbers, is_excluded: true })
+      });
+    } catch(e) {}
+  }
+
+  closeBulkExcludeModal();
+  renderOrders();
+  showConfirmModal({
+    icon: '✅',
+    title: '일괄 미인식 처리 완료',
+    message: `입력한 ${numbers.length}개 주문번호 중 <strong>${updatedCount}건</strong>이 미인식 처리되었습니다.`,
+    confirmText: '확인',
+    cancelText: '',
+  });
+}
+
 function renderOrders() {
   const from = document.getElementById('ordersDateFrom')?.value;
   const to = document.getElementById('ordersDateTo')?.value;
   const search = (document.getElementById('ordersSearchName')?.value || '').toLowerCase();
 
-  let filtered = orders.filter(o => {
+  let dateFiltered = orders.filter(o => {
     if (search && !o['등록상품명'].toLowerCase().includes(search)) return false;
     const d = parseOrderDate(o['주문일']);
     if (from && d && d < new Date(from)) return false;
@@ -2356,15 +2449,22 @@ function renderOrders() {
     return true;
   });
 
+  const excludedCount = dateFiltered.filter(o => o.is_excluded).length;
+
+  let filtered = dateFiltered;
+  if (ordersExcludeFilter === 'included') filtered = dateFiltered.filter(o => !o.is_excluded);
+  else if (ordersExcludeFilter === 'excluded') filtered = dateFiltered.filter(o => o.is_excluded);
+
   // 요약
-  const totalAmt = filtered.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
-  const totalShip = filtered.reduce((s, o) => s + (parseFloat(o['배송비']) || 0), 0);
+  const totalAmt = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
+  const totalShip = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['배송비']) || 0), 0);
   const summaryEl = document.getElementById('ordersSummary');
   if (summaryEl) {
     summaryEl.innerHTML = `
-      <div class="summary-card"><div class="summary-card-label">총 주문수</div><div class="summary-card-value">${filtered.length.toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">총 결제액</div><div class="summary-card-value green">${totalAmt.toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총 배송비</div><div class="summary-card-value">${totalShip.toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 주문수(인식)</div><div class="summary-card-value">${(dateFiltered.length - excludedCount).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">미인식</div><div class="summary-card-value" style="color:var(--red)">${excludedCount.toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${totalAmt.toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${totalShip.toLocaleString('ko-KR')}원</div></div>
     `;
   }
 
@@ -2373,14 +2473,18 @@ function renderOrders() {
   const tbody = document.getElementById('ordersTbody');
   if (!thead || !tbody) return;
 
-  thead.innerHTML = '<tr>' + ORDER_DISPLAY_COLS.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  thead.innerHTML = '<tr><th>미인식</th>' + ORDER_DISPLAY_COLS.map(c => `<th>${c}</th>`).join('') + '</tr>';
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="${ORDER_DISPLAY_COLS.length}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${ORDER_DISPLAY_COLS.length + 1}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     return;
   }
-  tbody.innerHTML = filtered.map(o =>
-    '<tr>' + ORDER_DISPLAY_COLS.map(c => `<td>${o[c] ?? ''}</td>`).join('') + '</tr>'
-  ).join('');
+  tbody.innerHTML = filtered.map(o => {
+    const isExcluded = o.is_excluded;
+    const btnLabel = isExcluded ? '✅인식' : '🚫미인식';
+    const rowStyle = isExcluded ? ' style="opacity:0.4"' : '';
+    const toggleBtn = `<td><button class="btn btn-ghost btn-xs" onclick="toggleOrderExclude('${(o['주문번호'] || '').replace(/'/g, "\\'")}')">${btnLabel}</button></td>`;
+    return `<tr${rowStyle}>${toggleBtn}` + ORDER_DISPLAY_COLS.map(c => `<td>${o[c] ?? ''}</td>`).join('') + '</tr>';
+  }).join('');
 }
 
 async function deleteAllOrders() {
@@ -3079,12 +3183,14 @@ function renderProfit() {
   const from = document.getElementById('profitDateFrom')?.value;
   const to = document.getElementById('profitDateTo')?.value;
 
-  let filtered = orders.filter(o => {
+  let allInRange = orders.filter(o => {
     const d = parseOrderDate(o['주문일']);
     if (from && d && d < new Date(from)) return false;
     if (to && d && d > new Date(to + 'T23:59:59')) return false;
     return true;
   });
+  const excludedInRange = allInRange.filter(o => o.is_excluded).length;
+  let filtered = allInRange.filter(o => !o.is_excluded);
 
   const feeRate = getPlatformRate();
 
@@ -3287,6 +3393,7 @@ function renderProfit() {
       <div class="summary-card"><div class="summary-card-label">총쿠폰할인</div><div class="summary-card-value red">${Math.round(totalCouponDiscount).toLocaleString('ko-KR')}원</div></div>
       <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(totalVat).toLocaleString('ko-KR')}원</div></div>
       <div class="summary-card"><div class="summary-card-label">순이익</div><div class="summary-card-value ${totalNet >= 0 ? 'green' : 'red'}">${Math.round(totalNet).toLocaleString('ko-KR')}원</div></div>
+      ${excludedInRange > 0 ? `<div class="summary-card"><div class="summary-card-label">미인식 제외</div><div class="summary-card-value" style="color:var(--red)">${excludedInRange.toLocaleString('ko-KR')}건</div></div>` : ''}
     `;
   }
 

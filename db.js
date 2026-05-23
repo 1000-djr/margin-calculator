@@ -128,6 +128,7 @@ async function initDB() {
       recipient_name_masked    VARCHAR(100),
       recipient_phone_masked   VARCHAR(50),
       recipient_address_masked TEXT,
+      is_excluded              BOOLEAN DEFAULT FALSE,
       created_at               TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE (user_id, order_number)
     );
@@ -239,8 +240,9 @@ async function initDB() {
   `);
 
   await pool.query(`
-    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS start_date DATE;
-    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS end_date   DATE;
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS start_date  DATE;
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS end_date    DATE;
+    ALTER TABLE orders     ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT FALSE;
   `);
 
   console.log('[db] Tables ready');
