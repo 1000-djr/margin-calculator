@@ -555,4 +555,117 @@ router.delete('/ad-option-mappings/:adOptionId', requireAuth, async (req, res) =
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── B2B 매입가 이력 ──────────────────────────────────────────────────────────
+function b2bPriceRow(r) {
+  return {
+    id:            r.id,
+    product_name:  r.product_name,
+    unit:          r.unit || '',
+    supplier_name: r.supplier_name,
+    cost:          parseFloat(r.cost),
+    start_date:    r.start_date ? r.start_date.toISOString().slice(0,10) : '',
+    end_date:      r.end_date   ? r.end_date.toISOString().slice(0,10)   : '',
+  };
+}
+
+async function upsertB2BProduct(userId, productName, unit, client) {
+  const q = client || pool;
+  const { rows } = await q.query(
+    `INSERT INTO b2b_products (user_id,name,unit) VALUES ($1,$2,$3)
+     ON CONFLICT (user_id,name,unit) DO UPDATE SET name=EXCLUDED.name RETURNING id`,
+    [userId, productName, unit || '']
+  );
+  return rows[0].id;
+}
+
+async function upsertB2BSupplier(userId, supplierName, client) {
+  const q = client || pool;
+  const { rows } = await q.query(
+    `INSERT INTO b2b_suppliers (user_id,name) VALUES ($1,$2)
+     ON CONFLICT (user_id,name) DO UPDATE SET name=EXCLUDED.name RETURNING id`,
+    [userId, supplierName]
+  );
+  return rows[0].id;
+}
+
+router.get('/b2b-prices', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT bp.id, bp.cost, bp.start_date, bp.end_date,
+             p.name AS product_name, p.unit,
+             s.name AS supplier_name
+      FROM b2b_prices bp
+      JOIN b2b_products p ON p.id = bp.b2b_product_id
+      JOIN b2b_suppliers s ON s.id = bp.supplier_id
+      WHERE bp.user_id = $1
+      ORDER BY p.name, p.unit, bp.start_date DESC
+    `, [req.user.id]);
+    res.json(rows.map(b2bPriceRow));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/b2b-prices', requireAuth, async (req, res) => {
+  const { product_name, unit, supplier_name, cost, start_date, end_date } = req.body;
+  if (!product_name || !supplier_name || !cost || !start_date)
+    return res.status(400).json({ error: 'product_name, supplier_name, cost, start_date 필수' });
+  try {
+    const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
+    const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
+    const { rows } = await pool.query(
+      `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id,b2b_product_id,supplier_id,start_date) DO NOTHING
+       RETURNING id, cost, start_date, end_date`,
+      [req.user.id, productId, supplierId, cost, start_date, end_date || null]
+    );
+    if (!rows.length) return res.status(409).json({ error: '동일 상품+공급처+시작일 중복' });
+    res.status(201).json({ id: rows[0].id, product_name, unit: unit||'', supplier_name, cost: parseFloat(rows[0].cost), start_date: rows[0].start_date.toISOString().slice(0,10), end_date: rows[0].end_date ? rows[0].end_date.toISOString().slice(0,10) : '' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/b2b-prices/bulk', requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  let inserted = 0, dupCount = 0;
+  const errorRows = [];
+  for (const item of items) {
+    const { product_name, unit, supplier_name, cost, start_date, end_date } = item;
+    if (!product_name || !supplier_name || !cost || !start_date) { errorRows.push(`skip: ${product_name}`); continue; }
+    try {
+      const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
+      const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
+      const r = await pool.query(
+        `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (user_id,b2b_product_id,supplier_id,start_date) DO NOTHING`,
+        [req.user.id, productId, supplierId, cost, start_date, end_date || null]
+      );
+      if (r.rowCount > 0) inserted++; else dupCount++;
+    } catch(e) { errorRows.push(`${product_name}: ${e.message}`); }
+  }
+  res.json({ inserted, dupCount, errorRows });
+});
+
+router.put('/b2b-prices/:id', requireAuth, async (req, res) => {
+  const { product_name, unit, supplier_name, cost, start_date, end_date } = req.body;
+  if (!product_name || !supplier_name || !cost || !start_date)
+    return res.status(400).json({ error: '필수값 누락' });
+  try {
+    const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
+    const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
+    await pool.query(
+      `UPDATE b2b_prices SET b2b_product_id=$3,supplier_id=$4,cost=$5,start_date=$6,end_date=$7
+       WHERE id=$1 AND user_id=$2`,
+      [req.params.id, req.user.id, productId, supplierId, cost, start_date, end_date || null]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/b2b-prices/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM b2b_prices WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

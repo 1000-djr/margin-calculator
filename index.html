@@ -642,22 +642,48 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ B2B 매입가 탭 ════════════════════════════════════════════ -->
   <div class="panel" id="tab-b2b">
-    <div class="section-label">B2B 매입가 현황</div>
-    <div class="info-box" style="margin-bottom:14px">
-      💡 <b>최저가는 초록</b>으로 표시됩니다. 각 행의 <b>▾ 정보</b> 버튼으로 썸네일·링크를 등록할 수 있습니다.
+    <div class="section-label">B2B 매입가 이력</div>
+    <div class="btn-row" style="margin-bottom:14px">
+      <button class="btn" onclick="downloadB2BTemplate()">📥 엑셀 양식 다운로드</button>
+      <button class="btn btn-primary" onclick="document.getElementById('b2bBulkFileInput').click()">📤 엑셀 대량 입력</button>
+      <input type="file" id="b2bBulkFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleB2BBulkUpload(this)">
     </div>
-    <div class="btn-row" style="margin-top:0;margin-bottom:12px">
-      <button class="btn btn-ghost btn-sm" onclick="loadApiPrices()">☁️ API에서 가격 불러오기</button>
-      <button class="btn btn-ghost btn-sm" onclick="addB2BRow()">+ 품목 추가</button>
-      <button class="btn btn-ghost btn-sm" onclick="addSupplier()">+ 공급처 추가</button>
-      <button class="btn btn-ghost btn-sm" onclick="saveB2BData()">💾 저장</button>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span><span id="b2bFormTitle">이력 추가</span></div>
+      <div class="field-row">
+        <div class="field" style="flex:2">
+          <label>상품명</label>
+          <input type="text" id="b2bFormProduct" list="b2bProductList" placeholder="예: 세척사과">
+          <datalist id="b2bProductList"></datalist>
+        </div>
+        <div class="field">
+          <label>단위</label>
+          <input type="text" id="b2bFormUnit" list="b2bUnitList" placeholder="예: 5kg">
+          <datalist id="b2bUnitList"></datalist>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:2">
+          <label>공급처</label>
+          <input type="text" id="b2bFormSupplier" list="b2bSupplierList" placeholder="공급처명">
+          <datalist id="b2bSupplierList"></datalist>
+        </div>
+        <div class="field">
+          <label>공급가 (원)</label>
+          <input type="number" id="b2bFormCost" placeholder="0" min="0">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>적용 시작일</label><input type="date" id="b2bFormStartDate"></div>
+        <div class="field"><label>적용 종료일 <span style="font-weight:400;color:var(--text-dim)">(미입력 시 진행중)</span></label><input type="date" id="b2bFormEndDate"></div>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-primary" id="b2bSaveBtn" onclick="saveB2BPrice()">+ 이력 추가</button>
+        <button class="btn" id="b2bCancelBtn" onclick="resetB2BPriceForm()" style="display:none">취소</button>
+      </div>
     </div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <table class="b2b-table">
-        <thead id="b2bThead"></thead>
-        <tbody id="b2bBody"></tbody>
-      </table>
-    </div>
+    <div class="section-label">공급처별 이력</div>
+    <div id="b2bHistoryList"></div>
 
     <div class="section-label" style="margin-top:28px">공급처별 마진율 빠른 조회</div>
     <div class="card">
@@ -973,9 +999,11 @@ async function loadUserData() {
     if (Array.isArray(cData)) { coupons = cData; localStorage.setItem('couponsData', JSON.stringify(coupons)); }
     if (Array.isArray(cmData)) {
       optionMatchings = {};
-      cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt' }; });
+      cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt', productName: m.product_name || '' }; });
       localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
     }
+    const phData = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => []);
+    if (Array.isArray(phData)) { b2bPriceHistory = phData; localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory)); }
     const aomData = await fetch('/api/ad-option-mappings').then(r => r.json()).catch(() => []);
     if (Array.isArray(aomData) && aomData.length) {
       adOptionMappings = {};
@@ -1053,6 +1081,8 @@ let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let editingCouponId = null;
+let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
+let editingB2BPriceId = null;
 let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -1698,159 +1728,316 @@ function updateSupplierName(idx, name) {
   if (costInputMode === 'b2b') renderSupplierBtns();
 }
 
-// ── B2B 테이블 렌더링 ────────────────────────────────────────────────────────
-function renderB2BHeader() {
-  const supplierCols = suppliers.map((s, i) => `
-    <th class="supplier-th">
-      <div class="supplier-th-inner">
-        <input class="th-input" value="${s.name}"
-          onchange="updateSupplierName(${i}, this.value)"
-          onblur="updateSupplierName(${i}, this.value)"
-          title="클릭하여 공급처명 편집">
-        <button class="supplier-del-btn" onclick="removeSupplier(${i})" title="공급처 삭제">×</button>
-      </div>
-    </th>`).join('');
-  document.getElementById('b2bThead').innerHTML = `<tr>
-    <th style="width:220px">상품명</th>
-    <th>단위</th>
-    ${supplierCols}
-    <th>최저가</th>
-    <th>전일대비</th>
-    <th></th>
-  </tr>`;
+// ── B2B 매입가 이력 ──────────────────────────────────────────────────────────
+function getB2BCostForDate(productName, dateStr) {
+  if (!productName || !dateStr) return null;
+  const d = String(dateStr).slice(0, 10);
+  if (!d || d.length < 10) return null;
+  const matches = b2bPriceHistory.filter(p => {
+    if (p.product_name !== productName) return false;
+    if (p.start_date && p.start_date > d) return false;
+    if (p.end_date   && p.end_date   < d) return false;
+    return true;
+  });
+  if (!matches.length) return null;
+  return matches.reduce((a, b) => (a.id > b.id ? a : b));
+}
+
+function updateB2BDataLists() {
+  const products   = [...new Set(b2bPriceHistory.map(p => p.product_name))].sort();
+  const units      = [...new Set(b2bPriceHistory.map(p => p.unit || '').filter(Boolean))].sort();
+  const suppliers  = [...new Set(b2bPriceHistory.map(p => p.supplier_name))].sort();
+  const set = (id, vals) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = vals.map(v => `<option value="${v}">`).join('');
+  };
+  set('b2bProductList',  products);
+  set('b2bUnitList',     units);
+  set('b2bSupplierList', suppliers);
 }
 
 function renderB2B() {
-  renderB2BHeader();
-  const tbody = document.getElementById('b2bBody');
-  tbody.innerHTML = '';
-  const colSpan = suppliers.length + 5; // 상품명 + 단위 + suppliers + 최저가 + 전일대비 + actions
+  updateB2BDataLists();
+  const container = document.getElementById('b2bHistoryList');
+  if (!container) return;
 
-  b2bProducts.forEach((p, idx) => {
-    const valids = p.prices.filter(v => v > 0);
-    const lowest = valids.length ? Math.min(...valids) : 0;
-    const prev = p.prevLowest || 0;
-    let badge = '';
-    if (prev && lowest < prev) badge = `<span class="change-badge down">▼ ${(prev - lowest).toLocaleString()}</span>`;
-    else if (prev && lowest > prev) badge = `<span class="change-badge up">▲ ${(lowest - prev).toLocaleString()}</span>`;
-    else badge = `<span class="change-badge same">—</span>`;
+  if (!b2bPriceHistory.length) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:32px;font-size:13px">등록된 매입가 이력이 없습니다</div>';
+    updateQuickSelect(); return;
+  }
 
-    const priceCells = suppliers.map((s, i) => {
-      const isLowest = p.prices[i] && p.prices[i] === lowest;
-      return `<td><input type="number" value="${p.prices[i] || ''}" placeholder="-" style="width:88px${isLowest ? ';color:var(--green);font-weight:600' : ''}" onchange="b2bProducts[${idx}].prices[${i}]=parseFloat(this.value)||0;renderB2B()"></td>`;
+  const today = new Date().toISOString().slice(0, 10);
+  const groups = new Map();
+  b2bPriceHistory.forEach(p => {
+    const key = p.product_name + '||' + (p.unit || '');
+    if (!groups.has(key)) groups.set(key, { name: p.product_name, unit: p.unit || '', items: [] });
+    groups.get(key).items.push(p);
+  });
+
+  container.innerHTML = [...groups.values()].map(({ name, unit, items }) => {
+    const groupId = 'b2bg-' + (name + '_' + unit).replace(/[^a-zA-Z0-9가-힣]/g, '_');
+    const activeCount = items.filter(p =>
+      (!p.start_date || p.start_date <= today) && (!p.end_date || p.end_date >= today)
+    ).length;
+    const sorted = [...items].sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+    const rows = sorted.map(p => {
+      const isActive = (!p.start_date || p.start_date <= today) && (!p.end_date || p.end_date >= today);
+      const badge = isActive
+        ? `<span style="background:var(--green,#22c55e);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px">진행중</span>`
+        : `<span style="background:var(--surface3,#f0f0f5);color:var(--text-dim);border-radius:4px;padding:1px 7px;font-size:11px">종료</span>`;
+      return `<tr style="${isActive ? 'background:rgba(34,197,94,0.05)' : ''}">
+        <td style="${isActive ? 'color:var(--green);font-weight:600' : ''}">${p.supplier_name}</td>
+        <td style="font-family:var(--mono);${isActive ? 'color:var(--green);font-weight:600' : ''}">${p.cost.toLocaleString('ko-KR')}원</td>
+        <td style="font-family:var(--mono);font-size:12px">${p.start_date || '-'}</td>
+        <td style="font-family:var(--mono);font-size:12px">${p.end_date || '진행중'}</td>
+        <td>${badge}</td>
+        <td style="white-space:nowrap">
+          <button class="history-edit-btn" onclick="editB2BPrice(${p.id})">수정</button>
+          <button class="history-del-btn"  onclick="deleteB2BPrice(${p.id})">삭제</button>
+        </td>
+      </tr>`;
     }).join('');
 
-    const thumbHtml = p.imageUrl
-      ? `<img src="${p.imageUrl}" class="product-thumb" onerror="this.style.display='none'">`
-      : `<div class="product-thumb-placeholder">📦</div>`;
+    return `<div class="history-group" style="margin-bottom:10px">
+      <div class="history-group-header" onclick="toggleB2BGroup('${groupId}')">
+        <span class="history-group-name">${name}</span>
+        ${unit ? `<span class="history-group-unit">${unit}</span>` : ''}
+        <span class="history-group-count">${items.length}건${activeCount ? ` · 진행중 ${activeCount}` : ''}</span>
+        <span class="history-group-toggle" id="${groupId}-arrow">▲</span>
+      </div>
+      <div class="history-group-body" id="${groupId}">
+        <table class="history-table">
+          <thead><tr><th>공급처</th><th>공급가</th><th>시작일</th><th>종료일</th><th>상태</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
 
-    let linkHtml = '';
-    if (p.detailUrl) linkHtml += `<a href="${p.detailUrl}" target="_blank" class="link-btn">상세</a>`;
-    if (p.shareUrl)  linkHtml += `<a href="${p.shareUrl}" target="_blank" class="link-btn share">공유</a>`;
-
-    const dataRow = document.createElement('tr');
-    dataRow.className = 'data-row';
-    dataRow.innerHTML = `
-      <td>
-        <div class="product-name-cell">
-          ${thumbHtml}
-          <div>
-            <input type="text" value="${p.name}" onchange="b2bProducts[${idx}].name=this.value;updateQuickSelect()" style="font-weight:500">
-            <div class="links-cell" style="margin-top:3px">${linkHtml}</div>
-          </div>
-        </div>
-      </td>
-      <td><input type="text" value="${p.unit}" style="width:60px" onchange="b2bProducts[${idx}].unit=this.value"></td>
-      ${priceCells}
-      <td style="font-family:var(--mono);color:var(--green);font-weight:600">${lowest ? lowest.toLocaleString() + '원' : '-'}</td>
-      <td>${badge}</td>
-      <td style="white-space:nowrap">
-        <button class="btn btn-ghost btn-xs" style="margin-right:4px" onclick="toggleDetailRow(${idx})">▾ 정보</button>
-        <button class="btn btn-danger btn-xs" onclick="removeB2BRow(${idx})">삭제</button>
-      </td>`;
-    tbody.appendChild(dataRow);
-
-    const detailRow = document.createElement('tr');
-    detailRow.className = 'detail-row';
-    detailRow.id = `detail-row-${idx}`;
-    detailRow.innerHTML = `
-      <td colspan="${colSpan}">
-        <div class="detail-form">
-          <div>
-            <label>썸네일 이미지 URL</label>
-            <input type="text" value="${p.imageUrl || ''}" placeholder="https://..." id="imgUrl-${idx}"
-              oninput="b2bProducts[${idx}].imageUrl=this.value;renderB2B()">
-          </div>
-          <div>
-            <label>상세페이지 URL</label>
-            <input type="text" value="${p.detailUrl || ''}" placeholder="https://..."
-              oninput="b2bProducts[${idx}].detailUrl=this.value;renderB2B()">
-          </div>
-          <div>
-            <label>공유 URL</label>
-            <input type="text" value="${p.shareUrl || ''}" placeholder="https://..."
-              oninput="b2bProducts[${idx}].shareUrl=this.value;renderB2B()">
-          </div>
-          <div>
-            ${p.imageUrl ? `<img src="${p.imageUrl}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;border:1px solid var(--border)" onerror="this.style.display='none'">` : '<div style="width:56px;height:56px;border-radius:8px;background:var(--surface3);border:1px dashed var(--border)"></div>'}
-          </div>
-        </div>
-      </td>`;
-    tbody.appendChild(detailRow);
-  });
   updateQuickSelect();
 }
 
-function toggleDetailRow(idx) {
-  const row = document.getElementById(`detail-row-${idx}`);
-  if (row) row.classList.toggle('open');
+function toggleB2BGroup(groupId) {
+  const body  = document.getElementById(groupId);
+  const arrow = document.getElementById(groupId + '-arrow');
+  if (!body) return;
+  const isOpen = !body.classList.contains('collapsed');
+  body.classList.toggle('collapsed', isOpen);
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
-function addB2BRow() {
-  b2bProducts.push({ id: Date.now(), name: '신규품목', unit: '1kg', prices: new Array(suppliers.length).fill(0), prevLowest: 0, imageUrl: '', detailUrl: '', shareUrl: '' });
+function resetB2BPriceForm() {
+  editingB2BPriceId = null;
+  ['b2bFormProduct','b2bFormUnit','b2bFormSupplier','b2bFormCost','b2bFormStartDate','b2bFormEndDate']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('b2bFormTitle').textContent      = '이력 추가';
+  document.getElementById('b2bSaveBtn').textContent        = '+ 이력 추가';
+  document.getElementById('b2bCancelBtn').style.display    = 'none';
+}
+
+function editB2BPrice(id) {
+  const p = b2bPriceHistory.find(x => x.id == id);
+  if (!p) return;
+  editingB2BPriceId = id;
+  document.getElementById('b2bFormProduct').value   = p.product_name || '';
+  document.getElementById('b2bFormUnit').value      = p.unit || '';
+  document.getElementById('b2bFormSupplier').value  = p.supplier_name || '';
+  document.getElementById('b2bFormCost').value      = p.cost || '';
+  document.getElementById('b2bFormStartDate').value = p.start_date || '';
+  document.getElementById('b2bFormEndDate').value   = p.end_date || '';
+  document.getElementById('b2bFormTitle').textContent   = '이력 수정';
+  document.getElementById('b2bSaveBtn').textContent     = '수정 저장';
+  document.getElementById('b2bCancelBtn').style.display = '';
+  document.getElementById('tab-b2b').scrollTop = 0;
+}
+
+async function saveB2BPrice() {
+  const productName  = document.getElementById('b2bFormProduct').value.trim();
+  const unit         = document.getElementById('b2bFormUnit').value.trim();
+  const supplierName = document.getElementById('b2bFormSupplier').value.trim();
+  const cost         = parseFloat(document.getElementById('b2bFormCost').value) || 0;
+  const startDate    = document.getElementById('b2bFormStartDate').value;
+  const endDate      = document.getElementById('b2bFormEndDate').value;
+
+  if (!productName)  { alert('상품명을 입력하세요'); return; }
+  if (!supplierName) { alert('공급처를 입력하세요'); return; }
+  if (!cost)         { alert('공급가를 입력하세요'); return; }
+  if (!startDate)    { alert('적용 시작일을 입력하세요'); return; }
+
+  const payload = { product_name: productName, unit, supplier_name: supplierName, cost, start_date: startDate, end_date: endDate || null };
+
+  if (editingB2BPriceId !== null) {
+    if (currentUser) {
+      try {
+        await fetch('/api/b2b-prices/' + editingB2BPriceId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      } catch(e) {}
+    }
+    const idx = b2bPriceHistory.findIndex(p => p.id == editingB2BPriceId);
+    if (idx >= 0) b2bPriceHistory[idx] = { ...b2bPriceHistory[idx], ...payload };
+  } else {
+    if (currentUser) {
+      try {
+        const data = await fetch('/api/b2b-prices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json());
+        if (data.error) throw new Error(data.error);
+        b2bPriceHistory.push(data);
+      } catch(e) { b2bPriceHistory.push({ id: Date.now(), ...payload }); }
+    } else {
+      b2bPriceHistory.push({ id: Date.now(), ...payload });
+    }
+  }
+  localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory));
+  resetB2BPriceForm();
   renderB2B();
 }
-function removeB2BRow(idx) { b2bProducts.splice(idx, 1); renderB2B(); }
-function saveB2BData() {
-  b2bProducts = b2bProducts.map(p => {
-    const v = p.prices.filter(x => x > 0);
-    return { ...p, prevLowest: v.length ? Math.min(...v) : 0 };
-  });
-  localStorage.setItem('b2bProducts', JSON.stringify(b2bProducts));
-  saveToServer('b2bProducts', b2bProducts);
+
+async function deleteB2BPrice(id) {
+  const idx = b2bPriceHistory.findIndex(p => p.id == id);
+  if (idx < 0) return;
+  if (!confirm(`'${b2bPriceHistory[idx].product_name} - ${b2bPriceHistory[idx].supplier_name}' 이력을 삭제할까요?`)) return;
+  if (editingB2BPriceId == id) resetB2BPriceForm();
+  b2bPriceHistory.splice(idx, 1);
+  localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory));
+  if (currentUser) { try { await fetch('/api/b2b-prices/' + id, { method: 'DELETE' }); } catch(e) {} }
   renderB2B();
-  alert('저장되었습니다! 오늘 가격이 전일가로 기록됩니다.');
+}
+
+function downloadB2BTemplate() {
+  const headers = ['상품명', '단위', '공급처', '공급가(원)', '시작일(YYYY-MM-DD)', '종료일(YYYY-MM-DD)'];
+  const example = ['세척사과', '5kg', '공급처A', '12000', '2026-05-01', '2026-05-31'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  ws['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 20 }, { wch: 20 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'B2B매입가양식');
+  XLSX.writeFile(wb, 'B2B_매입가_양식.xlsx');
+}
+
+async function handleB2BBulkUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (rows.length < 2) { alert('데이터가 없습니다'); return; }
+
+      const headers    = rows[0].map(h => String(h).trim());
+      const colProduct  = headers.indexOf('상품명');
+      const colUnit     = headers.indexOf('단위');
+      const colSupplier = headers.indexOf('공급처');
+      const colCost     = headers.indexOf('공급가(원)');
+      const colStart    = headers.indexOf('시작일(YYYY-MM-DD)');
+      const colEnd      = headers.indexOf('종료일(YYYY-MM-DD)');
+
+      const toAdd = [];
+      const errorRows = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (row.every(c => String(c).trim() === '')) continue;
+        const product_name  = String(colProduct  >= 0 ? row[colProduct]  : '').trim();
+        const unit          = String(colUnit      >= 0 ? row[colUnit]     : '').trim();
+        const supplier_name = String(colSupplier  >= 0 ? row[colSupplier] : '').trim();
+        const cost          = parseFloat(colCost  >= 0 ? row[colCost]     : '') || 0;
+        const start_date    = String(colStart     >= 0 ? row[colStart]    : '').trim();
+        const end_date      = String(colEnd       >= 0 ? row[colEnd]      : '').trim();
+
+        if (!product_name)  { errorRows.push(`${i+1}행: 상품명 없음`); continue; }
+        if (!supplier_name) { errorRows.push(`${i+1}행 (${product_name}): 공급처 없음`); continue; }
+        if (!cost)          { errorRows.push(`${i+1}행 (${product_name}): 공급가 오류`); continue; }
+        if (!start_date)    { errorRows.push(`${i+1}행 (${product_name}): 시작일 없음`); continue; }
+
+        // 중복 체크 (product_name + supplier_name + start_date)
+        const isDup = b2bPriceHistory.some(p =>
+          p.product_name === product_name &&
+          (p.unit || '') === unit &&
+          p.supplier_name === supplier_name &&
+          p.start_date === start_date
+        );
+        if (isDup) { errorRows.push(`${i+1}행 (${product_name} ${start_date}): 중복`); continue; }
+
+        toAdd.push({ product_name, unit, supplier_name, cost, start_date, end_date: end_date || null });
+      }
+
+      let successCount = 0, dupCount = 0;
+      if (currentUser && toAdd.length) {
+        try {
+          const result = await fetch('/api/b2b-prices/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) }).then(r => r.json());
+          successCount = result.inserted || 0;
+          dupCount     = result.dupCount || 0;
+          if (successCount) {
+            const fresh = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => null);
+            if (Array.isArray(fresh)) b2bPriceHistory = fresh;
+          }
+        } catch(e) {
+          toAdd.forEach(p => { b2bPriceHistory.push({ id: Date.now() + Math.random(), ...p }); });
+          successCount = toAdd.length;
+        }
+      } else {
+        toAdd.forEach(p => { b2bPriceHistory.push({ id: Date.now() + Math.random(), ...p }); });
+        successCount = toAdd.length;
+      }
+      localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory));
+      renderB2B();
+
+      const errDetail = errorRows.length
+        ? `<div style="text-align:left;font-size:12px;color:var(--red);max-height:120px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:8px 10px;margin-top:10px;font-family:var(--mono)">${errorRows.join('<br>')}</div>`
+        : '';
+      await showConfirmModal({
+        icon: '📦', title: 'B2B 매입가 대량 등록 완료',
+        message: `<strong>성공 ${successCount}건</strong> &nbsp;·&nbsp; 중복 ${dupCount + errorRows.filter(r => r.includes('중복')).length}건 &nbsp;·&nbsp; 오류 ${errorRows.filter(r => !r.includes('중복')).length}건${errDetail}`,
+        confirmText: '확인', cancelText: '',
+      });
+    } catch(err) { alert('파일 읽기 오류: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function updateQuickSelect() {
   const sel = document.getElementById('quickProduct');
+  if (!sel) return;
   const prev = sel.value;
   sel.innerHTML = '<option value="">선택하세요</option>';
-  b2bProducts.forEach((p, i) => {
-    const o = document.createElement('option');
-    o.value = i;
-    o.textContent = `${p.name} (${p.unit})`;
-    sel.appendChild(o);
+  const today = new Date().toISOString().slice(0, 10);
+  const seen = new Set();
+  b2bPriceHistory.forEach(p => {
+    const key = p.product_name + '||' + (p.unit || '');
+    if (!seen.has(key)) {
+      seen.add(key);
+      const o = document.createElement('option');
+      o.value = key;
+      o.textContent = `${p.product_name}${p.unit ? ' (' + p.unit + ')' : ''}`;
+      sel.appendChild(o);
+    }
   });
   if (prev) sel.value = prev;
 }
 
 function quickCalc() {
-  const idx = document.getElementById('quickProduct').value;
+  const key  = document.getElementById('quickProduct').value;
   const sale = parseFloat(document.getElementById('quickSalePrice').value) || 0;
   const container = document.getElementById('quickResult');
-  if (!idx || !sale) {
+  if (!key || !sale) {
     container.innerHTML = '<div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value">상품과 판매가를 입력하세요</span></div>';
     return;
   }
-  const p = b2bProducts[parseInt(idx)];
-  const fee = getFeeRate(), feeAmt = sale * fee, afterFee = sale - feeAmt;
-  container.innerHTML = suppliers.map((s, i) => {
-    const cost = p.prices[i];
-    if (!cost) return `<div class="result-row"><span class="result-label">${s.name}</span><span class="result-value" style="color:var(--text-dim)">가격 없음</span></div>`;
-    const margin = afterFee - cost, rate = (margin / sale) * 100;
+  const [productName, unit] = key.split('||');
+  const today = new Date().toISOString().slice(0, 10);
+  const activePrices = b2bPriceHistory.filter(p =>
+    p.product_name === productName && (p.unit || '') === (unit || '') &&
+    (!p.start_date || p.start_date <= today) && (!p.end_date || p.end_date >= today)
+  );
+  const fee = getFeeRate(), afterFee = sale - sale * fee;
+  if (!activePrices.length) {
+    container.innerHTML = '<div class="result-row"><span class="result-label">현재 진행중인 매입가 없음</span><span class="result-value" style="color:var(--text-dim)">-</span></div>';
+    return;
+  }
+  container.innerHTML = activePrices.map(p => {
+    const margin = afterFee - p.cost, rate = (margin / sale) * 100;
     const cls = margin < 0 ? 'red' : rate < 15 ? 'yellow' : 'green';
-    return `<div class="result-row"><span class="result-label">${s.name} (매입 ${cost.toLocaleString()}원)</span><span class="result-value ${cls}">${Math.round(margin).toLocaleString()}원 · ${rate.toFixed(1)}%</span></div>`;
+    return `<div class="result-row"><span class="result-label">${p.supplier_name} (매입 ${p.cost.toLocaleString()}원)</span><span class="result-value ${cls}">${Math.round(margin).toLocaleString()}원 · ${rate.toFixed(1)}%</span></div>`;
   }).join('');
 }
 
@@ -3034,7 +3221,13 @@ function renderProfit() {
         const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
         const fee = realRevenue * feeRate;
         const matching = g.optionId ? optionMatchings[g.optionId] : null;
-        const cost = matching ? (matching.cost || 0) * g.qty : null;
+        let cost = null;
+        if (matching) {
+          const from = document.getElementById('profitDateFrom')?.value;
+          const repDate = from || new Date().toISOString().slice(0,10);
+          const b2bMatch = matching.productName ? getB2BCostForDate(matching.productName, repDate) : null;
+          cost = (b2bMatch ? b2bMatch.cost : (matching.cost || 0)) * g.qty;
+        }
         const adCostRaw = g.optionId ? getOptionAdCost(g.optionId) : 0;
         const realAdCost = adCostRaw * 1.1;
         const taxTyp = matching ? matching.taxType : 'exempt';
@@ -3111,7 +3304,13 @@ function renderProfit() {
     const fee = realRev * feeRate;
     const matching = oid ? optionMatchings[oid] : null;
     const qty = parseFloat(o['구매수(수량)']) || 1;
-    const cost = matching ? (matching.cost || 0) * qty : 0;
+    let unitCost = matching ? (matching.cost || 0) : 0;
+    if (matching && matching.productName) {
+      const orderDateStr = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
+      const b2bMatch = getB2BCostForDate(matching.productName, orderDateStr);
+      if (b2bMatch) unitCost = b2bMatch.cost;
+    }
+    const cost = unitCost * qty;
     const adCostRaw = oid ? getOptionAdCost(oid) : 0;
     const realAdCost = adCostRaw * 1.1;
     const taxTyp = matching ? matching.taxType : 'exempt';

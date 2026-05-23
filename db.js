@@ -198,6 +198,35 @@ async function initDB() {
       created_at   TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE (user_id, ad_option_id)
     );
+
+    CREATE TABLE IF NOT EXISTS b2b_products (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name       VARCHAR(200) NOT NULL,
+      unit       VARCHAR(50)  NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, name, unit)
+    );
+
+    CREATE TABLE IF NOT EXISTS b2b_suppliers (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name       VARCHAR(100) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS b2b_prices (
+      id               SERIAL PRIMARY KEY,
+      user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      b2b_product_id   INTEGER REFERENCES b2b_products(id) ON DELETE CASCADE,
+      supplier_id      INTEGER REFERENCES b2b_suppliers(id) ON DELETE CASCADE,
+      cost             NUMERIC(12,2) NOT NULL,
+      start_date       DATE NOT NULL,
+      end_date         DATE,
+      created_at       TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, b2b_product_id, supplier_id, start_date)
+    );
   `);
 
   // coupons 테이블 마이그레이션 (기존 테이블에 신규 컬럼 추가)
@@ -207,6 +236,11 @@ async function initDB() {
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS start_at        TIMESTAMPTZ;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS end_at          TIMESTAMPTZ;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS option_ids      JSONB DEFAULT '[]';
+  `);
+
+  await pool.query(`
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS start_date DATE;
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS end_date   DATE;
   `);
 
   console.log('[db] Tables ready');
