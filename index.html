@@ -2880,7 +2880,7 @@ async function handleCouponBulkUpload(input) {
   const reader = new FileReader();
   reader.onload = async function(e) {
     try {
-      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const wb   = XLSX.read(e.target.result, { type: 'array', cellDates: true });
       const ws   = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       if (rows.length < 2) { alert('데이터가 없습니다'); return; }
@@ -2903,8 +2903,8 @@ async function handleCouponBulkUpload(input) {
         const name      = String(colName  >= 0 ? row[colName]  : '').trim();
         const coupon_id = String(colCid   >= 0 ? row[colCid]   : '').trim();
         const amt       = parseFloat(colAmt >= 0 ? row[colAmt] : '') || 0;
-        const startRaw  = String(colStart >= 0 ? row[colStart] : '').trim();
-        const endRaw    = String(colEnd   >= 0 ? row[colEnd]   : '').trim();
+        const startRaw  = colStart >= 0 ? row[colStart] : '';
+        const endRaw    = colEnd   >= 0 ? row[colEnd]   : '';
         const optsRaw   = String(colOpts  >= 0 ? row[colOpts]  : '').trim();
 
         // 필수값 검사
@@ -2912,10 +2912,16 @@ async function handleCouponBulkUpload(input) {
         if (!amt || amt <= 0)   { errorRows.push(`${i + 1}행 (${name}): 할인금액 오류`); continue; }
         if (!startRaw || !endRaw) { errorRows.push(`${i + 1}행 (${name}): 기간 없음`); continue; }
 
-        // 날짜 파싱 ("2026-05-01 00:00" → ISO)
-        const start_at = startRaw.replace(' ', 'T');
-        const end_at   = endRaw.replace(' ', 'T');
-        if (isNaN(new Date(start_at).getTime()) || isNaN(new Date(end_at).getTime())) {
+        // 날짜 파싱: Date 객체(cellDates:true) 또는 텍스트("2026-05-01 00:00") 모두 처리
+        function parseCouponDate(val) {
+          if (val instanceof Date) return isNaN(val.getTime()) ? null : val.toISOString().slice(0, 16);
+          const s = String(val).trim().replace(' ', 'T');
+          const d = new Date(s);
+          return isNaN(d.getTime()) ? null : s;
+        }
+        const start_at = parseCouponDate(startRaw);
+        const end_at   = parseCouponDate(endRaw);
+        if (!start_at || !end_at) {
           errorRows.push(`${i + 1}행 (${name}): 날짜 형식 오류 (YYYY-MM-DD HH:mm 사용)`); continue;
         }
 
