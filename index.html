@@ -965,6 +965,7 @@ async function checkAuth() {
     await loadUserData();
     renderPlatformBtns();
     renderB2B();
+    navigateToHash();
   }
 }
 
@@ -1113,8 +1114,15 @@ let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{
 // { [ad_option_id]: { productId, productName } }
 let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 
+// ── 탭 ↔ URL 해시 매핑 ────────────────────────────────────────────────────────
+const TAB_TO_HASH = {
+  calc: 'margin', b2b: 'b2b', history: 'history', shortcuts: 'shortcuts',
+  settings: 'settings', orders: 'orders', ads: 'ads', coupons: 'coupons', profit: 'analytics'
+};
+const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
+
 // ── 탭 전환 ──────────────────────────────────────────────────────────────────
-function switchTab(name, btn) {
+function switchTab(name, btn, skipHistory) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
@@ -1128,7 +1136,34 @@ function switchTab(name, btn) {
   if (name === 'ads') renderAds();
   if (name === 'coupons') renderCoupons();
   if (name === 'profit') renderProfit();
+  // URL 해시 업데이트 (hashchange 이벤트 발생 없이)
+  const hash = '#' + (TAB_TO_HASH[name] || name);
+  if (!skipHistory && window.location.hash !== hash) {
+    history.pushState(null, '', hash);
+  }
 }
+
+// 현재 URL 해시를 읽어 해당 탭 활성화
+function navigateToHash() {
+  const hash = (window.location.hash || '').replace('#', '') || 'margin';
+  const name = HASH_TO_TAB[hash] || 'calc';
+  const btn  = [...document.querySelectorAll('.tab')].find(b =>
+    (b.getAttribute('onclick') || '').includes(`'${name}'`)
+  );
+  if (btn) switchTab(name, btn, true); // skipHistory=true: replaceState로 처리
+  else {
+    const defaultBtn = document.querySelector('.tab');
+    if (defaultBtn) switchTab('calc', defaultBtn, true);
+  }
+  // 초기 로드 시 해시 정규화
+  const canonical = '#' + (TAB_TO_HASH[name] || 'margin');
+  if (window.location.hash !== canonical) history.replaceState(null, '', canonical);
+}
+
+// 브라우저 뒤로가기/앞으로가기
+window.addEventListener('hashchange', () => {
+  if (currentUser) navigateToHash();
+});
 
 // ── B2B 사이트 등록 (API) ────────────────────────────────────────────────────
 async function loadSiteList() {
