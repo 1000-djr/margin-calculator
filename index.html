@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>농수산물 마진 계산기</title>
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg: #f5f5f7;
@@ -381,6 +382,58 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .user-name { font-size: 13px; font-weight: 600; color: var(--text); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logout-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer; font-family: var(--sans); transition: all 0.15s; white-space: nowrap; }
 .logout-btn:hover { border-color: var(--red); color: var(--red); }
+/* ── 업로드 영역 ── */
+.upload-area { border: 2px dashed var(--border); border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface2); }
+.upload-area:hover { border-color: var(--accent); background: #f0f5ff; }
+.upload-area-icon { font-size: 28px; margin-bottom: 8px; }
+.upload-area-text { font-size: 13px; color: var(--text-dim); }
+/* ── 요약 카드 ── */
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+.summary-card-label { font-size: 11px; color: var(--text-dim); font-weight: 600; letter-spacing: 0.04em; margin-bottom: 6px; }
+.summary-card-value { font-size: 18px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+.summary-card-value.green { color: var(--green); }
+.summary-card-value.red { color: var(--red); }
+/* ── 주문서/광고 테이블 ── */
+.data-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.data-table th { text-align: left; padding: 8px 12px; color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--surface2); position: sticky; top: 0; }
+.data-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: #fafafa; }
+/* ── 광고 그룹 행 ── */
+.ad-group-row td { background: var(--surface2); font-weight: 600; cursor: pointer; }
+.ad-group-row td:hover { background: var(--surface3); }
+.ad-detail-rows { display: none; }
+.ad-detail-rows.open { display: table-row-group; }
+/* ── 수익 분석 ── */
+.profit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.profit-table th { text-align: left; padding: 8px 12px; color: var(--text-dim); font-size: 11px; font-weight: 600; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.profit-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; font-family: var(--mono); font-size: 12px; }
+.profit-table tr:last-child td { border-bottom: none; }
+.profit-table tbody tr:hover td { background: #fafafa; }
+.profit-table tr.unmatched-row td { background: #fffbea; }
+/* ── 매칭 모달 ── */
+.match-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); z-index: 4000; display: none; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; }
+.match-modal-backdrop.visible { display: flex; }
+.match-modal { background: #fff; border-radius: 20px; padding: 28px; width: 100%; max-width: 540px; box-shadow: 0 8px 48px rgba(0,0,0,0.2); }
+.match-modal-title { font-size: 17px; font-weight: 700; margin-bottom: 16px; color: var(--text); }
+.match-item { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.match-item-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.match-item-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.match-item-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.match-inline-form { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; align-items: flex-end; }
+.match-inline-form label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 3px; }
+.match-inline-form input, .match-inline-form select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; font-family: var(--mono); padding: 6px 8px; outline: none; }
+.match-inline-form input:focus, .match-inline-form select:focus { border-color: var(--accent); }
+/* ── 필터 행 ── */
+.filter-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+.filter-row .field { margin-bottom: 0; flex: 1; min-width: 140px; }
+.filter-row .field input, .filter-row .field select { font-size: 13px; }
+/* ── 기간 토글 ── */
+.period-toggle { display: flex; gap: 2px; background: var(--surface3); border-radius: 8px; padding: 3px; }
+.period-btn { padding: 6px 14px; border-radius: 6px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; }
+.period-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 </style>
 </head>
 <body>
@@ -449,6 +502,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('history', this)">📋 계산 이력</button>
     <button class="tab" onclick="switchTab('shortcuts', this)">🔗 바로가기</button>
     <button class="tab" onclick="switchTab('settings', this)">⚙️ 설정</button>
+    <button class="tab" onclick="switchTab('orders', this)">📋 주문서</button>
+    <button class="tab" onclick="switchTab('ads', this)">📢 광고</button>
+    <button class="tab" onclick="switchTab('coupons', this)">🎟 쿠폰</button>
+    <button class="tab" onclick="switchTab('profit', this)">📊 수익분석</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -676,6 +733,148 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="section-label">등록된 바로가기</div>
     <div id="shortcutGrid" class="shortcut-grid"></div>
   </div>
+
+  <!-- ══ 주문서 탭 ══════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-orders">
+    <div class="section-label">주문서 업로드</div>
+    <div class="card">
+      <div class="upload-area" onclick="document.getElementById('ordersFileInput').click()">
+        <div class="upload-area-icon">📂</div>
+        <div class="upload-area-text">클릭하여 주문서 엑셀 파일 선택 (.xlsx, .xls)<br>기존 주문과 합산되며 주문번호 기준 중복 제거됩니다</div>
+      </div>
+      <input type="file" id="ordersFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleOrdersUpload(this)">
+    </div>
+    <div class="section-label">필터</div>
+    <div class="card">
+      <div class="filter-row">
+        <div class="field"><label>주문일 시작</label><input type="date" id="ordersDateFrom"></div>
+        <div class="field"><label>주문일 종료</label><input type="date" id="ordersDateTo"></div>
+        <div class="field"><label>상품명 검색</label><input type="text" id="ordersSearchName" placeholder="등록상품명 검색…"></div>
+        <button class="btn btn-ghost btn-sm" onclick="renderOrders()" style="margin-bottom:0">검색</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="margin-bottom:0">전체 삭제</button>
+      </div>
+    </div>
+    <div id="ordersSummary" class="summary-cards"></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead id="ordersThead"></thead>
+          <tbody id="ordersTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 광고 탭 ════════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-ads">
+    <div class="section-label">광고 리포트 업로드</div>
+    <div class="card">
+      <div class="upload-area" onclick="document.getElementById('adsFileInput').click()">
+        <div class="upload-area-icon">📂</div>
+        <div class="upload-area-text">클릭하여 광고 리포트 엑셀 파일 선택 (.xlsx, .xls)<br>날짜+옵션ID+캠페인ID 기준 중복 제거됩니다</div>
+      </div>
+      <input type="file" id="adsFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleAdsUpload(this)">
+    </div>
+    <div class="section-label">필터</div>
+    <div class="card">
+      <div class="filter-row">
+        <div class="field"><label>날짜 시작</label><input type="date" id="adsDateFrom"></div>
+        <div class="field"><label>날짜 종료</label><input type="date" id="adsDateTo"></div>
+        <button class="btn btn-ghost btn-sm" onclick="renderAds()" style="margin-bottom:0">검색</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAllAds()" style="margin-bottom:0">전체 삭제</button>
+      </div>
+    </div>
+    <div id="adsContent"></div>
+  </div>
+
+  <!-- ══ 쿠폰 탭 ════════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-coupons">
+    <div class="section-label">쿠폰 등록</div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>새 쿠폰 추가</div>
+      <div class="field-row">
+        <div class="field"><label>쿠폰명</label><input type="text" id="couponName" placeholder="예: 신규가입 할인"></div>
+        <div class="field"><label>할인금액 (원)</label><input type="number" id="couponDiscount" placeholder="0" min="0"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>적용 시작일</label><input type="date" id="couponStartDate"></div>
+        <div class="field"><label>적용 종료일</label><input type="date" id="couponEndDate"></div>
+      </div>
+      <div class="field"><label>적용 상품명 (쉼표 구분, 빈칸=전체)</label><input type="text" id="couponProducts" placeholder="예: 사과,방울토마토 — 빈칸이면 전체 적용"></div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-primary" onclick="addCoupon()">+ 쿠폰 추가</button>
+      </div>
+    </div>
+    <div class="section-label">쿠폰 목록</div>
+    <div id="couponSummary" class="summary-cards"></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="data-table" style="white-space:normal">
+        <thead><tr>
+          <th>쿠폰명</th><th>할인금액</th><th>적용기간</th><th>적용상품</th><th>적용주문수</th><th>총할인액</th><th></th>
+        </tr></thead>
+        <tbody id="couponTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ 수익분석 탭 ════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-profit">
+    <div class="section-label">기간 선택</div>
+    <div class="card">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">집계 단위</div>
+          <div class="period-toggle">
+            <button class="period-btn active" id="periodDay" onclick="setPeriodMode('day')">일별</button>
+            <button class="period-btn" id="periodWeek" onclick="setPeriodMode('week')">주별</button>
+            <button class="period-btn" id="periodMonth" onclick="setPeriodMode('month')">월별</button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:0"><label>시작일</label><input type="date" id="profitDateFrom"></div>
+        <div class="field" style="margin-bottom:0"><label>종료일</label><input type="date" id="profitDateTo"></div>
+        <button class="btn btn-primary" onclick="renderProfit()">분석 실행</button>
+      </div>
+    </div>
+    <div id="profitSummaryCards" class="summary-cards"></div>
+    <div class="section-label">원가 매칭</div>
+    <div class="card" id="profitMatchSection">
+      <div id="profitMatchContent"><div style="color:var(--text-dim);font-size:13px">분석을 실행하면 매칭 현황이 표시됩니다</div></div>
+    </div>
+    <div class="section-label">상품별 수익</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="profit-table">
+          <thead><tr>
+            <th>등록상품명</th><th>옵션명</th><th>수량</th><th>실매출</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>부가세</th><th>순이익</th><th>마진율</th>
+          </tr></thead>
+          <tbody id="profitProductTbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="section-label">기간별 집계</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="profit-table">
+          <thead><tr>
+            <th>기간</th><th>총매출</th><th>순이익</th><th>마진율</th>
+          </tr></thead>
+          <tbody id="profitPeriodTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 매칭 리뷰 모달 ═══════════════════════════════════════════════ -->
+<div class="match-modal-backdrop" id="matchModalBackdrop">
+  <div class="match-modal">
+    <div class="match-modal-title">📦 이전 매칭 공급가 확인</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">주문서에 등장한 옵션의 공급가를 확인해 주세요</div>
+    <div id="matchModalItems"></div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end">
+      <button class="btn btn-primary" onclick="closeMatchModal()">확인 완료</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -719,11 +918,11 @@ function updateAuthUI() {
 
 async function loadUserData() {
   try {
-    const keys = ['platforms', 'suppliers', 'b2bProducts', 'history', 'shortcuts'];
+    const keys = ['platforms', 'suppliers', 'b2bProducts', 'history', 'shortcuts', 'ordersData', 'adReportsData', 'couponsData', 'optionMatchings'];
     const results = await Promise.all(
       keys.map(k => fetch('/api/user/data/' + k).then(r => r.json()).catch(() => null))
     );
-    const [pData, sData, b2bData, hData, scData] = results;
+    const [pData, sData, b2bData, hData, scData, oData, arData, cData, omData] = results;
 
     if (pData && Array.isArray(pData)) {
       platforms = pData;
@@ -741,6 +940,10 @@ async function loadUserData() {
     }
     if (hData && Array.isArray(hData)) history = hData;
     if (scData && Array.isArray(scData)) shortcuts = scData;
+    if (oData && Array.isArray(oData)) { orders = oData; localStorage.setItem('ordersData', JSON.stringify(orders)); }
+    if (arData && Array.isArray(arData)) { adReports = arData; localStorage.setItem('adReportsData', JSON.stringify(adReports)); }
+    if (cData && Array.isArray(cData)) { coupons = cData; localStorage.setItem('couponsData', JSON.stringify(coupons)); }
+    if (omData && typeof omData === 'object' && !Array.isArray(omData)) { optionMatchings = omData; localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings)); }
   } catch (e) {
     console.warn('[auth] 유저 데이터 불러오기 실패', e);
   }
@@ -807,6 +1010,14 @@ let history          = JSON.parse(localStorage.getItem('marginHistory') || '[]')
 let editingHistoryIdx = -1; // -1: 신규, >=0: 수정 중인 이력 인덱스
 let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts')  || '[]');
 
+// ── 새 탭 데이터 ──────────────────────────────────────────────────────────────
+let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
+let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
+let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
+let optionMatchings = JSON.parse(localStorage.getItem('optionMatchings') || '{}');
+// { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable' } }
+let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
+
 // ── 탭 전환 ──────────────────────────────────────────────────────────────────
 function switchTab(name, btn) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -818,6 +1029,10 @@ function switchTab(name, btn) {
   if (name === 'history') renderHistory();
   if (name === 'shortcuts') renderShortcuts();
   if (name === 'settings') renderPlatformList();
+  if (name === 'orders') renderOrders();
+  if (name === 'ads') renderAds();
+  if (name === 'coupons') renderCoupons();
+  if (name === 'profit') renderProfit();
 }
 
 // ── B2B 사이트 등록 (API) ────────────────────────────────────────────────────
@@ -1763,6 +1978,781 @@ function deleteShortcut(idx) {
   localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts));
   saveToServer('shortcuts', shortcuts);
   renderShortcuts();
+}
+
+// ── 주문서 탭 ────────────────────────────────────────────────────────────────
+const ORDER_COLUMNS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송Y/N','분리배송출고예정일','주문시출고예정일','출고일','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','최초등록상품명','업체상품코드','바코드','결제액','배송비구분','배송비','도서산간추가배송비','구매수량','옵션판매가','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소','배송메세지','상품별추가메시지','주문자추가메시지','배송완료일','구매확정일자','개인통관번호','통관용수취인전화번호','기타','결제위치','배송유형'];
+const ORDER_MASK_COLS = new Set(['구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인주소']);
+const ORDER_DISPLAY_COLS = ['번호','묶음배송번호','주문번호','택배사','운송장번호','주문일','등록상품명','등록옵션명','노출상품명','노출상품ID','옵션ID','결제액','배송비','구매수량','옵션판매가','배송완료일','구매확정일자','결제위치','배송유형'];
+
+function handleOrdersUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
+      const headers = rows[0].map(h => String(h).trim());
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+
+      // 헤더 인덱스 매핑
+      const colIdx = {};
+      ORDER_COLUMNS.forEach(col => { colIdx[col] = headers.indexOf(col); });
+
+      const newOrders = dataRows.map(row => {
+        const obj = {};
+        ORDER_COLUMNS.forEach(col => {
+          const i = colIdx[col];
+          let val = i >= 0 ? String(row[i] ?? '').trim() : '';
+          if (ORDER_MASK_COLS.has(col) && val) val = '***';
+          obj[col] = val;
+        });
+        return obj;
+      }).filter(o => o['주문번호']);
+
+      // 기존 주문과 합산 (주문번호 기준 중복 제거)
+      const existingNums = new Set(orders.map(o => o['주문번호']));
+      const added = newOrders.filter(o => !existingNums.has(o['주문번호']));
+      orders = [...orders, ...added];
+      localStorage.setItem('ordersData', JSON.stringify(orders));
+      saveToServer('ordersData', orders);
+
+      // 매칭 리뷰: 이미 optionMatchings에 있는 옵션ID 확인
+      const newOptionIds = [...new Set(newOrders.map(o => o['옵션ID']).filter(Boolean))];
+      const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
+      if (matchedIds.length > 0) {
+        showMatchingReviewModal(matchedIds, newOrders);
+      }
+
+      renderOrders();
+      alert(`${added.length}건 추가됨 (총 ${orders.length}건)`);
+    } catch(err) {
+      alert('파일 파싱 오류: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseOrderDate(str) {
+  if (!str) return null;
+  // "2024.01.15 12:30:00" or "2024-01-15" or "2024/01/15"
+  const s = String(str).replace(/\./g, '-').replace(/\//g, '-').trim();
+  const d = new Date(s.substring(0, 10));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function renderOrders() {
+  const from = document.getElementById('ordersDateFrom')?.value;
+  const to = document.getElementById('ordersDateTo')?.value;
+  const search = (document.getElementById('ordersSearchName')?.value || '').toLowerCase();
+
+  let filtered = orders.filter(o => {
+    if (search && !o['등록상품명'].toLowerCase().includes(search)) return false;
+    const d = parseOrderDate(o['주문일']);
+    if (from && d && d < new Date(from)) return false;
+    if (to && d && d > new Date(to + 'T23:59:59')) return false;
+    return true;
+  });
+
+  // 요약
+  const totalAmt = filtered.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
+  const totalShip = filtered.reduce((s, o) => s + (parseFloat(o['배송비']) || 0), 0);
+  const summaryEl = document.getElementById('ordersSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="summary-card"><div class="summary-card-label">총 주문수</div><div class="summary-card-value">${filtered.length.toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 결제액</div><div class="summary-card-value green">${totalAmt.toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 배송비</div><div class="summary-card-value">${totalShip.toLocaleString('ko-KR')}원</div></div>
+    `;
+  }
+
+  // 테이블
+  const thead = document.getElementById('ordersThead');
+  const tbody = document.getElementById('ordersTbody');
+  if (!thead || !tbody) return;
+
+  thead.innerHTML = '<tr>' + ORDER_DISPLAY_COLS.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="${ORDER_DISPLAY_COLS.length}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(o =>
+    '<tr>' + ORDER_DISPLAY_COLS.map(c => `<td>${o[c] ?? ''}</td>`).join('') + '</tr>'
+  ).join('');
+}
+
+function deleteAllOrders() {
+  if (!confirm('주문서 데이터를 전체 삭제할까요?')) return;
+  orders = [];
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+  saveToServer('ordersData', orders);
+  renderOrders();
+}
+
+// ── 광고 탭 ──────────────────────────────────────────────────────────────────
+const AD_COLUMNS = ['날짜','과금방식','판매방식','광고유형','캠페인ID','캠페인명','광고그룹','광고집행상품명','광고집행옵션ID','광고전환매출발생상품명','광고전환매출발생옵션ID','광고노출지면','키워드','노출수','클릭수','광고비','클릭률','총주문수(1일)','직접주문수(1일)','간접주문수(1일)','총판매수량(1일)','직접판매수량(1일)','간접판매수량(1일)','총전환매출액(1일)','직접전환매출액(1일)','간접전환매출액(1일)','총주문수(14일)','직접주문수(14일)','간접주문수(14일)','총판매수량(14일)','직접판매수량(14일)','간접판매수량(14일)','총전환매출액(14일)','직접전환매출액(14일)','간접전환매출액(14일)','총광고수익률(1일)','직접광고수익률(1일)','간접광고수익률(1일)','총광고수익률(14일)','직접광고수익률(14일)','간접광고수익률(14일)','캠페인시작일','캠페인종료일','비고'];
+
+function handleAdsUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
+      const headers = rows[0].map(h => String(h).trim());
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+
+      const colIdx = {};
+      AD_COLUMNS.forEach(col => { colIdx[col] = headers.indexOf(col); });
+
+      const newReports = dataRows.map(row => {
+        const obj = {};
+        AD_COLUMNS.forEach(col => {
+          const i = colIdx[col];
+          obj[col] = i >= 0 ? String(row[i] ?? '').trim() : '';
+        });
+        return obj;
+      });
+
+      // 중복 제거: 날짜+광고집행옵션ID+캠페인ID
+      const existingKeys = new Set(adReports.map(r => `${r['날짜']}|${r['광고집행옵션ID']}|${r['캠페인ID']}`));
+      const added = newReports.filter(r => !existingKeys.has(`${r['날짜']}|${r['광고집행옵션ID']}|${r['캠페인ID']}`));
+      adReports = [...adReports, ...added];
+      localStorage.setItem('adReportsData', JSON.stringify(adReports));
+      saveToServer('adReportsData', adReports);
+      renderAds();
+      alert(`${added.length}건 추가됨 (총 ${adReports.length}건)`);
+    } catch(err) {
+      alert('파일 파싱 오류: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderAds() {
+  const from = document.getElementById('adsDateFrom')?.value;
+  const to = document.getElementById('adsDateTo')?.value;
+
+  let filtered = adReports.filter(r => {
+    const d = parseOrderDate(r['날짜']);
+    if (from && d && d < new Date(from)) return false;
+    if (to && d && d > new Date(to + 'T23:59:59')) return false;
+    return true;
+  });
+
+  const container = document.getElementById('adsContent');
+  if (!container) return;
+
+  if (!filtered.length) {
+    container.innerHTML = '<div class="card"><div style="color:var(--text-dim);font-size:13px;text-align:center;padding:24px">데이터가 없습니다</div></div>';
+    return;
+  }
+
+  // 상품별 그룹핑
+  const groupMap = new Map();
+  filtered.forEach(r => {
+    const key = r['광고집행상품명'] || '(상품명 없음)';
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key).push(r);
+  });
+
+  let html = '';
+  groupMap.forEach((rows, productName) => {
+    const totalAdCost = rows.reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
+    const realAdCost = totalAdCost * 1.1;
+    const totalImpr = rows.reduce((s, r) => s + (parseFloat(r['노출수']) || 0), 0);
+    const totalClk = rows.reduce((s, r) => s + (parseFloat(r['클릭수']) || 0), 0);
+    const totalOrd = rows.reduce((s, r) => s + (parseFloat(r['총주문수(1일)']) || 0), 0);
+    const totalRev = rows.reduce((s, r) => s + (parseFloat(r['총전환매출액(1일)']) || 0), 0);
+
+    const gid = 'adg_' + productName.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+
+    // 옵션별 집계
+    const optMap = new Map();
+    rows.forEach(r => {
+      const oid = r['광고집행옵션ID'] || '(옵션 없음)';
+      if (!optMap.has(oid)) optMap.set(oid, { adCost: 0, impr: 0, clk: 0, clkRate: 0, cnt: 0 });
+      const g = optMap.get(oid);
+      g.adCost += parseFloat(r['광고비']) || 0;
+      g.impr += parseFloat(r['노출수']) || 0;
+      g.clk += parseFloat(r['클릭수']) || 0;
+      g.clkRate += parseFloat(r['클릭률']) || 0;
+      g.cnt++;
+    });
+
+    const detailRows = [...optMap.entries()].map(([oid, d]) => `
+      <tr>
+        <td>${oid}</td>
+        <td>${Math.round(d.adCost).toLocaleString('ko-KR')}원</td>
+        <td>${Math.round(d.adCost * 1.1).toLocaleString('ko-KR')}원</td>
+        <td>${Math.round(d.impr).toLocaleString('ko-KR')}</td>
+        <td>${Math.round(d.clk).toLocaleString('ko-KR')}</td>
+        <td>${d.cnt > 0 ? (d.clkRate / d.cnt).toFixed(2) : '-'}%</td>
+      </tr>`).join('');
+
+    html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <table class="data-table" style="white-space:normal">
+        <thead>
+          <tr class="ad-group-row" onclick="toggleAdGroup('${gid}')">
+            <td colspan="7" style="padding:12px 14px;font-size:13px;font-weight:600">${productName}</td>
+          </tr>
+          <tr style="background:var(--surface2)">
+            <th>총 광고비</th><th>실광고비(×1.1)</th><th>총 노출수</th><th>총 클릭수</th><th>총주문수(1일)</th><th>총전환매출(1일)</th><th></th>
+          </tr>
+          <tr>
+            <td>${Math.round(totalAdCost).toLocaleString('ko-KR')}원</td>
+            <td style="color:var(--red)">${Math.round(realAdCost).toLocaleString('ko-KR')}원</td>
+            <td>${Math.round(totalImpr).toLocaleString('ko-KR')}</td>
+            <td>${Math.round(totalClk).toLocaleString('ko-KR')}</td>
+            <td>${Math.round(totalOrd).toLocaleString('ko-KR')}</td>
+            <td>${Math.round(totalRev).toLocaleString('ko-KR')}원</td>
+            <td><button class="btn btn-ghost btn-xs" onclick="toggleAdGroup('${gid}')">옵션별 ▾</button></td>
+          </tr>
+        </thead>
+        <tbody class="ad-detail-rows" id="${gid}">
+          <tr style="background:var(--surface2)">
+            <th>옵션ID</th><th>광고비</th><th>실광고비</th><th>노출수</th><th>클릭수</th><th>클릭률</th>
+          </tr>
+          ${detailRows}
+        </tbody>
+      </table>
+    </div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function toggleAdGroup(gid) {
+  const el = document.getElementById(gid);
+  if (el) el.classList.toggle('open');
+}
+
+function deleteAllAds() {
+  if (!confirm('광고 리포트 데이터를 전체 삭제할까요?')) return;
+  adReports = [];
+  localStorage.setItem('adReportsData', JSON.stringify(adReports));
+  saveToServer('adReportsData', adReports);
+  renderAds();
+}
+
+// ── 쿠폰 탭 ──────────────────────────────────────────────────────────────────
+function addCoupon() {
+  const name = document.getElementById('couponName').value.trim();
+  const discount = parseFloat(document.getElementById('couponDiscount').value) || 0;
+  const startDate = document.getElementById('couponStartDate').value;
+  const endDate = document.getElementById('couponEndDate').value;
+  const products = document.getElementById('couponProducts').value.trim();
+  if (!name) { alert('쿠폰명을 입력하세요'); return; }
+  if (!discount || discount <= 0) { alert('할인금액을 입력하세요'); return; }
+  if (!startDate || !endDate) { alert('적용 기간을 입력하세요'); return; }
+  coupons.push({ id: Date.now(), name, discount, startDate, endDate, products });
+  localStorage.setItem('couponsData', JSON.stringify(coupons));
+  saveToServer('couponsData', coupons);
+  ['couponName','couponDiscount','couponStartDate','couponEndDate','couponProducts'].forEach(id => { document.getElementById(id).value = ''; });
+  renderCoupons();
+}
+
+function getCouponAppliedOrders(coupon) {
+  return orders.filter(o => {
+    const d = parseOrderDate(o['주문일']);
+    if (!d) return false;
+    if (d < new Date(coupon.startDate) || d > new Date(coupon.endDate + 'T23:59:59')) return false;
+    if (coupon.products) {
+      const prods = coupon.products.split(',').map(s => s.trim()).filter(Boolean);
+      if (prods.length && !prods.some(p => o['등록상품명'].includes(p))) return false;
+    }
+    return true;
+  });
+}
+
+function renderCoupons() {
+  const tbody = document.getElementById('couponTbody');
+  if (!tbody) return;
+
+  // 전체 쿠폰 할인액 집계
+  let totalDiscount = 0;
+  const totalPayment = orders.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
+
+  if (!coupons.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px">등록된 쿠폰이 없습니다</td></tr>`;
+  } else {
+    tbody.innerHTML = coupons.map((c, i) => {
+      const applied = getCouponAppliedOrders(c);
+      const count = applied.length;
+      const discountTotal = c.discount * count;
+      totalDiscount += discountTotal;
+      const products = c.products || '전체';
+      return `<tr>
+        <td>${c.name}</td>
+        <td style="font-family:var(--mono)">${c.discount.toLocaleString('ko-KR')}원</td>
+        <td style="font-family:var(--mono);font-size:12px">${c.startDate} ~ ${c.endDate}</td>
+        <td style="font-size:12px">${products}</td>
+        <td style="font-family:var(--mono)">${count.toLocaleString('ko-KR')}건</td>
+        <td style="font-family:var(--mono);color:var(--red)">${discountTotal.toLocaleString('ko-KR')}원</td>
+        <td><button class="btn btn-danger btn-xs" onclick="deleteCoupon(${i})">삭제</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  const realRevenue = totalPayment - totalDiscount;
+  const summaryEl = document.getElementById('couponSummary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="summary-card"><div class="summary-card-label">총 결제액</div><div class="summary-card-value green">${totalPayment.toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 쿠폰할인</div><div class="summary-card-value red">${totalDiscount.toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">실매출</div><div class="summary-card-value">${realRevenue.toLocaleString('ko-KR')}원</div></div>
+    `;
+  }
+}
+
+function deleteCoupon(idx) {
+  if (!confirm(`'${coupons[idx].name}' 쿠폰을 삭제할까요?`)) return;
+  coupons.splice(idx, 1);
+  localStorage.setItem('couponsData', JSON.stringify(coupons));
+  saveToServer('couponsData', coupons);
+  renderCoupons();
+}
+
+// ── 수익분석 탭 ──────────────────────────────────────────────────────────────
+function setPeriodMode(mode) {
+  profitPeriodMode = mode;
+  ['day','week','month'].forEach(m => {
+    document.getElementById('period' + m.charAt(0).toUpperCase() + m.slice(1))?.classList.toggle('active', m === mode);
+  });
+}
+
+function getPlatformRate() {
+  const p = platforms.find(pl => pl.id === selectedPlatformId);
+  return p ? p.rate / 100 : 0.1166;
+}
+
+function getOptionAdCost(optionId) {
+  // 합산: 해당 옵션ID의 총 광고비
+  return adReports
+    .filter(r => r['광고집행옵션ID'] === optionId)
+    .reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
+}
+
+function getCouponDiscountForOrder(order) {
+  let discount = 0;
+  coupons.forEach(c => {
+    const d = parseOrderDate(order['주문일']);
+    if (!d) return;
+    if (d < new Date(c.startDate) || d > new Date(c.endDate + 'T23:59:59')) return;
+    if (c.products) {
+      const prods = c.products.split(',').map(s => s.trim()).filter(Boolean);
+      if (prods.length && !prods.some(p => order['등록상품명'].includes(p))) return;
+    }
+    discount += c.discount;
+  });
+  return discount;
+}
+
+function getPeriodKey(dateStr) {
+  const d = parseOrderDate(dateStr);
+  if (!d) return '미상';
+  if (profitPeriodMode === 'day') return dateStr.substring(0, 10);
+  if (profitPeriodMode === 'month') return dateStr.substring(0, 7);
+  // week: ISO week
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function renderProfit() {
+  const from = document.getElementById('profitDateFrom')?.value;
+  const to = document.getElementById('profitDateTo')?.value;
+
+  let filtered = orders.filter(o => {
+    const d = parseOrderDate(o['주문일']);
+    if (from && d && d < new Date(from)) return false;
+    if (to && d && d > new Date(to + 'T23:59:59')) return false;
+    return true;
+  });
+
+  const feeRate = getPlatformRate();
+
+  // 옵션별 집계
+  const optionMap = new Map();
+  filtered.forEach(o => {
+    const oid = o['옵션ID'] || '';
+    const key = `${o['등록상품명']}||${o['등록옵션명']}||${oid}`;
+    if (!optionMap.has(key)) {
+      optionMap.set(key, {
+        productName: o['등록상품명'],
+        optionName: o['등록옵션명'],
+        optionId: oid,
+        qty: 0, payment: 0, shipping: 0, couponDiscount: 0
+      });
+    }
+    const g = optionMap.get(key);
+    g.qty += parseFloat(o['구매수량']) || 1;
+    g.payment += parseFloat(o['결제액']) || 0;
+    g.shipping += parseFloat(o['배송비']) || 0;
+    g.couponDiscount += getCouponDiscountForOrder(o);
+  });
+
+  // 매칭 현황
+  let matchedCount = 0, unmatchedCount = 0;
+  const unmatchedItems = [];
+  optionMap.forEach((g, key) => {
+    if (g.optionId && optionMatchings[g.optionId]) matchedCount++;
+    else { unmatchedCount++; unmatchedItems.push(g); }
+  });
+
+  // 매칭 섹션 렌더링
+  const matchContent = document.getElementById('profitMatchContent');
+  if (matchContent) {
+    let matchHtml = `<div style="font-size:13px;margin-bottom:12px">매칭완료 <strong style="color:var(--green)">${matchedCount}건</strong> / 미매칭 <strong style="color:var(--red)">${unmatchedCount}건</strong></div>`;
+    if (unmatchedItems.length) {
+      matchHtml += `<table class="profit-table"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>수량</th><th>공급처 지정</th></tr></thead><tbody>`;
+      unmatchedItems.forEach(g => {
+        matchHtml += `<tr>
+          <td>${g.productName}</td>
+          <td>${g.optionName}</td>
+          <td style="font-family:var(--mono)">${g.optionId || '-'}</td>
+          <td style="font-family:var(--mono)">${g.qty}</td>
+          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}', this)">공급처 지정</button></td>
+        </tr>
+        <tr id="matchform_${g.optionId}" style="display:none">
+          <td colspan="5">
+            <div class="match-inline-form">
+              <div>
+                <label>공급처명</label>
+                <select id="matchSupplier_${g.optionId}">
+                  ${suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label>공급가 (원)</label>
+                <input type="number" id="matchCost_${g.optionId}" placeholder="0">
+              </div>
+              <div>
+                <label>과세구분</label>
+                <select id="matchTax_${g.optionId}">
+                  <option value="exempt">면세</option>
+                  <option value="taxable">과세</option>
+                </select>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}')">저장</button>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+      });
+      matchHtml += '</tbody></table>';
+    }
+
+    // 이미 매칭된 항목도 표시
+    const matchedItems = [];
+    optionMap.forEach(g => { if (g.optionId && optionMatchings[g.optionId]) matchedItems.push(g); });
+    if (matchedItems.length) {
+      matchHtml += `<div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--text-dim)">매칭 완료 항목</div>
+        <table class="profit-table" style="margin-top:6px"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>공급처</th><th>공급가</th><th>과세구분</th><th></th></tr></thead><tbody>`;
+      matchedItems.forEach(g => {
+        const m = optionMatchings[g.optionId];
+        matchHtml += `<tr>
+          <td>${g.productName}</td>
+          <td>${g.optionName}</td>
+          <td style="font-family:var(--mono)">${g.optionId}</td>
+          <td>${m.supplierName}</td>
+          <td style="font-family:var(--mono)">${(m.cost || 0).toLocaleString('ko-KR')}원</td>
+          <td>${m.taxType === 'taxable' ? '과세' : '면세'}</td>
+          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}', this)">변경</button></td>
+        </tr>
+        <tr id="matchform_${g.optionId}" style="display:none">
+          <td colspan="7">
+            <div class="match-inline-form">
+              <div>
+                <label>공급처명</label>
+                <select id="matchSupplier_${g.optionId}">
+                  ${suppliers.map(s => `<option value="${s.name}"${s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label>공급가 (원)</label>
+                <input type="number" id="matchCost_${g.optionId}" value="${m.cost || 0}">
+              </div>
+              <div>
+                <label>과세구분</label>
+                <select id="matchTax_${g.optionId}">
+                  <option value="exempt"${m.taxType === 'exempt' ? ' selected' : ''}>면세</option>
+                  <option value="taxable"${m.taxType === 'taxable' ? ' selected' : ''}>과세</option>
+                </select>
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}')">저장</button>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+      });
+      matchHtml += '</tbody></table>';
+    }
+    matchContent.innerHTML = matchHtml;
+  }
+
+  // 상품별 수익 테이블
+  const productTbody = document.getElementById('profitProductTbody');
+  if (productTbody) {
+    if (!optionMap.size) {
+      productTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+    } else {
+      productTbody.innerHTML = [...optionMap.values()].map(g => {
+        const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
+        const fee = realRevenue * feeRate;
+        const matching = g.optionId ? optionMatchings[g.optionId] : null;
+        const cost = matching ? (matching.cost || 0) * g.qty : null;
+        const adCostRaw = g.optionId ? getOptionAdCost(g.optionId) : 0;
+        const realAdCost = adCostRaw * 1.1;
+        const taxTyp = matching ? matching.taxType : 'exempt';
+        let vat = 0;
+        if (taxTyp === 'exempt') {
+          vat = (fee / 11) + (adCostRaw / 11);
+        } else {
+          vat = (realRevenue / 11) - ((cost || 0) / 11) - (fee / 11) - (adCostRaw / 11);
+        }
+        const netProfit = cost !== null ? realRevenue - fee - cost - realAdCost - vat : null;
+        const marginRate = (netProfit !== null && realRevenue > 0) ? (netProfit / realRevenue * 100) : null;
+        const isUnmatched = !matching;
+
+        return `<tr class="${isUnmatched ? 'unmatched-row' : ''}">
+          <td>${g.productName}</td>
+          <td>${g.optionName}</td>
+          <td style="font-family:var(--mono)">${g.qty}</td>
+          <td style="font-family:var(--mono)">${Math.round(realRevenue).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(fee).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${cost !== null ? Math.round(cost).toLocaleString('ko-KR') + '원' : '<span style="color:var(--yellow)">미매칭</span>'}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(realAdCost).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${Math.round(vat).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);font-weight:600;color:${netProfit === null ? 'var(--text-dim)' : netProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${netProfit !== null ? Math.round(netProfit).toLocaleString('ko-KR') + '원' : '-'}</td>
+          <td style="font-family:var(--mono)">${marginRate !== null ? marginRate.toFixed(1) + '%' : '-'}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // 수익 요약 카드
+  let totalRevenue = 0, totalFee = 0, totalCost = 0, totalCouponDiscount = 0, totalVat = 0, totalNet = 0, totalRealAdCost = 0;
+  optionMap.forEach(g => {
+    const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
+    const fee = realRevenue * feeRate;
+    const matching = g.optionId ? optionMatchings[g.optionId] : null;
+    const cost = matching ? (matching.cost || 0) * g.qty : 0;
+    const adCostRaw = g.optionId ? getOptionAdCost(g.optionId) : 0;
+    const realAdCost = adCostRaw * 1.1;
+    const taxTyp = matching ? matching.taxType : 'exempt';
+    let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRevenue / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
+    const netProfit = matching ? realRevenue - fee - cost - realAdCost - vat : 0;
+    totalRevenue += realRevenue;
+    totalFee += fee;
+    totalCost += cost;
+    totalCouponDiscount += g.couponDiscount;
+    totalVat += vat;
+    totalNet += netProfit;
+    totalRealAdCost += realAdCost;
+  });
+
+  const summaryEl = document.getElementById('profitSummaryCards');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div class="summary-card"><div class="summary-card-label">총매출(실)</div><div class="summary-card-value green">${Math.round(totalRevenue).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총광고비(실)</div><div class="summary-card-value red">${Math.round(totalRealAdCost).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총원가</div><div class="summary-card-value red">${Math.round(totalCost).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총쿠폰할인</div><div class="summary-card-value red">${Math.round(totalCouponDiscount).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(totalVat).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">순이익</div><div class="summary-card-value ${totalNet >= 0 ? 'green' : 'red'}">${Math.round(totalNet).toLocaleString('ko-KR')}원</div></div>
+    `;
+  }
+
+  // 기간별 집계
+  const periodMap = new Map();
+  filtered.forEach(o => {
+    const pk = getPeriodKey(o['주문일']);
+    if (!periodMap.has(pk)) periodMap.set(pk, { revenue: 0, net: 0 });
+    const g = periodMap.get(pk);
+    const oid = o['옵션ID'] || '';
+    const payment = parseFloat(o['결제액']) || 0;
+    const shipping = parseFloat(o['배송비']) || 0;
+    const couponDisc = getCouponDiscountForOrder(o);
+    const realRev = (payment + shipping) - couponDisc;
+    const fee = realRev * feeRate;
+    const matching = oid ? optionMatchings[oid] : null;
+    const qty = parseFloat(o['구매수량']) || 1;
+    const cost = matching ? (matching.cost || 0) * qty : 0;
+    const adCostRaw = oid ? getOptionAdCost(oid) : 0;
+    const realAdCost = adCostRaw * 1.1;
+    const taxTyp = matching ? matching.taxType : 'exempt';
+    let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRev / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
+    const netProfit = matching ? realRev - fee - cost - realAdCost - vat : realRev - fee;
+    g.revenue += realRev;
+    g.net += netProfit;
+  });
+
+  const periodTbody = document.getElementById('profitPeriodTbody');
+  if (periodTbody) {
+    const sortedPeriods = [...periodMap.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    if (!sortedPeriods.length) {
+      periodTbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+    } else {
+      periodTbody.innerHTML = sortedPeriods.map(([period, d]) => {
+        const rate = d.revenue > 0 ? (d.net / d.revenue * 100) : 0;
+        return `<tr>
+          <td style="font-family:var(--mono)">${period}</td>
+          <td style="font-family:var(--mono)">${Math.round(d.revenue).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);color:${d.net >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${Math.round(d.net).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${rate.toFixed(1)}%</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+}
+
+function showMatchForm(optionId, btn) {
+  const row = document.getElementById('matchform_' + optionId);
+  if (!row) return;
+  const isHidden = row.style.display === 'none' || row.style.display === '';
+  row.style.display = isHidden ? 'table-row' : 'none';
+}
+
+function saveOptionMatching(optionId) {
+  const supplierEl = document.getElementById('matchSupplier_' + optionId);
+  const costEl = document.getElementById('matchCost_' + optionId);
+  const taxEl = document.getElementById('matchTax_' + optionId);
+  if (!supplierEl || !costEl || !taxEl) return;
+  const supplierName = supplierEl.value;
+  const cost = parseFloat(costEl.value) || 0;
+  const taxType = taxEl.value;
+  if (!cost) { alert('공급가를 입력하세요'); return; }
+
+  optionMatchings[optionId] = { supplierName, cost, taxType };
+  localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
+  saveToServer('optionMatchings', optionMatchings);
+
+  // B2B 매입가 이력도 업데이트
+  const today = new Date().toLocaleDateString('ko-KR');
+  const supIdx = suppliers.findIndex(s => s.name === supplierName);
+  if (supIdx >= 0) {
+    // 옵션ID를 상품명으로 활용하여 B2B에 기록
+    const existingB2B = b2bProducts.find(p => p.name === optionId);
+    if (existingB2B) {
+      while (existingB2B.prices.length <= supIdx) existingB2B.prices.push(0);
+      existingB2B.prices[supIdx] = cost;
+    } else {
+      const newPrices = new Array(suppliers.length).fill(0);
+      if (supIdx >= 0) newPrices[supIdx] = cost;
+      b2bProducts.push({ id: Date.now(), name: optionId, unit: '옵션', prices: newPrices, prevLowest: 0, imageUrl: '', detailUrl: '', shareUrl: '' });
+    }
+    localStorage.setItem('b2bProducts', JSON.stringify(b2bProducts));
+    saveToServer('b2bProducts', b2bProducts);
+  }
+
+  renderProfit();
+}
+
+// ── 매칭 리뷰 모달 ───────────────────────────────────────────────────────────
+function showMatchingReviewModal(optionIds, newOrders) {
+  const backdrop = document.getElementById('matchModalBackdrop');
+  const itemsEl = document.getElementById('matchModalItems');
+  if (!backdrop || !itemsEl) return;
+
+  itemsEl.innerHTML = optionIds.map(oid => {
+    const m = optionMatchings[oid];
+    const order = newOrders.find(o => o['옵션ID'] === oid);
+    const productName = order ? order['등록상품명'] : oid;
+    const optionName = order ? order['등록옵션명'] : '';
+    return `<div class="match-item" id="matchreview_${oid}">
+      <div class="match-item-name">${productName}</div>
+      <div class="match-item-sub">옵션: ${optionName} | 옵션ID: ${oid}</div>
+      <div class="match-item-sub">현재 매칭: ${m.supplierName} · ${(m.cost || 0).toLocaleString('ko-KR')}원 · ${m.taxType === 'taxable' ? '과세' : '면세'}</div>
+      <div class="match-item-actions">
+        <button class="btn btn-ghost btn-sm" onclick="confirmMatchReview('${oid}', true)">✓ 맞음</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmMatchReview('${oid}', false)">변경</button>
+      </div>
+      <div id="matchreview_form_${oid}" style="display:none">
+        <div class="match-inline-form">
+          <div>
+            <label>공급처</label>
+            <select id="mrf_supplier_${oid}">
+              ${suppliers.map(s => `<option value="${s.name}"${s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label>공급가</label>
+            <input type="number" id="mrf_cost_${oid}" value="${m.cost || 0}">
+          </div>
+          <div>
+            <label>과세구분</label>
+            <select id="mrf_tax_${oid}">
+              <option value="exempt"${m.taxType === 'exempt' ? ' selected' : ''}>면세</option>
+              <option value="taxable"${m.taxType === 'taxable' ? ' selected' : ''}>과세</option>
+            </select>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button class="btn btn-primary btn-sm" onclick="saveMatchReview('${oid}')">저장</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  backdrop.classList.add('visible');
+}
+
+function confirmMatchReview(oid, confirmed) {
+  const formEl = document.getElementById('matchreview_form_' + oid);
+  if (confirmed) {
+    // 맞음: 해당 항목을 완료 표시
+    const itemEl = document.getElementById('matchreview_' + oid);
+    if (itemEl) {
+      itemEl.style.opacity = '0.5';
+      itemEl.style.pointerEvents = 'none';
+      itemEl.querySelector('.match-item-actions').innerHTML = '<span style="color:var(--green);font-size:12px">✓ 확인됨</span>';
+    }
+    if (formEl) formEl.style.display = 'none';
+  } else {
+    if (formEl) formEl.style.display = formEl.style.display === 'none' ? 'block' : 'none';
+  }
+}
+
+function saveMatchReview(oid) {
+  const supplierEl = document.getElementById('mrf_supplier_' + oid);
+  const costEl = document.getElementById('mrf_cost_' + oid);
+  const taxEl = document.getElementById('mrf_tax_' + oid);
+  if (!supplierEl || !costEl || !taxEl) return;
+  const supplierName = supplierEl.value;
+  const cost = parseFloat(costEl.value) || 0;
+  const taxType = taxEl.value;
+
+  optionMatchings[oid] = { supplierName, cost, taxType };
+  localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
+  saveToServer('optionMatchings', optionMatchings);
+
+  const itemEl = document.getElementById('matchreview_' + oid);
+  if (itemEl) {
+    itemEl.style.opacity = '0.5';
+    itemEl.style.pointerEvents = 'none';
+    itemEl.querySelector('.match-item-actions').innerHTML = '<span style="color:var(--green);font-size:12px">✓ 변경 저장됨</span>';
+    const formEl = document.getElementById('matchreview_form_' + oid);
+    if (formEl) formEl.style.display = 'none';
+  }
+}
+
+function closeMatchModal() {
+  const backdrop = document.getElementById('matchModalBackdrop');
+  if (backdrop) backdrop.classList.remove('visible');
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
