@@ -226,48 +226,54 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
   if (!items.length) return res.json({ inserted: 0 });
   console.log(`[orders/bulk] user=${req.user.id} items=${items.length}`);
+
+  const CHUNK = 500;
   let inserted = 0;
   try {
-    for (const o of items) {
-      const r = await pool.query(
-        `INSERT INTO orders
-         (user_id,order_number,bundle_number,order_date,product_name,option_name,
-          display_name,display_product_id,option_id,payment_amount,shipping_fee,
-          quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
-          confirmed_date,payment_location,delivery_type,buyer_masked,
-          recipient_name_masked,recipient_phone_masked,recipient_address_masked)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
-         ON CONFLICT (user_id, order_number) DO NOTHING`,
-        [
-          req.user.id,
-          o['주문번호'] || '',
-          o['묶음배송번호'] || '',
-          o['주문일'] || '',
-          o['등록상품명'] || '',
-          o['등록옵션명'] || '',
-          o['노출상품명(옵션명)'] || o['노출상품명'] || '',
-          o['노출상품ID'] || '',
-          o['옵션ID'] || '',
-          parseInt(o['결제액']) || 0,
-          parseInt(o['배송비']) || 0,
-          parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,
-          parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0,
-          o['택배사'] || '',
-          o['운송장번호'] || '',
-          o['출고일'] || '',
-          o['배송완료일'] || '',
-          o['구매확정일자'] || '',
-          o['결제위치'] || '',
-          o['배송유형'] || '',
-          o['구매자'] || '',
-          o['수취인이름'] || '',
-          o['수취인전화번호'] || '',
-          o['수취인 주소'] || o['수취인주소'] || '',
-        ]
-      );
-      if (r.rowCount > 0) inserted++;
+    for (let start = 0; start < items.length; start += CHUNK) {
+      const chunk = items.slice(start, start + CHUNK);
+      for (const o of chunk) {
+        const r = await pool.query(
+          `INSERT INTO orders
+           (user_id,order_number,bundle_number,order_date,product_name,option_name,
+            display_name,display_product_id,option_id,payment_amount,shipping_fee,
+            quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
+            confirmed_date,payment_location,delivery_type,buyer_masked,
+            recipient_name_masked,recipient_phone_masked,recipient_address_masked)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+           ON CONFLICT (user_id, order_number) DO NOTHING`,
+          [
+            req.user.id,
+            o['주문번호'] || '',
+            o['묶음배송번호'] || '',
+            o['주문일'] || '',
+            o['등록상품명'] || '',
+            o['등록옵션명'] || '',
+            o['노출상품명(옵션명)'] || o['노출상품명'] || '',
+            o['노출상품ID'] || '',
+            o['옵션ID'] || '',
+            parseInt(o['결제액']) || 0,
+            parseInt(o['배송비']) || 0,
+            parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,
+            parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0,
+            o['택배사'] || '',
+            o['운송장번호'] || '',
+            o['출고일'] || '',
+            o['배송완료일'] || '',
+            o['구매확정일자'] || '',
+            o['결제위치'] || '',
+            o['배송유형'] || '',
+            o['구매자'] || '',
+            o['수취인이름'] || '',
+            o['수취인전화번호'] || '',
+            o['수취인 주소'] || o['수취인주소'] || '',
+          ]
+        );
+        if (r.rowCount > 0) inserted++;
+      }
+      console.log(`[orders/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 처리 완료`);
     }
-    console.log(`[orders/bulk] 삽입=${inserted} / 전체=${items.length}`);
+    console.log(`[orders/bulk] 완료: 삽입=${inserted} / 전체=${items.length}`);
     res.json({ inserted });
   } catch(e) {
     console.error('[orders/bulk] DB 오류:', e.message);
@@ -323,9 +329,14 @@ router.get('/ad-reports', requireAuth, async (req, res) => {
 router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
   if (!items.length) return res.json({ inserted: 0 });
+  console.log(`[ad-reports/bulk] user=${req.user.id} items=${items.length}`);
+
+  const CHUNK = 500;
   let inserted = 0;
   try {
-    for (const r of items) {
+    for (let start = 0; start < items.length; start += CHUNK) {
+      const chunk = items.slice(start, start + CHUNK);
+      for (const r of chunk) {
       // 상품명 컬럼은 띄어쓰기 있는 버전과 없는 버전 모두 지원
       const productName = r['광고집행 상품명'] || r['광고집행상품명'] || '';
       const optionId    = r['광고집행 옵션ID'] || r['광고집행옵션ID'] || '';
@@ -398,10 +409,16 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
           r['비고'] || '',
         ]
       );
-      if (result.rowCount > 0) inserted++;
+        if (result.rowCount > 0) inserted++;
+      }
+      console.log(`[ad-reports/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 처리 완료`);
     }
+    console.log(`[ad-reports/bulk] 완료: 삽입=${inserted} / 전체=${items.length}`);
     res.json({ inserted });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[ad-reports/bulk] DB 오류:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.delete('/ad-reports', requireAuth, async (req, res) => {
