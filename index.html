@@ -2334,12 +2334,37 @@ function handleOrdersUpload(input) {
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       if (!rows.length) { alert('데이터가 없습니다'); return; }
       const headers = rows[0].map(h => String(h).trim());
       const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+
+      // 날짜 컬럼: Date 객체 / 텍스트 / 엑셀 시리얼 숫자 모두 'YYYY-MM-DD HH:mm' 로 통일
+      const DATE_COLS = new Set(['주문일', '출고일', '배송완료일']);
+      function formatOrderDate(val) {
+        if (val == null || val === '') return '';
+        if (val instanceof Date) {
+          if (isNaN(val.getTime())) return '';
+          const Y = val.getFullYear();
+          const M = String(val.getMonth() + 1).padStart(2, '0');
+          const D = String(val.getDate()).padStart(2, '0');
+          const h = String(val.getHours()).padStart(2, '0');
+          const m = String(val.getMinutes()).padStart(2, '0');
+          return `${Y}-${M}-${D} ${h}:${m}`;
+        }
+        if (typeof val === 'number') {
+          // 엑셀 시리얼 넘버 → JS Date (1900 기준, 엑셀 윤년 버그 보정)
+          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          if (isNaN(d.getTime())) return String(val);
+          const Y = d.getUTCFullYear();
+          const M = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const D = String(d.getUTCDate()).padStart(2, '0');
+          return `${Y}-${M}-${D}`;
+        }
+        return String(val).trim();
+      }
 
       // 헤더 인덱스 매핑
       const colIdx = {};
@@ -2349,7 +2374,8 @@ function handleOrdersUpload(input) {
         const obj = {};
         ORDER_COLUMNS.forEach(col => {
           const i = colIdx[col];
-          let val = i >= 0 ? String(row[i] ?? '').trim() : '';
+          const raw = i >= 0 ? row[i] : '';
+          let val = DATE_COLS.has(col) ? formatOrderDate(raw) : String(raw ?? '').trim();
           if (ORDER_MASK_COLS.has(col) && val) val = maskValue(col, val);
           obj[col] = val;
         });
