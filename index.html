@@ -3334,14 +3334,79 @@ function getPeriodKey(dateStr) {
   return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
-function renderProfit() {
+async function renderProfit() {
   const from = document.getElementById('profitDateFrom')?.value;
-  const to = document.getElementById('profitDateTo')?.value;
+  const to   = document.getElementById('profitDateTo')?.value;
 
-  let allInRange = orders.filter(o => {
+  // 로딩 표시
+  const summaryEl = document.getElementById('profitSummaryCards');
+  if (summaryEl) summaryEl.innerHTML = '<div style="color:var(--text-dim);padding:8px 0">데이터 불러오는 중...</div>';
+
+  // ── API에서 기간 기반 fresh 데이터 fetch ─────────────────────────────────
+  let pOrders = orders, pAdReports = adReports, pCoupons = coupons, pB2b = b2bPriceHistory;
+  if (currentUser) {
+    const qs = new URLSearchParams();
+    if (from) qs.set('start_date', from);
+    if (to)   qs.set('end_date',   to);
+    const qstr = qs.toString() ? '?' + qs.toString() : '';
+    const safeFetch = async url => {
+      try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch { return null; }
+    };
+    const [oData, arData, cData, bData] = await Promise.all([
+      safeFetch('/api/orders'    + qstr),
+      safeFetch('/api/ad-reports' + qstr),
+      safeFetch('/api/coupons'),
+      safeFetch('/api/b2b-prices'),
+    ]);
+    if (Array.isArray(oData))  pOrders    = oData;
+    if (Array.isArray(arData)) pAdReports = arData;
+    if (Array.isArray(cData))  pCoupons   = cData;
+    if (Array.isArray(bData))  pB2b       = bData;
+  }
+
+  // ── 로컬 헬퍼 (전역 변수 대신 fetch된 데이터 사용) ───────────────────────
+  function localAdCost(oid) {
+    return pAdReports
+      .filter(r => (r[AD_OPTION_COL] || r['광고집행옵션ID']) === oid)
+      .reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
+  }
+  function localCouponDiscount(order) {
+    const d = parseOrderDate(order['주문일']);
+    if (!d) return 0;
+    const oid = String(order['옵션ID'] || '');
+    const applicable = pCoupons.filter(c => {
+      const s = c.start_at ? new Date(c.start_at) : null;
+      const e = c.end_at   ? new Date(c.end_at)   : null;
+      if (s && d < s) return false;
+      if (e && d > e) return false;
+      const opts = Array.isArray(c.option_ids) ? c.option_ids : [];
+      return !opts.length || opts.includes(oid);
+    });
+    if (!applicable.length) return 0;
+    applicable.sort((a, b) => {
+      const diff = (b.discount_amount || 0) - (a.discount_amount || 0);
+      return diff !== 0 ? diff : (Number(b.coupon_id) || 0) - (Number(a.coupon_id) || 0);
+    });
+    return applicable[0].discount_amount || 0;
+  }
+  function localB2bCost(productName, dateStr) {
+    if (!productName || !dateStr) return null;
+    const d = String(dateStr).replace(/\./g, '-').slice(0, 10);
+    const matches = pB2b.filter(p => {
+      if (p.product_name !== productName) return false;
+      if (p.start_date && d < p.start_date) return false;
+      if (p.end_date   && d > p.end_date)   return false;
+      return true;
+    });
+    if (!matches.length) return null;
+    return matches.reduce((best, p) => (!best || p.id > best.id) ? p : best, null);
+  }
+
+  // ── 필터링 (API가 날짜 필터했어도 클라이언트 측 재확인 + 미인식 제외) ───
+  let allInRange = pOrders.filter(o => {
     const d = parseOrderDate(o['주문일']);
     if (from && d && d < new Date(from)) return false;
-    if (to && d && d > new Date(to + 'T23:59:59')) return false;
+    if (to   && d && d > new Date(to + 'T23:59:59')) return false;
     return true;
   });
   const excludedInRange = allInRange.filter(o => o.is_excluded).length;
@@ -3366,7 +3431,7 @@ function renderProfit() {
     g.qty += parseFloat(o['구매수(수량)']) || 1;
     g.payment += parseFloat(o['결제액']) || 0;
     g.shipping += parseFloat(o['배송비']) || 0;
-    g.couponDiscount += getCouponDiscountForOrder(o);
+    g.couponDiscount += localCouponDiscount(o);
   });
 
   // 매칭 현황
@@ -3486,10 +3551,10 @@ function renderProfit() {
         if (matching) {
           const from = document.getElementById('profitDateFrom')?.value;
           const repDate = from || new Date().toISOString().slice(0,10);
-          const b2bMatch = matching.productName ? getB2BCostForDate(matching.productName, repDate) : null;
+          const b2bMatch = matching.productName ? localB2bCost(matching.productName, repDate) : null;
           cost = (b2bMatch ? b2bMatch.cost : (matching.cost || 0)) * g.qty;
         }
-        const adCostRaw = g.optionId ? getOptionAdCost(g.optionId) : 0;
+        const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
         const realAdCost = adCostRaw * 1.1;
         const taxTyp = matching ? matching.taxType : 'exempt';
         let vat = 0;
@@ -3525,7 +3590,7 @@ function renderProfit() {
     const fee = realRevenue * feeRate;
     const matching = g.optionId ? optionMatchings[g.optionId] : null;
     const cost = matching ? (matching.cost || 0) * g.qty : 0;
-    const adCostRaw = g.optionId ? getOptionAdCost(g.optionId) : 0;
+    const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
     const realAdCost = adCostRaw * 1.1;
     const taxTyp = matching ? matching.taxType : 'exempt';
     let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRevenue / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);
@@ -3561,7 +3626,7 @@ function renderProfit() {
     const oid = o['옵션ID'] || '';
     const payment = parseFloat(o['결제액']) || 0;
     const shipping = parseFloat(o['배송비']) || 0;
-    const couponDisc = getCouponDiscountForOrder(o);
+    const couponDisc = localCouponDiscount(o);
     const realRev = (payment + shipping) - couponDisc;
     const fee = realRev * feeRate;
     const matching = oid ? optionMatchings[oid] : null;
@@ -3569,11 +3634,11 @@ function renderProfit() {
     let unitCost = matching ? (matching.cost || 0) : 0;
     if (matching && matching.productName) {
       const orderDateStr = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
-      const b2bMatch = getB2BCostForDate(matching.productName, orderDateStr);
+      const b2bMatch = localB2bCost(matching.productName, orderDateStr);
       if (b2bMatch) unitCost = b2bMatch.cost;
     }
     const cost = unitCost * qty;
-    const adCostRaw = oid ? getOptionAdCost(oid) : 0;
+    const adCostRaw = oid ? localAdCost(oid) : 0;
     const realAdCost = adCostRaw * 1.1;
     const taxTyp = matching ? matching.taxType : 'exempt';
     let vat = taxTyp === 'exempt' ? (fee / 11) + (adCostRaw / 11) : (realRev / 11) - (cost / 11) - (fee / 11) - (adCostRaw / 11);

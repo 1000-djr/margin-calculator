@@ -158,10 +158,13 @@ router.get('/crawl/status', (req, res) => {
 // ─── 주문서 ───────────────────────────────────────────────────────────────────
 router.get('/orders', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT * FROM orders WHERE user_id=$1 ORDER BY created_at DESC',
-      [req.user.id]
-    );
+    const { start_date, end_date } = req.query;
+    let q = 'SELECT * FROM orders WHERE user_id=$1';
+    const params = [req.user.id];
+    if (start_date) { params.push(start_date);              q += ` AND order_date >= $${params.length}`; }
+    if (end_date)   { params.push(end_date + ' 23:59:59');  q += ` AND order_date <= $${params.length}`; }
+    q += ' ORDER BY order_date DESC, created_at DESC';
+    const { rows } = await pool.query(q, params);
     res.json(rows.map(r => ({
       '번호':                r.id,
       '주문번호':            r.order_number,
@@ -282,10 +285,13 @@ router.delete('/orders', requireAuth, async (req, res) => {
 // ─── 광고보고서 ───────────────────────────────────────────────────────────────
 router.get('/ad-reports', requireAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT * FROM ad_reports WHERE user_id=$1 ORDER BY report_date DESC, created_at DESC',
-      [req.user.id]
-    );
+    const { start_date, end_date } = req.query;
+    let q = 'SELECT * FROM ad_reports WHERE user_id=$1';
+    const params = [req.user.id];
+    if (start_date) { params.push(start_date); q += ` AND report_date >= $${params.length}`; }
+    if (end_date)   { params.push(end_date);   q += ` AND report_date <= $${params.length}`; }
+    q += ' ORDER BY report_date DESC, created_at DESC';
+    const { rows } = await pool.query(q, params);
     res.json(rows.map(r => {
       // raw_data가 있으면 원본 그대로 반환, 없으면 구 컬럼으로 재구성
       if (r.raw_data) {
