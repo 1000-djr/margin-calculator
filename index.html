@@ -834,6 +834,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn btn-danger btn-sm" onclick="deleteAllAds()" style="margin-bottom:0">전체 삭제</button>
       </div>
     </div>
+    <div id="adsSummaryCards" class="summary-cards" style="margin-bottom:16px"></div>
     <div class="section-label" style="cursor:pointer;user-select:none" onclick="toggleAdMappingSection()">
       📦 상품 매칭 관리 <span id="adMappingToggleIcon">▾</span>
     </div>
@@ -2623,6 +2624,24 @@ function renderAds() {
     if (to && d && d > new Date(to + 'T23:59:59')) return false;
     return true;
   });
+
+  // 요약 카드
+  const summaryEl = document.getElementById('adsSummaryCards');
+  if (summaryEl) {
+    const totalAdCost  = filtered.reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
+    const totalImpr    = filtered.reduce((s, r) => s + (parseFloat(r['노출수']) || 0), 0);
+    const totalClk     = filtered.reduce((s, r) => s + (parseFloat(r['클릭수']) || 0), 0);
+    const totalOrd     = filtered.reduce((s, r) => s + (parseFloat(r['총 주문수(1일)']) || parseFloat(r['총주문수(1일)']) || 0), 0);
+    const totalRev     = filtered.reduce((s, r) => s + (parseFloat(r['총 전환매출액(1일)']) || parseFloat(r['총전환매출액(1일)']) || 0), 0);
+    summaryEl.innerHTML = filtered.length ? `
+      <div class="summary-card"><div class="summary-card-label">총 광고비</div><div class="summary-card-value">${Math.round(totalAdCost).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 실광고비 (×1.1)</div><div class="summary-card-value red">${Math.round(totalAdCost * 1.1).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 노출수</div><div class="summary-card-value">${Math.round(totalImpr).toLocaleString('ko-KR')}</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 클릭수</div><div class="summary-card-value">${Math.round(totalClk).toLocaleString('ko-KR')}</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 주문수 (1일)</div><div class="summary-card-value">${Math.round(totalOrd).toLocaleString('ko-KR')}</div></div>
+      <div class="summary-card"><div class="summary-card-label">총 전환매출액 (1일)</div><div class="summary-card-value green">${Math.round(totalRev).toLocaleString('ko-KR')}원</div></div>
+    ` : '';
+  }
 
   const container = document.getElementById('adsContent');
   if (!container) return;
