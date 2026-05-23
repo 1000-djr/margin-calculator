@@ -67,6 +67,39 @@ async function initDB() {
     ALTER TABLE price_history ADD COLUMN IF NOT EXISTS shipping_fee INTEGER;
   `);
 
+  // ad_reports 마이그레이션: 원본 전체 데이터 저장 컬럼 추가
+  await pool.query(`
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS raw_data JSONB;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS billing_type   TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS sales_type     TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS ad_type        TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS ad_placement   TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS click_rate     TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS conv_product   TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS conv_option_id TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS direct_orders_1d   INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS indirect_orders_1d INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS direct_qty_1d      INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS indirect_qty_1d    INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS direct_rev_1d      NUMERIC(14,2);
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS indirect_rev_1d    NUMERIC(14,2);
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS direct_orders_14d   INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS indirect_orders_14d INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS direct_qty_14d      INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS indirect_qty_14d    INTEGER;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS direct_rev_14d      NUMERIC(14,2);
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS indirect_rev_14d    NUMERIC(14,2);
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS roas_total_1d       TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS roas_direct_1d      TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS roas_indirect_1d    TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS roas_total_14d      TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS roas_direct_14d     TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS roas_indirect_14d   TEXT;
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS campaign_start      VARCHAR(50);
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS campaign_end        VARCHAR(50);
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS note               TEXT;
+  `);
+
   // 신규 테이블
   await pool.query(`
     CREATE TABLE IF NOT EXISTS orders (

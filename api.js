@@ -254,25 +254,31 @@ router.get('/ad-reports', requireAuth, async (req, res) => {
       'SELECT * FROM ad_reports WHERE user_id=$1 ORDER BY report_date DESC, created_at DESC',
       [req.user.id]
     );
-    res.json(rows.map(r => ({
-      '날짜':               r.report_date,
-      '캠페인ID':           r.campaign_id,
-      '캠페인명':           r.campaign_name,
-      '광고그룹':           r.ad_group,
-      '광고집행상품명':     r.product_name,
-      '광고집행옵션ID':     r.option_id,
-      '키워드':             r.keyword,
-      '노출수':             r.impressions,
-      '클릭수':             r.clicks,
-      '광고비':             r.ad_cost,
-      '실광고비':           r.actual_ad_cost,
-      '총주문수(1일)':      r.orders_1d,
-      '총판매수량(1일)':    r.quantity_1d,
-      '총전환매출액(1일)':  r.revenue_1d,
-      '총주문수(14일)':     r.orders_14d,
-      '총판매수량(14일)':   r.quantity_14d,
-      '총전환매출액(14일)': r.revenue_14d,
-    })));
+    res.json(rows.map(r => {
+      // raw_data가 있으면 원본 그대로 반환, 없으면 구 컬럼으로 재구성
+      if (r.raw_data) {
+        return { ...r.raw_data, '실광고비': parseFloat(r.actual_ad_cost) };
+      }
+      return {
+        '날짜':                  r.report_date,
+        '캠페인ID':              r.campaign_id,
+        '캠페인명':              r.campaign_name,
+        '광고그룹':              r.ad_group,
+        '광고집행 상품명':       r.product_name,
+        '광고집행옵션ID':        r.option_id,
+        '키워드':                r.keyword,
+        '노출수':                r.impressions,
+        '클릭수':                r.clicks,
+        '광고비':                r.ad_cost,
+        '실광고비':              r.actual_ad_cost,
+        '총주문수(1일)':         r.orders_1d,
+        '총판매수량(1일)':       r.quantity_1d,
+        '총전환매출액(1일)':     r.revenue_1d,
+        '총주문수(14일)':        r.orders_14d,
+        '총판매수량(14일)':      r.quantity_14d,
+        '총전환매출액(14일)':    r.revenue_14d,
+      };
+    }));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -282,13 +288,27 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   let inserted = 0;
   try {
     for (const r of items) {
+      // 상품명 컬럼은 띄어쓰기 있는 버전과 없는 버전 모두 지원
+      const productName = r['광고집행 상품명'] || r['광고집행상품명'] || '';
+      const optionId    = r['광고집행옵션ID'] || '';
       const adCost = parseFloat(r['광고비']) || 0;
       const result = await pool.query(
         `INSERT INTO ad_reports
          (user_id,report_date,campaign_id,campaign_name,ad_group,product_name,
           option_id,keyword,impressions,clicks,ad_cost,actual_ad_cost,
-          orders_1d,quantity_1d,revenue_1d,orders_14d,quantity_14d,revenue_14d)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+          orders_1d,quantity_1d,revenue_1d,orders_14d,quantity_14d,revenue_14d,
+          raw_data,billing_type,sales_type,ad_type,ad_placement,click_rate,
+          conv_product,conv_option_id,
+          direct_orders_1d,indirect_orders_1d,direct_qty_1d,indirect_qty_1d,
+          direct_rev_1d,indirect_rev_1d,
+          direct_orders_14d,indirect_orders_14d,direct_qty_14d,indirect_qty_14d,
+          direct_rev_14d,indirect_rev_14d,
+          roas_total_1d,roas_direct_1d,roas_indirect_1d,
+          roas_total_14d,roas_direct_14d,roas_indirect_14d,
+          campaign_start,campaign_end,note)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+                 $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
+                 $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
          ON CONFLICT (user_id, report_date, option_id, keyword) DO NOTHING`,
         [
           req.user.id,
@@ -296,8 +316,8 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
           r['캠페인ID'] || '',
           r['캠페인명'] || '',
           r['광고그룹'] || '',
-          r['광고집행상품명'] || '',
-          r['광고집행옵션ID'] || '',
+          productName,
+          optionId,
           r['키워드'] || '',
           parseInt(r['노출수']) || 0,
           parseInt(r['클릭수']) || 0,
@@ -309,6 +329,35 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
           parseInt(r['총주문수(14일)']) || 0,
           parseInt(r['총판매수량(14일)']) || 0,
           parseFloat(r['총전환매출액(14일)']) || 0,
+          JSON.stringify(r),                                        // raw_data
+          r['과금방식'] || '',
+          r['판매방식'] || '',
+          r['광고유형'] || '',
+          r['광고노출지면'] || '',
+          r['클릭률'] || '',
+          r['광고전환매출발생상품명'] || '',
+          r['광고전환매출발생옵션ID'] || '',
+          parseInt(r['직접주문수(1일)']) || 0,
+          parseInt(r['간접주문수(1일)']) || 0,
+          parseInt(r['직접판매수량(1일)']) || 0,
+          parseInt(r['간접판매수량(1일)']) || 0,
+          parseFloat(r['직접전환매출액(1일)']) || 0,
+          parseFloat(r['간접전환매출액(1일)']) || 0,
+          parseInt(r['직접주문수(14일)']) || 0,
+          parseInt(r['간접주문수(14일)']) || 0,
+          parseInt(r['직접판매수량(14일)']) || 0,
+          parseInt(r['간접판매수량(14일)']) || 0,
+          parseFloat(r['직접전환매출액(14일)']) || 0,
+          parseFloat(r['간접전환매출액(14일)']) || 0,
+          r['총광고수익률(1일)'] || '',
+          r['직접광고수익률(1일)'] || '',
+          r['간접광고수익률(1일)'] || '',
+          r['총광고수익률(14일)'] || '',
+          r['직접광고수익률(14일)'] || '',
+          r['간접광고수익률(14일)'] || '',
+          r['캠페인시작일'] || '',
+          r['캠페인종료일'] || '',
+          r['비고'] || '',
         ]
       );
       if (result.rowCount > 0) inserted++;
