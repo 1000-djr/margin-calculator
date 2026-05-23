@@ -3117,6 +3117,28 @@ function renderCoupons() {
   const tbody = document.getElementById('couponTbody');
   if (!tbody) return;
 
+  // 겹치는 쿠폰 ID 집합 계산 (기간 교차 + 옵션ID 교차)
+  const overlapIds = new Set();
+  for (let i = 0; i < coupons.length; i++) {
+    for (let j = i + 1; j < coupons.length; j++) {
+      const a = coupons[i], b = coupons[j];
+      const aStart = a.start_at ? new Date(a.start_at) : null;
+      const aEnd   = a.end_at   ? new Date(a.end_at)   : null;
+      const bStart = b.start_at ? new Date(b.start_at) : null;
+      const bEnd   = b.end_at   ? new Date(b.end_at)   : null;
+      // 기간 교차 여부 (한쪽 기간이 없으면 무한으로 간주)
+      const aS = aStart || new Date(0), aE = aEnd || new Date(9999, 0);
+      const bS = bStart || new Date(0), bE = bEnd || new Date(9999, 0);
+      if (aE < bS || bE < aS) continue; // 기간 비교차
+      // 옵션ID 교차 여부 (한쪽이 빈 배열이면 전체 옵션 → 반드시 교차)
+      const aOpts = Array.isArray(a.option_ids) ? a.option_ids : [];
+      const bOpts = Array.isArray(b.option_ids) ? b.option_ids : [];
+      const optOverlap = !aOpts.length || !bOpts.length ||
+        aOpts.some(id => bOpts.includes(id));
+      if (optOverlap) { overlapIds.add(a.id); overlapIds.add(b.id); }
+    }
+  }
+
   let totalDiscount = 0;
   const totalPayment = orders.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
   const now = new Date();
@@ -3135,13 +3157,16 @@ function renderCoupons() {
       const statusBadge = isActive
         ? `<span style="background:var(--green,#22c55e);color:#fff;border-radius:4px;padding:2px 7px;font-size:11px">사용중</span>`
         : `<span style="background:var(--surface3);color:var(--text-dim);border-radius:4px;padding:2px 7px;font-size:11px">종료</span>`;
+      const overlapBadge = overlapIds.has(c.id)
+        ? ` <span title="동일 기간·옵션ID에 다른 쿠폰과 겹칩니다. 할인금액이 큰 쿠폰 1개만 적용됩니다." style="background:#f59e0b;color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;cursor:help">⚠️ 중복</span>`
+        : '';
 
       const fmt = dt => dt ? dt.toLocaleString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '-';
       const period = `${fmt(startAt)} ~ ${fmt(endAt)}`;
       const optCount = Array.isArray(c.option_ids) ? c.option_ids.length : 0;
 
       return `<tr>
-        <td>${c.name}</td>
+        <td>${c.name}${overlapBadge}</td>
         <td style="font-family:var(--mono)">${c.coupon_id || '-'}</td>
         <td style="font-family:var(--mono)">${(c.discount_amount || 0).toLocaleString('ko-KR')}원</td>
         <td style="font-size:12px;font-family:var(--mono)">${period}</td>
@@ -3200,20 +3225,31 @@ function getOptionAdCost(optionId) {
 }
 
 function getCouponDiscountForOrder(order) {
-  let discount = 0;
   const d = parseOrderDate(order['주문일']);
   if (!d) return 0;
   const orderOptionId = String(order['옵션ID'] || '');
-  coupons.forEach(c => {
+
+  // 적용 가능한 쿠폰 목록 수집
+  const applicable = coupons.filter(c => {
     const startAt = c.start_at ? new Date(c.start_at) : null;
     const endAt   = c.end_at   ? new Date(c.end_at)   : null;
-    if (startAt && d < startAt) return;
-    if (endAt   && d > endAt)   return;
+    if (startAt && d < startAt) return false;
+    if (endAt   && d > endAt)   return false;
     const optIds = Array.isArray(c.option_ids) ? c.option_ids : [];
-    if (optIds.length && !optIds.includes(orderOptionId)) return;
-    discount += c.discount_amount || 0;
+    if (optIds.length && !optIds.includes(orderOptionId)) return false;
+    return true;
   });
-  return discount;
+
+  if (!applicable.length) return 0;
+
+  // 가장 유리한 쿠폰 1개만 적용: 할인금액 내림차순 → 쿠폰ID 내림차순
+  applicable.sort((a, b) => {
+    const diff = (b.discount_amount || 0) - (a.discount_amount || 0);
+    if (diff !== 0) return diff;
+    return (Number(b.coupon_id) || 0) - (Number(a.coupon_id) || 0);
+  });
+
+  return applicable[0].discount_amount || 0;
 }
 
 function getPeriodKey(dateStr) {
