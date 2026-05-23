@@ -1186,7 +1186,7 @@ function navigateToHash() {
   }
   // 초기 로드 시 해시 정규화
   const canonical = '#' + (TAB_TO_HASH[name] || 'margin');
-  if (window.location.hash !== canonical) history.replaceState(null, '', canonical);
+  if (window.location.hash !== canonical) window.location.hash = canonical;
 }
 
 // 브라우저 뒤로가기/앞으로가기
