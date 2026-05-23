@@ -3398,8 +3398,12 @@ function getCouponDiscountForOrder(order) {
 function getPeriodKey(dateStr) {
   const d = parseOrderDate(dateStr);
   if (!d) return '미상';
-  if (profitPeriodMode === 'day') return dateStr.substring(0, 10);
-  if (profitPeriodMode === 'month') return dateStr.substring(0, 7);
+  // 포맷 정규화: '2024.05.23', '2024-05-23 14:30' 등 모두 YYYY-MM-DD로 통일
+  const norm = d.getFullYear() + '-'
+    + String(d.getMonth() + 1).padStart(2, '0') + '-'
+    + String(d.getDate()).padStart(2, '0');
+  if (profitPeriodMode === 'day')   return norm;
+  if (profitPeriodMode === 'month') return norm.slice(0, 7);
   // week: ISO week
   const jan1 = new Date(d.getFullYear(), 0, 1);
   const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
@@ -3744,16 +3748,28 @@ async function renderProfit() {
     `;
   }
 
-  // 기간별 집계 — 주문건 루프 (매출·수수료·원가·부가세 주문분)
+  // ── 광고비 사전 계산 맵: (기간키|옵션ID) → 광고비 합계 ─────────────────────
+  // getPeriodKey가 날짜를 YYYY-MM-DD로 정규화하므로 주문일/광고일 포맷 불일치 없음
+  const adCostByPeriodOption = new Map();
+  pAdReports.forEach(r => {
+    const adOid = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '';
+    if (!adOid) return;
+    const pk = getPeriodKey(r['날짜'] || '');
+    if (pk === '미상') return;
+    const key = pk + '|' + adOid;
+    adCostByPeriodOption.set(key, (adCostByPeriodOption.get(key) || 0) + (parseFloat(r['광고비']) || 0));
+  });
+
+  // ── 기간별 집계 — 주문 루프 ────────────────────────────────────────────────
   const periodMap = new Map();
-  // 필터된 주문의 옵션ID 집합 (광고비 필터링에 사용)
-  const filteredOptionIds = new Set(filtered.map(o => o['옵션ID']).filter(Boolean));
+  const seenPeriodOid = new Set(); // (기간, 옵션ID) 중복 방지 — 광고비는 옵션ID당 1회만 합산
 
   filtered.forEach(o => {
-    const pk = getPeriodKey(o['주문일']);
+    const pk  = getPeriodKey(o['주문일']);
+    const oid = o['옵션ID'] || '';
     if (!periodMap.has(pk)) periodMap.set(pk, { revenue: 0, fee: 0, cost: 0, adCostRaw: 0, vatOrders: 0 });
     const p = periodMap.get(pk);
-    const oid = o['옵션ID'] || '';
+
     const payment    = parseFloat(o['결제액']) || 0;
     const shipping   = parseFloat(o['배송비']) || 0;
     const couponDisc = localCouponDiscount(o);
@@ -3763,30 +3779,28 @@ async function renderProfit() {
     const orderDateStr = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
     const resolved   = resolveUnitCost(o['등록상품명'], o['등록옵션명'], oid, orderDateStr);
     const cost       = resolved.unitCost !== null ? resolved.unitCost * qty : 0;
-    // 부가세 주문분 (광고비 제외 부분)
-    // 면세: -(fee/11)  / 과세: (rev - cost - fee) / 11
+
+    // 부가세 주문분 (광고비 제외)
     const vatOrderPart = resolved.taxType === 'taxable'
       ? (realRev - cost - fee) / 11
       : -(fee / 11);
+
     p.revenue   += realRev;
     p.fee       += fee;
     p.cost      += cost;
     p.vatOrders += vatOrderPart;
+
+    // 광고비: 같은 기간+옵션ID는 1회만 합산 (주문 건수만큼 중복 방지)
+    if (oid) {
+      const adKey = pk + '|' + oid;
+      if (!seenPeriodOid.has(adKey)) {
+        seenPeriodOid.add(adKey);
+        p.adCostRaw += adCostByPeriodOption.get(adKey) || 0;
+      }
+    }
   });
 
-  // 기간별 광고비 — pAdReports의 날짜 기준 집계
-  // 주문에 등장한 옵션ID의 광고비만 포함 (무관한 광고 제외)
-  pAdReports.forEach(r => {
-    const adOid = r[AD_OPTION_COL] || r['광고집행옵션ID'] || '';
-    if (!filteredOptionIds.has(adOid)) return; // 주문 옵션ID와 무관한 광고 제외
-    const pk = getPeriodKey(r['날짜'] || '');
-    if (!periodMap.has(pk)) return; // 해당 기간에 주문이 없으면 광고비 표시 안 함
-    periodMap.get(pk).adCostRaw += parseFloat(r['광고비']) || 0;
-  });
-
-  // 기간별 순이익 계산
-  // vat = 주문분(vatOrders) - 광고비분(adCostRaw/11) — 면세·과세 모두 광고비는 vat 차감
-  // 순이익 = 실매출 - 수수료 - 원가 - 실광고비(×1.1) - 부가세
+  // ── 기간별 순이익 확정 ─────────────────────────────────────────────────────
   periodMap.forEach(p => {
     const realAdCost = p.adCostRaw * 1.1;
     const vat = p.vatOrders - (p.adCostRaw / 11);
