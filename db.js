@@ -316,10 +316,11 @@ async function initDB() {
       END LOOP;
     END$$;
   `);
-  // 표현식 인덱스로 재생성: COALESCE로 NULL → '' 처리하여 NULL=NULL 충돌 감지
+  // 표현식 인덱스로 재생성: campaign_id 추가 + COALESCE로 NULL → '' 처리
+  await pool.query(`DROP INDEX IF EXISTS ad_reports_unique`);
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS ad_reports_unique
-    ON ad_reports(user_id, report_date, option_id,
+    CREATE UNIQUE INDEX ad_reports_unique
+    ON ad_reports(user_id, report_date, campaign_id, option_id,
                   COALESCE(keyword,''), COALESCE(ad_placement,''))
   `);
 
