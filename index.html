@@ -2890,7 +2890,14 @@ function handleAdsUpload(input) {
         adReports = [...adReports, ...toAdd];
         localStorage.setItem('adReportsData', JSON.stringify(adReports));
         if (currentUser) {
-          try { await fetch('/api/ad-reports/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) }); } catch(e) {}
+          try {
+            const dbRes = await fetch('/api/ad-reports/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) });
+            const dbResult = dbRes.ok ? await dbRes.json() : {};
+            console.log('[ads] DB 저장:', dbResult);
+            renderAds();
+            alert(`${toAdd.length}건 처리됨\nDB 저장: ${dbResult.inserted ?? '?'}건 / 중복스킵: ${dbResult.skipped ?? '?'}건 / 실패: ${dbResult.failed ?? 0}건\n(총 ${adReports.length}건)`);
+            return;
+          } catch(e) { console.error('[ads] DB 저장 오류:', e); }
         }
         renderAds();
         alert(`${toAdd.length}건 추가됨 (총 ${adReports.length}건)`);

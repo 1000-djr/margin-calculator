@@ -353,25 +353,34 @@ function safeFloat(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
 function safeStr(v)   { return (v == null || v === '') ? null : String(v); }
 
 router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
-  const items = Array.isArray(req.body) ? req.body : [];
-  if (!items.length) return res.json({ inserted: 0 });
-  console.log(`[ad-reports/bulk] user=${req.user.id} items=${items.length}`);
+  const items  = Array.isArray(req.body) ? req.body : [];
+  const userId = parseInt(req.user.id, 10);          // ① user_id 정수 보장
+  if (!items.length) return res.json({ inserted: 0, skipped: 0, failed: 0 });
+
+  // 첫 행 컬럼명 로그 → 실제 엑셀 헤더 확인용
+  if (items[0]) {
+    console.log(`[ad-reports/bulk] user=${userId} items=${items.length} 컬럼:`, Object.keys(items[0]).join(' | '));
+  }
 
   const CHUNK = 500;
-  let inserted = 0;
-  let failed = 0;
+  let inserted = 0, skipped = 0, failed = 0;
 
   for (let start = 0; start < items.length; start += CHUNK) {
     const chunk = items.slice(start, start + CHUNK);
     for (const r of chunk) {
       try {
-        // raw_data: 원본 row 무조건 저장
+        // ③ raw_data: 원본 행 전체 무조건 저장
         const rawData = JSON.stringify(r);
 
-        // 상품명/옵션ID: 띄어쓰기 있는 버전과 없는 버전 모두 지원
         const productName = r['광고집행 상품명'] || r['광고집행상품명'] || '';
         const optionId    = r['광고집행 옵션ID'] || r['광고집행옵션ID'] || '';
         const adCost      = safeFloat(r['광고비']) ?? 0;
+
+        // ② 노출지면: 가능한 모든 컬럼명 변형 지원
+        const adPlacement = safeStr(
+          r['광고 노출 지면'] || r['광고노출지면'] ||
+          r['노출 지면']     || r['노출지면']
+        );
 
         const result = await pool.query(
           `INSERT INTO ad_reports
@@ -392,7 +401,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
                    $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
            ON CONFLICT (user_id, report_date, option_id, keyword, ad_placement) DO NOTHING`,
           [
-            req.user.id,
+            userId,                                                               // $1 ①
             formatAdDate(r['날짜'] ?? ''),                                       // $2
             safeStr(r['캠페인 ID'] || r['캠페인ID']),                            // $3
             safeStr(r['캠페인명']),                                               // $4
@@ -410,11 +419,11 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
             safeInt(r['총 주문수(14일)'])       ?? safeInt(r['총주문수(14일)'])       ?? 0, // $16
             safeInt(r['총 판매수량(14일)'])     ?? safeInt(r['총판매수량(14일)'])     ?? 0, // $17
             safeFloat(r['총 전환매출액(14일)']) ?? safeFloat(r['총전환매출액(14일)']) ?? 0, // $18
-            rawData,                                                              // $19
+            rawData,                                                              // $19 ③
             safeStr(r['과금 방식'] || r['과금방식']),                             // $20
             safeStr(r['판매방식']),                                               // $21
             safeStr(r['광고유형']),                                               // $22
-            safeStr(r['광고 노출 지면'] || r['광고노출지면']),                    // $23
+            adPlacement,                                                          // $23 ②
             safeStr(r['클릭률']),                                                 // $24
             safeStr(r['광고전환매출발생 상품명'] || r['광고전환매출발생상품명']), // $25
             safeStr(r['광고전환매출발생 옵션ID'] || r['광고전환매출발생옵션ID']), // $26
@@ -442,16 +451,23 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
           ]
         );
         if (result.rowCount > 0) inserted++;
+        else skipped++;                                 // ⑤ DO NOTHING 건수
       } catch(rowErr) {
         failed++;
-        console.error(`[ad-reports/bulk] 행 저장 실패 (날짜=${r['날짜']}, 옵션ID=${r['광고집행 옵션ID'] || r['광고집행옵션ID'] || ''}):`, rowErr.message);
+        // ④ 실패 시 에러 상세 + 행 정보 출력
+        console.error(
+          `[ad-reports/bulk] 행 저장 실패 user=${userId}`,
+          `날짜=${r['날짜']} 옵션ID=${optionId} 지면=${r['광고 노출 지면']||r['노출지면']||''}`,
+          rowErr.message
+        );
       }
     }
-    console.log(`[ad-reports/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 처리 완료`);
+    console.log(`[ad-reports/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 완료`);
   }
 
-  console.log(`[ad-reports/bulk] 완료: 삽입=${inserted} / 실패=${failed} / 전체=${items.length}`);
-  res.json({ inserted, failed });
+  // ⑤ 실제 저장 건수 응답
+  console.log(`[ad-reports/bulk] 완료: user=${userId} 삽입=${inserted} / 중복스킵=${skipped} / 실패=${failed} / 전체=${items.length}`);
+  res.json({ inserted, skipped, failed, total: items.length });
 });
 
 router.delete('/ad-reports', requireAuth, async (req, res) => {
