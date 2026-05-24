@@ -7,6 +7,7 @@
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('./db');
+const { calculateProfit } = require('./profit');
 
 let crawlStatus = { running: false, lastRun: null, lastResult: null };
 
@@ -815,6 +816,22 @@ router.delete('/product-name-mappings/:id', requireAuth, async (req, res) => {
     );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 수익 분석 (백엔드 통합 계산) ────────────────────────────────────────────
+router.get('/analytics', requireAuth, async (req, res) => {
+  try {
+    const { start_date, end_date, group_by = 'month' } = req.query;
+    const result = await calculateProfit(
+      req.user.id,
+      start_date || null,
+      end_date   || null,
+      group_by
+    );
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;

@@ -7,6 +7,7 @@ const express = require('express');
 const path    = require('path');
 const router  = express.Router();
 const { pool } = require('./db');
+const { calculateProfit } = require('./profit');
 
 // ─── 어드민 미들웨어 ──────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
@@ -20,7 +21,7 @@ router.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// ─── 전체 유저 목록 + 수익분석 완전 동일 수식 집계 ──────────────────────────
+// ─── 전체 유저 목록 + 수익분석 (calculateProfit 공통 함수 사용) ────────────────
 // 수식: 순이익 = 실매출 - 수수료(11.66%) - 원가(B2B이력) - 실광고비 - 부가세(면세)
 // 파라미터: start_date, end_date (YYYY-MM-DD)
 router.get('/admin/users', requireAdmin, async (req, res) => {
@@ -28,98 +29,29 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
     const start = req.query.start_date || null;
     const end   = req.query.end_date   || null;
 
-    const { rows } = await pool.query(`
-      WITH order_detail AS (
-        -- 주문별: 쿠폰할인 + B2B원가 (주문일 기준 이력 적용)
-        SELECT
-          o.user_id,
-          o.id                                    AS order_id,
-          o.quantity,
-          o.payment_amount + o.shipping_fee       AS gross_sale,
-          -- 실매출(쿠폰후): 쿠폰 기간 + 옵션ID 완전 매칭
-          GREATEST(
-            o.payment_amount + o.shipping_fee
-            - COALESCE((
-                SELECT SUM(c.discount_amount)
-                FROM coupons c
-                WHERE c.user_id = o.user_id
-                  AND c.option_ids @> jsonb_build_array(o.option_id)
-                  AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                  AND (c.start_at IS NULL
-                    OR SUBSTRING(o.order_date,1,10)
-                       >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
-                  AND (c.end_at IS NULL
-                    OR SUBSTRING(o.order_date,1,10)
-                       <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
-              ), 0),
-            0
-          ) AS net_sale,
-          -- 단위원가: product_name_mapping → b2b_products → b2b_prices 이력
-          COALESCE((
-            SELECT bp.cost
-            FROM product_name_mapping pnm
-            JOIN b2b_products b2bp
-              ON b2bp.user_id = pnm.user_id
-             AND b2bp.name    = pnm.b2b_name
-             AND b2bp.unit    = pnm.b2b_unit
-            JOIN b2b_prices bp
-              ON bp.user_id        = pnm.user_id
-             AND bp.b2b_product_id = b2bp.id
-             AND (bp.start_date IS NULL
-               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                   AND bp.start_date
-                       <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-             AND (bp.end_date IS NULL
-               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                   AND bp.end_date
-                       >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-            WHERE pnm.user_id         = o.user_id
-              AND pnm.registered_name = o.product_name
-              AND pnm.option_name     = COALESCE(o.option_name, '')
-            ORDER BY bp.start_date DESC NULLS LAST
-            LIMIT 1
-          ), 0) AS unit_cost
-        FROM orders o
-        WHERE o.is_excluded = FALSE
-          AND ($1::text IS NULL OR SUBSTRING(o.order_date,1,10) >= $1)
-          AND ($2::text IS NULL OR SUBSTRING(o.order_date,1,10) <= $2)
-      ),
-      user_order_stats AS (
-        SELECT
-          user_id,
-          COUNT(*)::INTEGER                        AS total_orders,
-          SUM(gross_sale)::BIGINT                  AS revenue_before,
-          SUM(net_sale)::BIGINT                    AS revenue_after,
-          SUM(net_sale * 0.1166)::NUMERIC(14,2)    AS commission,
-          SUM(unit_cost * quantity)::NUMERIC(14,2) AS total_cost
-        FROM order_detail
-        GROUP BY user_id
-      ),
-      user_ad_stats AS (
-        SELECT
-          user_id,
-          SUM(actual_ad_cost)::NUMERIC(14,2) AS actual_ad_cost,
-          SUM(ad_cost)::NUMERIC(14,2)        AS ad_cost_raw
-        FROM ad_reports
-        WHERE ($1::text IS NULL OR report_date >= $1)
-          AND ($2::text IS NULL OR report_date <= $2)
-        GROUP BY user_id
-      )
-      SELECT
-        u.id, u.name, u.email, u.picture,
-        u.status, u.is_admin, u.created_at, u.expires_at,
-        COALESCE(os.total_orders,   0) AS total_orders,
-        COALESCE(os.revenue_before, 0) AS revenue_before,
-        COALESCE(os.revenue_after,  0) AS revenue_after,
-        COALESCE(os.commission,     0) AS commission,
-        COALESCE(os.total_cost,     0) AS total_cost,
-        COALESCE(ar.actual_ad_cost, 0) AS actual_ad_cost,
-        COALESCE(ar.ad_cost_raw,    0) AS ad_cost_raw
-      FROM users u
-      LEFT JOIN user_order_stats os ON os.user_id = u.id
-      LEFT JOIN user_ad_stats    ar ON ar.user_id = u.id
-      ORDER BY u.created_at DESC
-    `, [start, end]);
+    // 전체 유저 목록 조회
+    const { rows: users } = await pool.query(
+      'SELECT id, name, email, picture, status, is_admin, created_at, expires_at FROM users ORDER BY created_at DESC'
+    );
+
+    // 유저별 수익 계산 (calculateProfit 병렬 실행)
+    const profitResults = await Promise.all(
+      users.map(u => calculateProfit(u.id, start, end, 'month').catch(() => null))
+    );
+
+    const rows = users.map((u, i) => {
+      const p = profitResults[i]?.summary || {};
+      return {
+        ...u,
+        total_orders:   p.total_orders   || 0,
+        revenue_before: p.revenue_before || 0,
+        revenue_after:  p.revenue_after  || 0,
+        commission:     p.commission     || 0,
+        total_cost:     p.total_cost     || 0,
+        actual_ad_cost: p.actual_ad_cost || 0,
+        ad_cost_raw:    p.ad_cost_raw    || 0,
+      };
+    });
 
     res.json(rows);
   } catch (e) {
