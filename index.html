@@ -858,8 +858,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="section-label">필터</div>
     <div class="card">
       <div class="filter-row">
-        <div class="field"><label>날짜 시작</label><input type="date" id="adsDateFrom"></div>
-        <div class="field"><label>날짜 종료</label><input type="date" id="adsDateTo"></div>
+        <div class="field"><label>날짜 시작</label><input type="date" id="adsDateFrom" onchange="clearAdsQuickSelect()"></div>
+        <div class="field"><label>날짜 종료</label><input type="date" id="adsDateTo" onchange="clearAdsQuickSelect()"></div>
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">빠른 선택</div>
+          <div class="quick-date-pills">
+            <button class="quick-pill" id="adsQpYesterday" onclick="setAdsQuickDate('yesterday')">어제</button>
+            <button class="quick-pill" id="adsQpWeek"      onclick="setAdsQuickDate('week')">최근 7일</button>
+            <button class="quick-pill" id="adsQpMonth"     onclick="setAdsQuickDate('month')">이번달</button>
+          </div>
+        </div>
         <button class="btn btn-ghost btn-sm" onclick="renderAds()" style="margin-bottom:0">검색</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllAds()" style="margin-bottom:0">전체 삭제</button>
       </div>
@@ -2886,6 +2894,34 @@ function handleAdsUpload(input) {
     input.value = '';
   };
   reader.readAsArrayBuffer(file);
+}
+
+function setAdsQuickDate(type) {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  let from, to;
+  if (type === 'yesterday') {
+    from = to = fmt(yesterday);
+  } else if (type === 'week') {
+    const start = new Date(today); start.setDate(today.getDate() - 7);
+    from = fmt(start); to = fmt(yesterday);
+  } else if (type === 'month') {
+    from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+    to   = fmt(today);
+  }
+  document.getElementById('adsDateFrom').value = from;
+  document.getElementById('adsDateTo').value   = to;
+  ['Yesterday','Week','Month'].forEach(t => {
+    document.getElementById('adsQp' + t)?.classList.toggle('active', t.toLowerCase() === type);
+  });
+  renderAds();
+}
+
+function clearAdsQuickSelect() {
+  ['adsQpYesterday','adsQpWeek','adsQpMonth'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
 }
 
 function renderAds() {
