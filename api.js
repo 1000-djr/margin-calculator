@@ -314,7 +314,11 @@ router.get('/ad-reports', requireAuth, async (req, res) => {
     res.json(rows.map(r => {
       // raw_data가 있으면 원본 그대로 반환, 없으면 구 컬럼으로 재구성
       if (r.raw_data) {
-        return { ...r.raw_data, '실광고비': parseFloat(r.actual_ad_cost) };
+        return {
+          ...r.raw_data,
+          '실광고비':    parseFloat(r.actual_ad_cost),
+          'ad_placement': r.ad_placement,
+        };
       }
       return {
         '날짜':                  r.report_date,
@@ -328,6 +332,7 @@ router.get('/ad-reports', requireAuth, async (req, res) => {
         '클릭수':                r.clicks,
         '광고비':                r.ad_cost,
         '실광고비':              r.actual_ad_cost,
+        'ad_placement':          r.ad_placement,
         '총 주문수(1일)':        r.orders_1d,
         '총 판매수량(1일)':      r.quantity_1d,
         '총 전환매출액(1일)':    r.revenue_1d,

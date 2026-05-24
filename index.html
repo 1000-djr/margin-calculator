@@ -3180,25 +3180,23 @@ function renderAds() {
 
   // ── 로우데이터 전체 내역 테이블 (기본 접힌 상태) ─────────────────────────────
   const RAW_COLS = [
-    ['날짜',     '날짜'],
-    ['캠페인명', '캠페인명'],
-    ['광고그룹', '광고그룹'],
-    ['상품명',   AD_PRODUCT_COL],
-    ['옵션ID',   AD_OPTION_COL],
-    ['키워드',   '키워드'],
-    ['노출지면', '노출지면'],
-    ['노출수',   '노출수'],
-    ['클릭수',   '클릭수'],
-    ['광고비',   '광고비'],
-    ['실광고비', '실광고비'],
+    ['날짜',     r => r['날짜']],
+    ['캠페인명', r => r['캠페인명']],
+    ['광고그룹', r => r['광고그룹']],
+    ['상품명',   r => r[AD_PRODUCT_COL]],
+    ['옵션ID',   r => r[AD_OPTION_COL]],
+    ['키워드',   r => r['키워드']],
+    ['노출지면', r => r['광고 노출 지면'] ?? r['ad_placement']],
+    ['노출수',   r => r['노출수']],
+    ['클릭수',   r => r['클릭수']],
+    ['광고비',   r => r['광고비']],
+    ['실광고비', r => Math.round((parseFloat(r['광고비']) || 0) * 1.1).toLocaleString('ko-KR') + '원'],
   ];
   const sortedRaw = [...filtered].sort((a, b) => (b['날짜'] || '').localeCompare(a['날짜'] || ''));
   const rawHeaderHtml = RAW_COLS.map(([label]) => `<th style="white-space:nowrap">${label}</th>`).join('');
   const rawRowsHtml = sortedRaw.map(r => {
-    const adCost = parseFloat(r['광고비']) || 0;
-    const rowData = { ...r, '실광고비': Math.round(adCost * 1.1).toLocaleString('ko-KR') + '원' };
-    return '<tr>' + RAW_COLS.map(([, col]) =>
-      `<td style="white-space:nowrap;font-size:12px">${rowData[col] ?? ''}</td>`
+    return '<tr>' + RAW_COLS.map(([, fn]) =>
+      `<td style="white-space:nowrap;font-size:12px">${fn(r) ?? ''}</td>`
     ).join('') + '</tr>';
   }).join('');
 
