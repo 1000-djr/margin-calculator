@@ -260,8 +260,13 @@ function showToast(msg,dur=2200){
   setTimeout(()=>t.classList.remove('show'),dur);
 }
 
-// ── 날짜 유틸 ────────────────────────────────────────────────────────────────
-function toDateStr(d){ return d.toISOString().slice(0,10); }
+// ── 날짜 유틸 (브라우저 로컬 시간 기준 — UTC 변환 없음) ─────────────────────
+function toDateStr(d){
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth()+1).padStart(2,'0');
+  const dd   = String(d.getDate()).padStart(2,'0');
+  return yyyy+'-'+mm+'-'+dd;
+}
 let _activeQuick = 'all';
 
 function setQuick(key){
@@ -270,20 +275,22 @@ function setQuick(key){
   const btn = document.getElementById('qbtn-'+key);
   if(btn) btn.classList.add('active');
 
-  const today = new Date(); today.setHours(0,0,0,0);
-  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const today = new Date();
+  const todayStr = toDateStr(today);
 
   if(key==='yesterday'){
-    document.getElementById('filterStart').value = toDateStr(yesterday);
-    document.getElementById('filterEnd').value   = toDateStr(yesterday);
+    const y = new Date(today); y.setDate(today.getDate()-1);
+    const yStr = toDateStr(y);
+    document.getElementById('filterStart').value = yStr;
+    document.getElementById('filterEnd').value   = yStr;
   } else if(key==='7days'){
-    const s=new Date(today); s.setDate(today.getDate()-6);
+    const s = new Date(today); s.setDate(today.getDate()-6);
     document.getElementById('filterStart').value = toDateStr(s);
-    document.getElementById('filterEnd').value   = toDateStr(today);
+    document.getElementById('filterEnd').value   = todayStr;
   } else if(key==='month'){
-    const s=new Date(today.getFullYear(),today.getMonth(),1);
+    const s = new Date(today.getFullYear(), today.getMonth(), 1);
     document.getElementById('filterStart').value = toDateStr(s);
-    document.getElementById('filterEnd').value   = toDateStr(today);
+    document.getElementById('filterEnd').value   = todayStr;
   } else {
     document.getElementById('filterStart').value = '';
     document.getElementById('filterEnd').value   = '';
