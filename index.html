@@ -939,7 +939,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn btn-primary" onclick="renderProfit()">분석 실행</button>
       </div>
     </div>
-    <div id="profitSummaryCards" class="summary-cards"></div>
+    <div id="profitSummaryCards" style="display:flex;flex-direction:column;gap:0"></div>
     <div class="section-label">원가 매칭</div>
     <div class="card" id="profitMatchSection">
       <div id="profitMatchContent"><div style="color:var(--text-dim);font-size:13px">분석을 실행하면 매칭 현황이 표시됩니다</div></div>
@@ -3958,17 +3958,21 @@ async function renderProfit() {
   const summaryEl = document.getElementById('profitSummaryCards');
   if (summaryEl) {
     summaryEl.innerHTML = `
-      <div class="summary-card"><div class="summary-card-label">총 판매건수</div><div class="summary-card-value">${filtered.length.toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">총매출(쿠폰 전)</div><div class="summary-card-value">${Math.round(totalGrossRevenue).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">쿠폰적용매출</div><div class="summary-card-value green">${Math.round(totalRevenue).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총광고비(실)</div><div class="summary-card-value red">${Math.round(totalRealAdCost).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총원가</div><div class="summary-card-value red">${Math.round(totalCost).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총쿠폰할인</div><div class="summary-card-value red">${Math.round(totalCouponDiscount).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(totalVat).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">순이익</div><div class="summary-card-value ${totalNet >= 0 ? 'green' : 'red'}">${Math.round(totalNet).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">순수익률</div><div class="summary-card-value ${totalNet >= 0 ? 'green' : 'red'}">${totalRevenue > 0 ? (totalNet / totalRevenue * 100).toFixed(1) + '%' : '-'}</div></div>
-      <div class="summary-card"><div class="summary-card-label">ROAS</div><div class="summary-card-value ${totalRealAdCost > 0 && totalRevenue / totalRealAdCost >= 3 ? 'green' : 'red'}">${totalRealAdCost > 0 ? (totalRevenue / totalRealAdCost * 100).toFixed(0) + '%' : '-'}</div></div>
-      ${excludedInRange > 0 ? `<div class="summary-card"><div class="summary-card-label">미인식 제외</div><div class="summary-card-value" style="color:var(--red)">${excludedInRange.toLocaleString('ko-KR')}건</div></div>` : ''}
+      <div class="summary-cards" style="margin-bottom:8px">
+        <div class="summary-card"><div class="summary-card-label">총 판매건수</div><div class="summary-card-value">${filtered.length.toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">총매출(쿠폰 전)</div><div class="summary-card-value">${Math.round(totalGrossRevenue).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">쿠폰적용매출</div><div class="summary-card-value green">${Math.round(totalRevenue).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">순이익</div><div class="summary-card-value ${totalNet >= 0 ? 'green' : 'red'}">${Math.round(totalNet).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">순수익률</div><div class="summary-card-value ${totalNet >= 0 ? 'green' : 'red'}">${totalRevenue > 0 ? (totalNet / totalRevenue * 100).toFixed(1) + '%' : '-'}</div></div>
+      </div>
+      <div class="summary-cards" style="margin-bottom:8px">
+        <div class="summary-card"><div class="summary-card-label">총원가</div><div class="summary-card-value red">${Math.round(totalCost).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">총쿠폰할인</div><div class="summary-card-value red">${Math.round(totalCouponDiscount).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">총광고비(실)</div><div class="summary-card-value red">${Math.round(totalRealAdCost).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(totalVat).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">ROAS</div><div class="summary-card-value ${totalRealAdCost > 0 && totalRevenue / totalRealAdCost >= 3 ? 'green' : 'red'}">${totalRealAdCost > 0 ? (totalRevenue / totalRealAdCost * 100).toFixed(0) + '%' : '-'}</div></div>
+        ${excludedInRange > 0 ? `<div class="summary-card"><div class="summary-card-label">미인식 제외</div><div class="summary-card-value" style="color:var(--red)">${excludedInRange.toLocaleString('ko-KR')}건</div></div>` : ''}
+      </div>
     `;
   }
 
