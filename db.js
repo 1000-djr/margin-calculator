@@ -324,20 +324,13 @@ async function initDB() {
                   COALESCE(keyword,''), COALESCE(ad_placement,''))
   `);
 
-  // ad_placement 백필: raw_data에서 '광고 노출 지면'(공백2개) 우선으로 NULL 행 전체 업데이트
+  // ad_placement 백필: raw_data->>'광고 노출 지면' 단일 컬럼으로 NULL 행 업데이트
   const { rowCount: backfilled } = await pool.query(`
     UPDATE ad_reports
-    SET ad_placement = COALESCE(
-      raw_data->>'광고 노출 지면',
-      raw_data->>'광고노출지면',
-      raw_data->>'광고 노출지면'
-    )
-    WHERE raw_data IS NOT NULL
-      AND COALESCE(
-        raw_data->>'광고 노출 지면',
-        raw_data->>'광고노출지면',
-        raw_data->>'광고 노출지면'
-      ) IS NOT NULL
+    SET ad_placement = raw_data->>'광고 노출 지면'
+    WHERE ad_placement IS NULL
+      AND raw_data IS NOT NULL
+      AND raw_data->>'광고 노출 지면' IS NOT NULL
   `);
   if (backfilled > 0) {
     console.log(`[db] ad_placement 백필 완료: ${backfilled}행 업데이트`);

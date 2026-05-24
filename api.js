@@ -377,8 +377,9 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
         const optionId    = r['광고집행 옵션ID'] || r['광고집행옵션ID'] || '';
         const adCost      = safeFloat(r['광고비']) ?? 0;
 
-        // ② 노출지면: 실제 엑셀 컬럼명 '광고 노출 지면'(공백2개) 우선, 변형 fallback
-        const adPlacement = r['광고 노출 지면'] || r['광고노출지면'] || r['광고 노출지면'] || null;
+        // ② 노출지면: 실제 엑셀 컬럼명 '광고 노출 지면' 그대로 사용
+        console.log('광고 노출 지면 값:', r['광고 노출 지면']);
+        const adPlacement = r['광고 노출 지면'] !== undefined ? r['광고 노출 지면'] : null;
 
         const result = await pool.query(
           `INSERT INTO ad_reports
