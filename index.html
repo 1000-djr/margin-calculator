@@ -801,7 +801,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ 주문서 탭 ══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-orders">
-    <div class="section-label">주문서 업로드</div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>주문서 업로드</span>
+      <button class="btn btn-ghost btn-sm" onclick="openOrderGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
+    </div>
     <div class="card">
       <div class="upload-area" onclick="document.getElementById('ordersFileInput').click()">
         <div class="upload-area-icon">📂</div>
@@ -986,6 +989,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <li><b>보고서 구조:</b> 캠페인 &gt; 광고그룹 &gt; 상품 &gt; 키워드</li>
       <li><b>클릭이 발생한 키워드만 보고서에 포함</b> 체크</li>
     </ul>
+  </div>
+</div>
+
+<!-- ══ 주문서 안내 모달 ══════════════════════════════════════════════ -->
+<div id="orderGuideBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center" onclick="closeOrderGuideModal()">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 28px 24px;max-width:520px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.18);position:relative" onclick="event.stopPropagation()">
+    <button onclick="closeOrderGuideModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;color:var(--text-dim);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px">주문서 다운로드 방법</div>
+    <p style="font-size:13px;color:var(--text-sub);line-height:1.7;margin-bottom:16px">
+      쿠팡 Wing → 주문/배송 → 배송 관리에서 주문서를 다운받아 업로드해주세요.<br>
+      <span style="color:var(--text-dim)">개인정보는 자동으로 마스킹 처리됩니다.</span>
+    </p>
+    <img src="https://margin-calculator-production-f974.up.railway.app/public/배송관리.png" alt="주문서 다운로드 안내" style="width:100%;border-radius:8px;border:1px solid var(--border);display:block" onerror="this.style.display='none'">
   </div>
 </div>
 
@@ -3082,6 +3098,15 @@ function renderAds() {
 function toggleAdGroup(gid) {
   const el = document.getElementById(gid);
   if (el) el.classList.toggle('open');
+}
+
+function openOrderGuideModal() {
+  const el = document.getElementById('orderGuideBackdrop');
+  if (el) el.style.display = 'flex';
+}
+function closeOrderGuideModal() {
+  const el = document.getElementById('orderGuideBackdrop');
+  if (el) el.style.display = 'none';
 }
 
 function openAdGuideModal() {
