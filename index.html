@@ -455,6 +455,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .period-toggle { display: flex; gap: 2px; background: var(--surface3); border-radius: 8px; padding: 3px; }
 .period-btn { padding: 6px 14px; border-radius: 6px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; }
 .period-btn.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+/* 빠른 날짜 선택 pill */
+.quick-date-pills { display: flex; gap: 5px; }
+.quick-pill { padding: 5px 13px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); color: var(--text-sub); font-size: 12px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.quick-pill:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+.quick-pill.active { background: var(--green); border-color: var(--green); color: #fff; box-shadow: 0 1px 6px rgba(29,131,72,0.25); }
 </style>
 </head>
 <body>
@@ -916,8 +921,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <button class="period-btn" id="periodMonth" onclick="setPeriodMode('month')">월별</button>
           </div>
         </div>
-        <div class="field" style="margin-bottom:0"><label>시작일</label><input type="date" id="profitDateFrom"></div>
-        <div class="field" style="margin-bottom:0"><label>종료일</label><input type="date" id="profitDateTo"></div>
+        <div class="field" style="margin-bottom:0"><label>시작일</label><input type="date" id="profitDateFrom" onchange="clearQuickSelect()"></div>
+        <div class="field" style="margin-bottom:0"><label>종료일</label><input type="date" id="profitDateTo" onchange="clearQuickSelect()"></div>
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">빠른 선택</div>
+          <div class="quick-date-pills">
+            <button class="quick-pill" id="qpYesterday" onclick="setQuickDate('yesterday')">어제</button>
+            <button class="quick-pill" id="qpWeek"      onclick="setQuickDate('week')">최근 7일</button>
+            <button class="quick-pill" id="qpMonth"     onclick="setQuickDate('month')">이번달</button>
+          </div>
+        </div>
         <button class="btn btn-primary" onclick="renderProfit()">분석 실행</button>
       </div>
     </div>
@@ -3463,6 +3476,44 @@ function setPeriodMode(mode) {
   ['day','week','month'].forEach(m => {
     document.getElementById('period' + m.charAt(0).toUpperCase() + m.slice(1))?.classList.toggle('active', m === mode);
   });
+}
+
+let _activeQuickPill = null;
+
+function setQuickDate(type) {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+
+  let from, to;
+  if (type === 'yesterday') {
+    from = to = fmt(yesterday);
+  } else if (type === 'week') {
+    const start = new Date(today); start.setDate(today.getDate() - 7);
+    from = fmt(start); to = fmt(yesterday);
+  } else if (type === 'month') {
+    from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+    to   = fmt(today);
+  }
+
+  document.getElementById('profitDateFrom').value = from;
+  document.getElementById('profitDateTo').value   = to;
+
+  // pill 하이라이트
+  _activeQuickPill = type;
+  ['yesterday','week','month'].forEach(t => {
+    const el = document.getElementById('qp' + t.charAt(0).toUpperCase() + t.slice(1));
+    el?.classList.toggle('active', t === type);
+  });
+
+  renderProfit();
+}
+
+function clearQuickSelect() {
+  _activeQuickPill = null;
+  document.getElementById('qpYesterday')?.classList.remove('active');
+  document.getElementById('qpWeek')?.classList.remove('active');
+  document.getElementById('qpMonth')?.classList.remove('active');
 }
 
 function getPlatformRate() {
