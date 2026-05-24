@@ -329,20 +329,19 @@ async function initDB() {
     END$$;
   `);
 
-  // ad_placement 백필: raw_data에서 '광고 노출 지면' 컬럼을 읽어 NULL 행 업데이트
+  // ad_placement 백필: raw_data에서 '광고 노출 지면'(공백2개) 우선으로 NULL 행 전체 업데이트
   const { rowCount: backfilled } = await pool.query(`
     UPDATE ad_reports
     SET ad_placement = COALESCE(
       raw_data->>'광고 노출 지면',
       raw_data->>'광고노출지면',
-      raw_data->>'ad_placement'
+      raw_data->>'광고 노출지면'
     )
-    WHERE ad_placement IS NULL
-      AND raw_data IS NOT NULL
+    WHERE raw_data IS NOT NULL
       AND COALESCE(
         raw_data->>'광고 노출 지면',
         raw_data->>'광고노출지면',
-        raw_data->>'ad_placement'
+        raw_data->>'광고 노출지면'
       ) IS NOT NULL
   `);
   if (backfilled > 0) {
