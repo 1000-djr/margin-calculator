@@ -2433,7 +2433,7 @@ function handleOrdersUpload(input) {
       const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
 
       // 날짜 컬럼: Date 객체 / 텍스트 / 엑셀 시리얼 숫자 모두 'YYYY-MM-DD HH:mm' 로 통일
-      const DATE_COLS = new Set(['주문일', '출고일', '배송완료일']);
+      const DATE_COLS = new Set(['주문일', '출고일', '배송완료일', '구매확정일자']);
       function formatOrderDate(val) {
         if (val == null || val === '') return '';
         if (val instanceof Date) {
@@ -2454,7 +2454,20 @@ function handleOrdersUpload(input) {
           const D = String(d.getUTCDate()).padStart(2, '0');
           return `${Y}-${M}-${D}`;
         }
-        return String(val).trim();
+        // 문자열인 경우: Date.toString() 형식("Thu May 14 2026 20:09:51 GMT+0900...") 파싱 시도
+        const str = String(val).trim();
+        if (/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4}/.test(str)) {
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) {
+            const Y = d.getFullYear();
+            const M = String(d.getMonth() + 1).padStart(2, '0');
+            const D = String(d.getDate()).padStart(2, '0');
+            const h = String(d.getHours()).padStart(2, '0');
+            const m = String(d.getMinutes()).padStart(2, '0');
+            return `${Y}-${M}-${D} ${h}:${m}`;
+          }
+        }
+        return str;
       }
 
       // 헤더 인덱스 매핑
@@ -2714,7 +2727,17 @@ function renderOrders() {
         }
         return `<td style="font-family:var(--mono)">${Math.round(net).toLocaleString('ko-KR')}원</td>`;
       }
-      return `<td>${o[c] ?? ''}</td>`;
+      let cellVal = o[c] ?? '';
+      // 이미 저장된 구매확정일자가 Date.toString() 형식인 경우 변환
+      if (c === '구매확정일자' && /^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4}/.test(cellVal)) {
+        const d = new Date(cellVal);
+        if (!isNaN(d.getTime())) {
+          const Y = d.getFullYear(), Mo = String(d.getMonth()+1).padStart(2,'0'), D = String(d.getDate()).padStart(2,'0');
+          const h = String(d.getHours()).padStart(2,'0'), mi = String(d.getMinutes()).padStart(2,'0');
+          cellVal = `${Y}-${Mo}-${D} ${h}:${mi}`;
+        }
+      }
+      return `<td>${cellVal}</td>`;
     }).join('') + '</tr>';
   }).join('');
 }
