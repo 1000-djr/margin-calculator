@@ -20,9 +20,13 @@ router.get('/admin', requireAdmin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// ─── 전체 유저 목록 + 매출/순이익 집계 ───────────────────────────────────────
+// ─── 전체 유저 목록 + 수익분석 동일 수식 집계 ────────────────────────────────
+// 쿼리 파라미터: start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)
 router.get('/admin/users', requireAdmin, async (req, res) => {
   try {
+    const start = req.query.start_date || null;
+    const end   = req.query.end_date   || null;
+
     const { rows } = await pool.query(`
       SELECT
         u.id,
@@ -33,27 +37,57 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
         u.is_admin,
         u.created_at,
         u.expires_at,
-        COALESCE(o.total_before, 0)      AS total_revenue_before,
-        COALESCE(o.total_orders, 0)      AS total_orders,
-        COALESCE(ar.total_actual_ad, 0)  AS total_actual_ad_cost,
-        COALESCE(c.total_coupon, 0)      AS total_coupon_discount
+        COUNT(DISTINCT ord.id)::INTEGER                        AS total_orders,
+        -- 실매출(쿠폰전) = 결제액 + 배송비
+        COALESCE(SUM(ord.payment_amount + ord.shipping_fee), 0)::BIGINT
+                                                               AS revenue_before,
+        -- 실매출(쿠폰후) = 결제액 + 배송비 - 주문별 쿠폰할인
+        COALESCE(SUM(ord.net_sale), 0)::BIGINT                 AS revenue_after,
+        -- 수수료 = 실매출(쿠폰후) × 11.66%
+        COALESCE(SUM(ord.net_sale * 0.1166), 0)::NUMERIC(14,2) AS commission,
+        -- 실광고비 = 광고비 × 1.1 (already stored as actual_ad_cost)
+        COALESCE(ar.actual_ad_cost, 0)::NUMERIC(14,2)          AS actual_ad_cost,
+        -- 광고비(VAT 전, 부가세 계산용)
+        COALESCE(ar.ad_cost_raw, 0)::NUMERIC(14,2)             AS ad_cost_raw
       FROM users u
+      -- 미인식 주문 제외, 날짜 필터 적용한 주문에 쿠폰할인 계산
       LEFT JOIN (
-        SELECT user_id,
-               SUM(payment_amount + shipping_fee)::BIGINT AS total_before,
-               COUNT(*)::INTEGER                          AS total_orders
-        FROM orders WHERE is_excluded = FALSE GROUP BY user_id
-      ) o ON o.user_id = u.id
+        SELECT
+          o.id, o.user_id, o.payment_amount, o.shipping_fee,
+          GREATEST(
+            o.payment_amount + o.shipping_fee
+            - COALESCE((
+                SELECT SUM(c.discount_amount)
+                FROM coupons c
+                WHERE c.user_id = o.user_id
+                  AND c.option_ids @> jsonb_build_array(o.option_id)
+                  AND (c.start_at IS NULL
+                       OR SUBSTRING(o.order_date,1,10) >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+                  AND (c.end_at IS NULL
+                       OR SUBSTRING(o.order_date,1,10) <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+              ), 0),
+            0
+          ) AS net_sale
+        FROM orders o
+        WHERE o.is_excluded = FALSE
+          AND ($1::text IS NULL OR SUBSTRING(o.order_date,1,10) >= $1)
+          AND ($2::text IS NULL OR SUBSTRING(o.order_date,1,10) <= $2)
+      ) ord ON ord.user_id = u.id
+      -- 날짜 필터 적용한 광고비
       LEFT JOIN (
-        SELECT user_id, SUM(actual_ad_cost)::NUMERIC(14,2) AS total_actual_ad
-        FROM ad_reports GROUP BY user_id
+        SELECT
+          user_id,
+          SUM(actual_ad_cost)::NUMERIC(14,2) AS actual_ad_cost,
+          SUM(ad_cost)::NUMERIC(14,2)        AS ad_cost_raw
+        FROM ad_reports
+        WHERE ($1::text IS NULL OR report_date >= $1)
+          AND ($2::text IS NULL OR report_date <= $2)
+        GROUP BY user_id
       ) ar ON ar.user_id = u.id
-      LEFT JOIN (
-        SELECT user_id, SUM(discount_amount)::NUMERIC(14,2) AS total_coupon
-        FROM coupons GROUP BY user_id
-      ) c ON c.user_id = u.id
+      GROUP BY u.id, ar.actual_ad_cost, ar.ad_cost_raw
       ORDER BY u.created_at DESC
-    `);
+    `, [start, end]);
+
     res.json(rows);
   } catch (e) {
     res.status(500).json({ error: e.message });

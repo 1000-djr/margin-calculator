@@ -98,6 +98,23 @@ tbody td{padding:13px 16px;vertical-align:middle}
 .monthly-table td{padding:7px 10px;border-bottom:1px solid #f5f5f7}
 .section-sub{font-size:13px;font-weight:600;margin:16px 0 6px}
 
+/* ── Date Filter ─────────────────────────────────────────────────────────── */
+.filter-bar{background:#fff;border-radius:14px;padding:16px 20px;margin-bottom:20px;
+            box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;align-items:center;
+            gap:12px;flex-wrap:wrap}
+.filter-bar label{font-size:12px;font-weight:500;color:#8e8e93;white-space:nowrap}
+.filter-bar input[type=date]{padding:7px 10px;border:1px solid #e5e5ea;border-radius:8px;
+                              font-size:13px;color:#1d1d1f;outline:none;cursor:pointer}
+.filter-bar input[type=date]:focus{border-color:#0071e3}
+.quick-btns{display:flex;gap:6px}
+.qbtn{border:1px solid #e5e5ea;background:#fff;padding:6px 12px;border-radius:8px;
+      font-size:12px;font-weight:500;cursor:pointer;color:#1d1d1f;transition:all .15s}
+.qbtn:hover,.qbtn.active{background:#1d1d1f;color:#fff;border-color:#1d1d1f}
+.btn-search{background:#0071e3;color:#fff;border:none;padding:7px 18px;border-radius:8px;
+            font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s}
+.btn-search:hover{opacity:.85}
+.filter-note{font-size:11px;color:#8e8e93;margin-left:auto}
+
 /* ── Empty State ─────────────────────────────────────────────────────────── */
 .empty{text-align:center;padding:48px;color:#8e8e93;font-size:14px}
 
@@ -136,6 +153,22 @@ tbody td{padding:13px 16px;vertical-align:middle}
     <div class="stat-card"><div class="label">전체 매출(쿠폰후)</div><div class="value" id="statRevenueAfter">—</div></div>
     <div class="stat-card"><div class="label">전체 광고비(실)</div><div class="value red" id="statAdCost">—</div></div>
     <div class="stat-card"><div class="label">전체 마진(단순)</div><div class="value green" id="statMargin">—</div></div>
+  </div>
+
+  <!-- 날짜 필터 -->
+  <div class="filter-bar">
+    <label>기간</label>
+    <input type="date" id="filterStart" oninput="clearQuick()">
+    <span style="font-size:13px;color:#8e8e93">~</span>
+    <input type="date" id="filterEnd" oninput="clearQuick()">
+    <div class="quick-btns">
+      <button class="qbtn" id="qbtn-yesterday" onclick="setQuick('yesterday')">어제</button>
+      <button class="qbtn" id="qbtn-7days"     onclick="setQuick('7days')">최근 7일</button>
+      <button class="qbtn" id="qbtn-month"      onclick="setQuick('month')">이번 달</button>
+      <button class="qbtn" id="qbtn-all"        onclick="setQuick('all')">전체</button>
+    </div>
+    <button class="btn-search" onclick="loadUsers()">조회</button>
+    <span class="filter-note" id="filterNote"></span>
   </div>
 
   <div class="section-title">유저 목록</div>
@@ -225,10 +258,58 @@ function showToast(msg,dur=2200){
   setTimeout(()=>t.classList.remove('show'),dur);
 }
 
+// ── 날짜 유틸 ────────────────────────────────────────────────────────────────
+function toDateStr(d){ return d.toISOString().slice(0,10); }
+let _activeQuick = 'all';
+
+function setQuick(key){
+  _activeQuick = key;
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+  const btn = document.getElementById('qbtn-'+key);
+  if(btn) btn.classList.add('active');
+
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+
+  if(key==='yesterday'){
+    document.getElementById('filterStart').value = toDateStr(yesterday);
+    document.getElementById('filterEnd').value   = toDateStr(yesterday);
+  } else if(key==='7days'){
+    const s=new Date(today); s.setDate(today.getDate()-6);
+    document.getElementById('filterStart').value = toDateStr(s);
+    document.getElementById('filterEnd').value   = toDateStr(today);
+  } else if(key==='month'){
+    const s=new Date(today.getFullYear(),today.getMonth(),1);
+    document.getElementById('filterStart').value = toDateStr(s);
+    document.getElementById('filterEnd').value   = toDateStr(today);
+  } else {
+    document.getElementById('filterStart').value = '';
+    document.getElementById('filterEnd').value   = '';
+  }
+}
+function clearQuick(){
+  _activeQuick = null;
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
+}
+
 // ── 데이터 로드 ───────────────────────────────────────────────────────────────
 async function loadUsers(){
+  document.getElementById('userTbody').innerHTML=
+    `<tr><td colspan="12" class="empty"><div class="spinner"></div></td></tr>`;
+
+  const start = document.getElementById('filterStart').value || '';
+  const end   = document.getElementById('filterEnd').value   || '';
+  const params = new URLSearchParams();
+  if(start) params.set('start_date', start);
+  if(end)   params.set('end_date',   end);
+
+  const note = start || end
+    ? `${start||'시작'} ~ ${end||'종료'} 기간 집계`
+    : '전체 기간 집계';
+  document.getElementById('filterNote').textContent = note;
+
   try{
-    const r=await fetch('/admin/users');
+    const r=await fetch('/admin/users?' + params.toString());
     if(!r.ok){
       if(r.status===401||r.status===403){
         document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,sans-serif;color:#ff3b30;font-size:15px">접근 권한이 없습니다.</div>';
@@ -240,49 +321,52 @@ async function loadUsers(){
     renderStats(allUsers);
     renderTable(allUsers);
   }catch(e){
-    document.getElementById('userTbody').innerHTML=`<tr><td colspan="12" class="empty">오류: ${e.message}</td></tr>`;
+    document.getElementById('userTbody').innerHTML=
+      `<tr><td colspan="12" class="empty">오류: ${e.message}</td></tr>`;
   }
 }
 
 // ── 유틸: 만료 상태 판정 ──────────────────────────────────────────────────────
-function expiryState(expiresAt) {
-  if (!expiresAt) return 'unlimited'; // 무제한
-  const exp  = new Date(expiresAt);
-  const now  = new Date();
-  const diff = (exp - now) / 86400000; // 남은 일수
-  if (diff < 0)  return 'expired';
-  if (diff <= 7) return 'soon';
+function expiryState(expiresAt){
+  if(!expiresAt) return 'unlimited';
+  const diff=(new Date(expiresAt)-new Date())/86400000;
+  if(diff<0)  return 'expired';
+  if(diff<=7) return 'soon';
   return 'ok';
 }
-function fmtExpiry(expiresAt) {
-  if (!expiresAt) return '<span style="color:#8e8e93">무제한</span>';
-  const state = expiryState(expiresAt);
-  const date  = expiresAt.slice(0, 10);
-  if (state === 'expired') return `<span style="color:#ff3b30;font-weight:600">만료 ${date}</span>`;
-  if (state === 'soon')    return `<span style="color:#ff9f0a;font-weight:600">${date} ⚠️</span>`;
+function fmtExpiry(expiresAt){
+  if(!expiresAt) return '<span style="color:#8e8e93">무제한</span>';
+  const state=expiryState(expiresAt), date=expiresAt.slice(0,10);
+  if(state==='expired') return `<span style="color:#ff3b30;font-weight:600">만료 ${date}</span>`;
+  if(state==='soon')    return `<span style="color:#ff9f0a;font-weight:600">${date} ⚠️</span>`;
   return `<span>${date}</span>`;
 }
-function rowBg(u) {
-  if (u.status === 'blocked') return '';
-  const s = expiryState(u.expires_at);
-  if (s === 'expired') return 'background:#fff1f0';
-  if (s === 'soon')    return 'background:#fffbea';
+function rowBg(u){
+  if(u.status==='blocked') return '';
+  const s=expiryState(u.expires_at);
+  if(s==='expired') return 'background:#fff1f0';
+  if(s==='soon')    return 'background:#fffbea';
   return '';
 }
 
-// ── 유틸: 수치 계산 ───────────────────────────────────────────────────────────
+// ── 수익분석 동일 수식 계산 ───────────────────────────────────────────────────
+// 순이익 = 실매출 - 수수료 - 실광고비 - 부가세(면세)
+// 부가세(면세) = -(수수료/11) - (광고비/11)  → 음수이므로 빼면 환급 효과
 function calcDerived(u){
-  const before = Number(u.total_revenue_before) || 0;
-  const coupon = Number(u.total_coupon_discount) || 0;
-  const adCost = Number(u.total_actual_ad_cost)  || 0;
-  const after  = Math.max(before - coupon, 0);
-  const margin = after - adCost;
-  const rate   = after > 0 ? (margin / after * 100) : 0;
-  return { before, coupon, adCost, after, margin, rate };
+  const revBefore  = Number(u.revenue_before)  || 0;
+  const revAfter   = Number(u.revenue_after)   || 0;
+  const commission = Number(u.commission)      || 0;
+  const actualAd   = Number(u.actual_ad_cost)  || 0;
+  const adRaw      = Number(u.ad_cost_raw)     || 0; // 광고비(VAT 전)
+  const tax        = -(commission / 11) - (adRaw / 11); // 면세 부가세(음수)
+  const profit     = revAfter - commission - actualAd - tax;
+  const rate       = revAfter > 0 ? (profit / revAfter * 100) : 0;
+  return { revBefore, revAfter, commission, actualAd, tax, profit, rate };
 }
+
 function fmtW(n){return '₩'+fmt(Math.round(n));}
 function fmtRate(r){
-  const c = r>=0?'#34c759':'#ff3b30';
+  const c=r>=0?'#34c759':'#ff3b30';
   return `<span style="color:${c};font-weight:600">${r>=0?'+':''}${r.toFixed(1)}%</span>`;
 }
 
@@ -291,15 +375,16 @@ function renderStats(users){
   document.getElementById('statActive').textContent=users.filter(u=>u.status==='active').length;
   document.getElementById('statPending').textContent=users.filter(u=>u.status==='pending').length;
   document.getElementById('statBlocked').textContent=users.filter(u=>u.status==='blocked').length;
-  const totals=users.reduce((s,u)=>{
+  const t=users.reduce((s,u)=>{
     const d=calcDerived(u);
-    s.before+=d.before;s.after+=d.after;s.ad+=d.adCost;s.margin+=d.margin;
+    s.before+=d.revBefore; s.after+=d.revAfter;
+    s.ad+=d.actualAd;      s.profit+=d.profit;
     return s;
-  },{before:0,after:0,ad:0,margin:0});
-  document.getElementById('statRevenueBefore').textContent=fmtW(totals.before);
-  document.getElementById('statRevenueAfter').textContent=fmtW(totals.after);
-  document.getElementById('statAdCost').textContent=fmtW(totals.ad);
-  document.getElementById('statMargin').textContent=fmtW(totals.margin);
+  },{before:0,after:0,ad:0,profit:0});
+  document.getElementById('statRevenueBefore').textContent=fmtW(t.before);
+  document.getElementById('statRevenueAfter').textContent=fmtW(t.after);
+  document.getElementById('statAdCost').textContent=fmtW(t.ad);
+  document.getElementById('statMargin').textContent=fmtW(t.profit);
 }
 
 function renderTable(users){
@@ -322,10 +407,10 @@ function renderTable(users){
         ${badgeHtml(u.status)}
         ${u.is_admin?'<span class="badge admin" style="margin-left:4px">어드민</span>':''}
       </td>
-      <td>${fmtW(d.before)}</td>
-      <td>${fmtW(d.after)}</td>
-      <td style="color:#ff3b30">${fmtW(d.adCost)}</td>
-      <td style="color:${d.margin>=0?'#34c759':'#ff3b30'};font-weight:600">${fmtW(d.margin)}</td>
+      <td>${fmtW(d.revBefore)}</td>
+      <td>${fmtW(d.revAfter)}</td>
+      <td style="color:#ff3b30">${fmtW(d.actualAd)}</td>
+      <td style="color:${d.profit>=0?'#34c759':'#ff3b30'};font-weight:600">${fmtW(d.profit)}</td>
       <td>${fmtRate(d.rate)}</td>
       <td onclick="event.stopPropagation()">
         ${fmtExpiry(u.expires_at)}
@@ -501,6 +586,7 @@ function closeDetailBtn(){
 }
 
 // ── 초기화 ────────────────────────────────────────────────────────────────────
+setQuick('all');
 loadUsers();
 </script>
 </body>
