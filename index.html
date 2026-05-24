@@ -2933,16 +2933,27 @@ function renderAds() {
 
   const sortedDates = [...dateMap.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
-  let dateTableRows = sortedDates.map(([date, d]) => `
+  const KO_DAYS = ['일','월','화','수','목','금','토'];
+  let dateTableRows = sortedDates.map(([date, d]) => {
+    const dayLabel = (() => {
+      const parts = date.split('-');
+      if (parts.length === 3) {
+        const dow = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
+        return `<span style="color:var(--text-dim);font-size:11px;margin-left:4px">(${KO_DAYS[dow]})</span>`;
+      }
+      return '';
+    })();
+    return `
     <tr>
-      <td style="font-family:var(--sans);color:var(--text-sub)">${date}</td>
+      <td style="font-family:var(--sans);color:var(--text-sub);white-space:nowrap">${date}${dayLabel}</td>
       <td>${Math.round(d.adCost).toLocaleString('ko-KR')}원</td>
       <td style="color:var(--red)">${Math.round(d.adCost * 1.1).toLocaleString('ko-KR')}원</td>
       <td>${Math.round(d.impr).toLocaleString('ko-KR')}</td>
       <td>${Math.round(d.clk).toLocaleString('ko-KR')}</td>
       <td>${Math.round(d.ord).toLocaleString('ko-KR')}</td>
       <td>${Math.round(d.rev).toLocaleString('ko-KR')}원</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
     <div style="padding:12px 14px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border);background:var(--surface2)">
