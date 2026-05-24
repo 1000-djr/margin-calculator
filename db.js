@@ -154,7 +154,7 @@ async function initDB() {
       quantity_14d     INTEGER DEFAULT 0,
       revenue_14d      NUMERIC(14,2) DEFAULT 0,
       created_at       TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (user_id, report_date, option_id, keyword)
+      UNIQUE (user_id, report_date, option_id, keyword, ad_placement)
     );
 
     CREATE TABLE IF NOT EXISTS coupons (
@@ -297,6 +297,36 @@ async function initDB() {
        WHERE email = $1
     `, [process.env.ADMIN_EMAIL]);
   }
+
+  // ad_reports UNIQUE 제약 마이그레이션:
+  // (user_id, report_date, option_id, keyword) → (user_id, report_date, option_id, keyword, ad_placement)
+  await pool.query(`
+    DO $$
+    DECLARE
+      cname TEXT;
+    BEGIN
+      -- 4컬럼짜리 구 제약이 있으면 드롭
+      SELECT conname INTO cname
+        FROM pg_constraint
+        WHERE conrelid = 'ad_reports'::regclass
+          AND contype = 'u'
+          AND array_length(conkey, 1) = 4;
+      IF cname IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE ad_reports DROP CONSTRAINT ' || quote_ident(cname);
+      END IF;
+      -- 새 5컬럼 제약이 없으면 추가
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'ad_reports'::regclass
+          AND contype = 'u'
+          AND array_length(conkey, 1) = 5
+      ) THEN
+        ALTER TABLE ad_reports
+          ADD CONSTRAINT ad_reports_unique_row
+          UNIQUE (user_id, report_date, option_id, keyword, ad_placement);
+      END IF;
+    END$$;
+  `);
 
   console.log('[db] Tables ready');
 }
