@@ -554,7 +554,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="shortcut-dropdown-btn" onclick="toggleShortcutDropdown(event)" title="바로가기">🔗</button>
         <div class="shortcut-dropdown" id="shortcutDropdown"></div>
       </div>
-<div class="auth-area">
+<div class="auth-area" style="display:flex;align-items:center;gap:8px">
+        <a id="adminBtn" href="/admin" style="display:none;padding:6px 14px;background:#1d1d1f;color:#fff;border-radius:980px;font-size:12px;font-weight:500;text-decoration:none;letter-spacing:.2px;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">Admin</a>
         <div class="user-profile" id="userProfile">
           <img id="userAvatar" class="user-avatar" src="" alt="프로필">
           <span id="userName" class="user-name"></span>
@@ -1072,6 +1073,7 @@ function updateAuthUI() {
     userProfile.style.display = 'flex';
     document.getElementById('userAvatar').src       = currentUser.picture || '';
     document.getElementById('userName').textContent = currentUser.name   || '';
+    document.getElementById('adminBtn').style.display = currentUser.is_admin ? 'inline-block' : 'none';
   } else {
     loginScreen.style.display = 'flex';
     appEl.style.display       = 'none';
