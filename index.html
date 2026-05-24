@@ -883,7 +883,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
     <div id="adsSummaryCards" class="summary-cards" style="margin-bottom:16px"></div>
-    <div class="section-label" style="cursor:pointer;user-select:none" onclick="toggleAdMappingSection()">
+    <div id="adsContent"></div>
+    <div class="section-label" style="cursor:pointer;user-select:none;margin-top:8px" onclick="toggleAdMappingSection()">
       📦 상품 매칭 관리 <span id="adMappingToggleIcon">▾</span>
     </div>
     <div id="adMappingSection" style="display:none">
@@ -894,7 +895,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div id="adMappingList"></div>
       </div>
     </div>
-    <div id="adsContent"></div>
   </div>
 
   <!-- ══ 쿠폰 탭 ════════════════════════════════════════════════════ -->
@@ -3171,7 +3171,55 @@ function renderAds() {
     </div>
   </div>`;
 
+  // ── 로우데이터 전체 내역 테이블 (기본 접힌 상태) ─────────────────────────────
+  const RAW_COLS = [
+    ['날짜',     '날짜'],
+    ['캠페인명', '캠페인명'],
+    ['광고그룹', '광고그룹'],
+    ['상품명',   AD_PRODUCT_COL],
+    ['옵션ID',   AD_OPTION_COL],
+    ['키워드',   '키워드'],
+    ['노출지면', '노출지면'],
+    ['노출수',   '노출수'],
+    ['클릭수',   '클릭수'],
+    ['광고비',   '광고비'],
+    ['실광고비', '실광고비'],
+  ];
+  const sortedRaw = [...filtered].sort((a, b) => (b['날짜'] || '').localeCompare(a['날짜'] || ''));
+  const rawHeaderHtml = RAW_COLS.map(([label]) => `<th style="white-space:nowrap">${label}</th>`).join('');
+  const rawRowsHtml = sortedRaw.map(r => {
+    const adCost = parseFloat(r['광고비']) || 0;
+    const rowData = { ...r, '실광고비': Math.round(adCost * 1.1).toLocaleString('ko-KR') + '원' };
+    return '<tr>' + RAW_COLS.map(([, col]) =>
+      `<td style="white-space:nowrap;font-size:12px">${rowData[col] ?? ''}</td>`
+    ).join('') + '</tr>';
+  }).join('');
+
+  html += `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+    <div style="padding:12px 14px;font-size:13px;font-weight:600;border-bottom:1px solid var(--border);background:var(--surface2);cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between" onclick="toggleAdRawData()">
+      <span>로우데이터 전체 내역<span style="font-size:11px;font-weight:400;color:var(--text-dim);margin-left:8px">${sortedRaw.length}행</span></span>
+      <span id="adRawToggleIcon" style="color:var(--text-dim);font-size:12px">▾ 펼치기</span>
+    </div>
+    <div id="adRawSection" style="display:none">
+      <div class="data-table-wrap" style="max-height:420px;overflow:auto">
+        <table class="data-table">
+          <thead><tr style="background:var(--surface2)">${rawHeaderHtml}</tr></thead>
+          <tbody>${rawRowsHtml}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
   container.innerHTML = html;
+}
+
+function toggleAdRawData() {
+  const section = document.getElementById('adRawSection');
+  const icon    = document.getElementById('adRawToggleIcon');
+  if (!section) return;
+  const open = section.style.display === 'none';
+  section.style.display = open ? '' : 'none';
+  if (icon) icon.textContent = open ? '▴ 접기' : '▾ 펼치기';
 }
 
 function toggleAdGroup(gid) {
