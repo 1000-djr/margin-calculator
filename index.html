@@ -4057,8 +4057,15 @@ function onMatchB2BSelect(optionId) {
   if (!val) { if (hintEl) hintEl.style.display = 'none'; return; }
 
   const [b2bName, b2bUnit] = val.split('\t');
-  const refDate = document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0, 10);
-  const d = String(refDate).replace(/\./g, '-').slice(0, 10);
+
+  // 해당 옵션ID의 실제 첫 주문일 기준으로 조회
+  const orderDates = orders
+    .filter(o => (o['옵션ID'] || '') === optionId && o['주문일'])
+    .map(o => String(o['주문일']).replace(/\./g, '-').slice(0, 10))
+    .filter(Boolean)
+    .sort();
+  const firstOrderDate = orderDates[0] || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0, 10);
+  const d = firstOrderDate;
 
   const best = b2bPriceHistory.filter(p => {
     if (p.product_name !== b2bName) return false;
@@ -4070,11 +4077,12 @@ function onMatchB2BSelect(optionId) {
 
   if (hintEl) {
     const label = b2bUnit ? `${b2bName} ${b2bUnit}` : b2bName;
+    const dateLabel = `첫 주문일 ${d}`;
     if (best) {
-      hintEl.innerHTML = `✓ <strong>${label}</strong> — ${best.supplier_name} / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong> (${best.start_date}~${best.end_date||'진행중'})`;
+      hintEl.innerHTML = `✓ <strong>${label}</strong> — ${best.supplier_name} / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong> (${best.start_date}~${best.end_date||'진행중'}) · <span style="color:var(--text-dim)">${dateLabel} 기준</span>`;
       hintEl.style.color = 'var(--green)';
     } else {
-      hintEl.innerHTML = `⚠️ <strong>${label}</strong> 기준 <strong>${d}</strong> 날짜의 B2B 이력이 없습니다.<br><strong>B2B 매입가 탭에 해당 날짜 이력을 먼저 입력해주세요.</strong>`;
+      hintEl.innerHTML = `⚠️ <strong>${label}</strong> 기준 <strong>${d}</strong>(첫 주문일) 날짜의 B2B 이력이 없습니다.<br><strong>B2B 매입가 탭에 해당 날짜 이력을 먼저 입력해주세요.</strong>`;
       hintEl.style.color = 'var(--yellow)';
     }
     hintEl.style.display = 'block';
