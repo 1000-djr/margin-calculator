@@ -39,9 +39,13 @@ app.use('/api', apiRouter);
 app.use('/', adminRouter);
 
 app.get('/', (req, res) => {
-  // 로그인된 유저 중 pending/blocked이면 대기 페이지로
-  if (req.user && req.user.status !== 'active') {
-    return res.redirect('/pending');
+  if (req.user) {
+    const { status, expires_at } = req.user;
+    if (status === 'pending') return res.redirect('/pending?reason=pending');
+    if (status === 'blocked') return res.redirect('/pending?reason=blocked');
+    if (status === 'active' && expires_at && new Date(expires_at) < new Date()) {
+      return res.redirect('/pending?reason=expired');
+    }
   }
   res.sendFile(path.join(__dirname, 'index.html'));
 });

@@ -32,6 +32,7 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
         u.status,
         u.is_admin,
         u.created_at,
+        u.expires_at,
         COALESCE(o.total_before, 0)      AS total_revenue_before,
         COALESCE(o.total_orders, 0)      AS total_orders,
         COALESCE(ar.total_actual_ad, 0)  AS total_actual_ad_cost,
@@ -113,6 +114,37 @@ router.put('/admin/users/:id/status', requireAdmin, async (req, res) => {
     const { rows } = await pool.query(
       'UPDATE users SET status = $1 WHERE id = $2 RETURNING id, email, status',
       [status, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── 승인 + 만료일 설정 ───────────────────────────────────────────────────────
+router.put('/admin/users/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const expiresAt = req.body.expires_at || null; // null = 무제한
+    const { rows } = await pool.query(
+      `UPDATE users SET status = 'active', expires_at = $1
+       WHERE id = $2 RETURNING id, email, status, expires_at`,
+      [expiresAt, req.params.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'User not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── 만료일만 변경 ────────────────────────────────────────────────────────────
+router.put('/admin/users/:id/expires', requireAdmin, async (req, res) => {
+  try {
+    const expiresAt = req.body.expires_at || null;
+    const { rows } = await pool.query(
+      'UPDATE users SET expires_at = $1 WHERE id = $2 RETURNING id, email, status, expires_at',
+      [expiresAt, req.params.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
     res.json(rows[0]);

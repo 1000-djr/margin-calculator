@@ -65,24 +65,40 @@ router.get('/auth/google', (req, res, next) => {
   passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
 });
 
+// ── 접근 제한 판정 유틸 ──────────────────────────────────────────────────────
+function getAccessDeniedReason(user) {
+  if (!user) return null;
+  if (user.status === 'pending')  return 'pending';
+  if (user.status === 'blocked')  return 'blocked';
+  if (user.status === 'active' && user.expires_at && new Date(user.expires_at) < new Date()) {
+    return 'expired';
+  }
+  return null; // 정상 접근
+}
+
 // Google 콜백
 router.get(
   '/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/?auth=failed' }),
   (req, res) => {
-    const status = req.user?.status || 'pending';
-    if (status === 'pending' || status === 'blocked') {
-      return res.redirect('/pending');
-    }
+    const reason = getAccessDeniedReason(req.user);
+    if (reason) return res.redirect('/pending?reason=' + reason);
     res.redirect('/');
   }
 );
 
-// 승인 대기 페이지
+// 승인 대기 / 차단 / 만료 페이지
 router.get('/pending', (req, res) => {
-  const status = req.user?.status;
+  const reason = req.query.reason || getAccessDeniedReason(req.user) || 'pending';
   const name   = req.user?.name || '';
-  const label  = status === 'blocked' ? '사용이 차단된 계정입니다.' : '관리자 승인 대기 중입니다.';
+
+  const configs = {
+    pending: { icon: '⏳', title: '관리자 승인 대기 중입니다.', msg:  '서비스 이용 신청이 접수되었습니다.<br>관리자 승인 후 이용하실 수 있습니다.' },
+    blocked: { icon: '🚫', title: '접근이 차단되었습니다.',      msg:  '이 계정은 사용이 차단되었습니다.<br>문의가 필요하시면 관리자에게 연락해 주세요.' },
+    expired: { icon: '📅', title: '사용 기간이 만료되었습니다.', msg:  '이용 기간이 종료되었습니다.<br>연장이 필요하시면 관리자에게 연락해 주세요.' },
+  };
+  const { icon, title, msg } = configs[reason] || configs.pending;
+
   res.send(`<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -106,9 +122,9 @@ router.get('/pending', (req, res) => {
 </head>
 <body>
 <div class="card">
-  <div class="icon">${status === 'blocked' ? '🚫' : '⏳'}</div>
-  <h1>${label}</h1>
-  <p>${name ? name + '님, ' : ''}서비스 이용 신청이 접수되었습니다.<br>관리자 승인 후 이용하실 수 있습니다.</p>
+  <div class="icon">${icon}</div>
+  <h1>${title}</h1>
+  <p>${name ? name + '님, ' : ''}${msg}</p>
   <a href="/auth/logout-get">로그아웃</a>
 </div>
 </body>
