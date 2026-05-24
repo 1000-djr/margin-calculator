@@ -300,33 +300,27 @@ async function initDB() {
   }
 
   // ad_reports UNIQUE 제약 마이그레이션:
-  // (user_id, report_date, option_id, keyword) → (user_id, report_date, option_id, keyword, ad_placement)
+  // NULL=NULL 비교 문제 해결: 기존 UNIQUE 제약 모두 삭제 후 표현식 인덱스로 교체
   await pool.query(`
     DO $$
     DECLARE
       cname TEXT;
     BEGIN
-      -- 4컬럼짜리 구 제약이 있으면 드롭
-      SELECT conname INTO cname
-        FROM pg_constraint
+      -- 기존 UNIQUE 제약 (4컬럼, 5컬럼 모두) 드롭
+      FOR cname IN
+        SELECT conname FROM pg_constraint
         WHERE conrelid = 'ad_reports'::regclass
           AND contype = 'u'
-          AND array_length(conkey, 1) = 4;
-      IF cname IS NOT NULL THEN
+      LOOP
         EXECUTE 'ALTER TABLE ad_reports DROP CONSTRAINT ' || quote_ident(cname);
-      END IF;
-      -- 새 5컬럼 제약이 없으면 추가
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conrelid = 'ad_reports'::regclass
-          AND contype = 'u'
-          AND array_length(conkey, 1) = 5
-      ) THEN
-        ALTER TABLE ad_reports
-          ADD CONSTRAINT ad_reports_unique_row
-          UNIQUE (user_id, report_date, option_id, keyword, ad_placement);
-      END IF;
+      END LOOP;
     END$$;
+  `);
+  // 표현식 인덱스로 재생성: COALESCE로 NULL → '' 처리하여 NULL=NULL 충돌 감지
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ad_reports_unique
+    ON ad_reports(user_id, report_date, option_id,
+                  COALESCE(keyword,''), COALESCE(ad_placement,''))
   `);
 
   // ad_placement 백필: raw_data에서 '광고 노출 지면'(공백2개) 우선으로 NULL 행 전체 업데이트
