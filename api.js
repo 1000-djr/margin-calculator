@@ -354,8 +354,8 @@ function safeStr(v)   { return (v == null || v === '') ? null : String(v); }
 
 router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   const items  = Array.isArray(req.body) ? req.body : [];
-  const userId = parseInt(req.user.id, 10);          // ① user_id 정수 보장
-  if (!items.length) return res.json({ inserted: 0, skipped: 0, failed: 0 });
+  const userId = parseInt(req.user.id, 10);
+  if (!items.length) return res.json({ inserted: 0, skipped: 0, failed: 0, total: 0 });
 
   // 첫 행 컬럼명 로그 → 실제 엑셀 헤더 확인용
   if (items[0]) {
@@ -365,6 +365,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   const CHUNK = 500;
   let inserted = 0, skipped = 0, failed = 0;
 
+  try {
   for (let start = 0; start < items.length; start += CHUNK) {
     const chunk = items.slice(start, start + CHUNK);
     for (const r of chunk) {
@@ -396,7 +397,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
                    $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
                    $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
-           ON CONFLICT (user_id, report_date, campaign_id, option_id, COALESCE(keyword,''), COALESCE(ad_placement,'')) DO NOTHING`,
+           ON CONFLICT DO NOTHING`,
           [
             userId,                                                               // $1 ①
             formatAdDate(r['날짜'] ?? ''),                                       // $2
@@ -461,8 +462,11 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
     }
     console.log(`[ad-reports/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 완료`);
   }
+  } catch (fatalErr) {
+    console.error(`[ad-reports/bulk] 치명적 오류 user=${userId}:`, fatalErr.message);
+    return res.status(500).json({ error: fatalErr.message, inserted, skipped, failed, total: items.length });
+  }
 
-  // ⑤ 실제 저장 건수 응답
   console.log(`[ad-reports/bulk] 완료: user=${userId} 삽입=${inserted} / 중복스킵=${skipped} / 실패=${failed} / 전체=${items.length}`);
   res.json({ inserted, skipped, failed, total: items.length });
 });
