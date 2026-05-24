@@ -376,11 +376,10 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
         const optionId    = r['광고집행 옵션ID'] || r['광고집행옵션ID'] || '';
         const adCost      = safeFloat(r['광고비']) ?? 0;
 
-        // ② 노출지면: 가능한 모든 컬럼명 변형 지원
+        // ② 노출지면: '광고 노출 지면'(띄어쓰기) 우선, 이후 변형들 fallback
         const adPlacement = safeStr(
-          r['광고 노출 지면'] || r['광고노출지면'] ||
-          r['노출 지면']     || r['노출지면']
-        );
+          r['광고 노출 지면'] || r['광고노출지면'] || r['ad_placement']
+        ) || null;
 
         const result = await pool.query(
           `INSERT INTO ad_reports
