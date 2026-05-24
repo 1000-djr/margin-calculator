@@ -151,8 +151,9 @@ tbody td{padding:13px 16px;vertical-align:middle}
     <div class="stat-card"><div class="label">차단됨</div><div class="value red" id="statBlocked">—</div></div>
     <div class="stat-card"><div class="label">전체 매출(쿠폰전)</div><div class="value" id="statRevenueBefore">—</div></div>
     <div class="stat-card"><div class="label">전체 매출(쿠폰후)</div><div class="value" id="statRevenueAfter">—</div></div>
+    <div class="stat-card"><div class="label">전체 원가</div><div class="value red" id="statCost">—</div></div>
     <div class="stat-card"><div class="label">전체 광고비(실)</div><div class="value red" id="statAdCost">—</div></div>
-    <div class="stat-card"><div class="label">전체 마진(단순)</div><div class="value green" id="statMargin">—</div></div>
+    <div class="stat-card"><div class="label">전체 순이익</div><div class="value green" id="statMargin">—</div></div>
   </div>
 
   <!-- 날짜 필터 -->
@@ -182,8 +183,9 @@ tbody td{padding:13px 16px;vertical-align:middle}
           <th>상태</th>
           <th>총매출(쿠폰전)</th>
           <th>총매출(쿠폰후)</th>
+          <th>원가</th>
           <th>광고비(실)</th>
-          <th>마진<span style="font-size:10px;font-weight:400;margin-left:2px">※단순</span></th>
+          <th>순이익</th>
           <th>마진율</th>
           <th>만료일</th>
           <th>승인/차단</th>
@@ -191,7 +193,7 @@ tbody td{padding:13px 16px;vertical-align:middle}
         </tr>
       </thead>
       <tbody id="userTbody">
-        <tr><td colspan="12" class="empty"><div class="spinner"></div></td></tr>
+        <tr><td colspan="13" class="empty"><div class="spinner"></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -295,7 +297,7 @@ function clearQuick(){
 // ── 데이터 로드 ───────────────────────────────────────────────────────────────
 async function loadUsers(){
   document.getElementById('userTbody').innerHTML=
-    `<tr><td colspan="12" class="empty"><div class="spinner"></div></td></tr>`;
+    `<tr><td colspan="13" class="empty"><div class="spinner"></div></td></tr>`;
 
   const start = document.getElementById('filterStart').value || '';
   const end   = document.getElementById('filterEnd').value   || '';
@@ -322,7 +324,7 @@ async function loadUsers(){
     renderTable(allUsers);
   }catch(e){
     document.getElementById('userTbody').innerHTML=
-      `<tr><td colspan="12" class="empty">오류: ${e.message}</td></tr>`;
+      `<tr><td colspan="13" class="empty">오류: ${e.message}</td></tr>`;
   }
 }
 
@@ -349,19 +351,20 @@ function rowBg(u){
   return '';
 }
 
-// ── 수익분석 동일 수식 계산 ───────────────────────────────────────────────────
-// 순이익 = 실매출 - 수수료 - 실광고비 - 부가세(면세)
-// 부가세(면세) = -(수수료/11) - (광고비/11)  → 음수이므로 빼면 환급 효과
+// ── 수익분석 완전 동일 수식 ───────────────────────────────────────────────────
+// 순이익 = 실매출 - 수수료 - 원가 - 실광고비 - 부가세(면세)
+// 부가세(면세) = -(수수료/11) - (광고비/11)
 function calcDerived(u){
   const revBefore  = Number(u.revenue_before)  || 0;
   const revAfter   = Number(u.revenue_after)   || 0;
   const commission = Number(u.commission)      || 0;
+  const cost       = Number(u.total_cost)      || 0;
   const actualAd   = Number(u.actual_ad_cost)  || 0;
-  const adRaw      = Number(u.ad_cost_raw)     || 0; // 광고비(VAT 전)
+  const adRaw      = Number(u.ad_cost_raw)     || 0;
   const tax        = -(commission / 11) - (adRaw / 11); // 면세 부가세(음수)
-  const profit     = revAfter - commission - actualAd - tax;
+  const profit     = revAfter - commission - cost - actualAd - tax;
   const rate       = revAfter > 0 ? (profit / revAfter * 100) : 0;
-  return { revBefore, revAfter, commission, actualAd, tax, profit, rate };
+  return { revBefore, revAfter, commission, cost, actualAd, tax, profit, rate };
 }
 
 function fmtW(n){return '₩'+fmt(Math.round(n));}
@@ -378,18 +381,19 @@ function renderStats(users){
   const t=users.reduce((s,u)=>{
     const d=calcDerived(u);
     s.before+=d.revBefore; s.after+=d.revAfter;
-    s.ad+=d.actualAd;      s.profit+=d.profit;
+    s.cost+=d.cost;        s.ad+=d.actualAd; s.profit+=d.profit;
     return s;
-  },{before:0,after:0,ad:0,profit:0});
+  },{before:0,after:0,cost:0,ad:0,profit:0});
   document.getElementById('statRevenueBefore').textContent=fmtW(t.before);
   document.getElementById('statRevenueAfter').textContent=fmtW(t.after);
+  document.getElementById('statCost').textContent=fmtW(t.cost);
   document.getElementById('statAdCost').textContent=fmtW(t.ad);
   document.getElementById('statMargin').textContent=fmtW(t.profit);
 }
 
 function renderTable(users){
   const tbody=document.getElementById('userTbody');
-  if(!users.length){tbody.innerHTML='<tr><td colspan="12" class="empty">유저가 없습니다.</td></tr>';return;}
+  if(!users.length){tbody.innerHTML='<tr><td colspan="13" class="empty">유저가 없습니다.</td></tr>';return;}
   tbody.innerHTML=users.map(u=>{
     const d=calcDerived(u);
     return `
@@ -409,6 +413,7 @@ function renderTable(users){
       </td>
       <td>${fmtW(d.revBefore)}</td>
       <td>${fmtW(d.revAfter)}</td>
+      <td style="color:#ff3b30">${fmtW(d.cost)}</td>
       <td style="color:#ff3b30">${fmtW(d.actualAd)}</td>
       <td style="color:${d.profit>=0?'#34c759':'#ff3b30'};font-weight:600">${fmtW(d.profit)}</td>
       <td>${fmtRate(d.rate)}</td>
