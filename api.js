@@ -378,7 +378,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
         const adCost      = safeFloat(r['광고비']) ?? 0;
 
         // ② 노출지면: 실제 엑셀 컬럼명 '광고 노출 지면' 그대로 사용
-        console.log('광고 노출 지면 값:', r['광고 노출 지면']);
+        if (start === 0 && chunk.indexOf(r) === 0) console.log('[ad-reports] 광고 노출 지면 값(첫행):', r['광고 노출 지면']);
         const adPlacement = r['광고 노출 지면'] !== undefined ? r['광고 노출 지면'] : null;
 
         const result = await pool.query(
