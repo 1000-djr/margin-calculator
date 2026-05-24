@@ -3743,34 +3743,39 @@ async function renderProfit() {
 
   // ── 매칭 폼 공통 HTML 생성 헬퍼 ────────────────────────────────────────────
   function matchFormHtml(g, colspan) {
-    const m = g.optionId ? optionMatchings[g.optionId] : null;
+    const pnm = productNameMappings.find(m =>
+      m.registered_name === g.productName && (m.option_name || '') === (g.optionName || '')
+    ) || productNameMappings.find(m =>
+      m.registered_name === g.productName && !m.option_name
+    ) || null;
+    const curKey = pnm ? (pnm.b2b_name + '\t' + (pnm.b2b_unit || '')) : '';
+
+    const b2bItems = [];
+    const seen = new Set();
+    b2bPriceHistory.forEach(p => {
+      if (!p.product_name) return;
+      const key = p.product_name + '\t' + (p.unit || '');
+      if (!seen.has(key)) { seen.add(key); b2bItems.push({ name: p.product_name, unit: p.unit || '' }); }
+    });
+    b2bItems.sort((a, b) => (a.name + a.unit).localeCompare(b.name + b.unit, 'ko'));
+    const selectOpts = `<option value="">-- B2B 상품 선택 --</option>` +
+      b2bItems.map(item => {
+        const val = item.name + '\t' + item.unit;
+        const label = item.unit ? `${item.name} ${item.unit}` : item.name;
+        return `<option value="${val.replace(/"/g,'&quot;')}"${curKey===val?' selected':''}>${label}</option>`;
+      }).join('');
+
     return `<tr id="matchform_${g.optionId}" style="display:none">
       <td colspan="${colspan}">
         <div style="padding:8px 0">
-          <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:6px"></div>
-          <div id="matchB2BMapRow_${g.optionId}" style="display:none;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-            <label style="font-size:12px;white-space:nowrap">B2B 상품 연결</label>
-            <select style="flex:1;min-width:180px;font-size:12px"></select>
-            <input type="hidden" id="matchB2BName_${g.optionId}" value="">
-          </div>
-          <div class="match-inline-form">
-            <div><label>공급처명</label>
-              <select id="matchSupplier_${g.optionId}">
-                ${suppliers.map(s => `<option value="${s.name}"${m && s.name === m.supplierName ? ' selected' : ''}>${s.name}</option>`).join('')}
-              </select>
-            </div>
-            <div><label>공급가 (원)</label>
-              <input type="number" id="matchCost_${g.optionId}" ${m ? `value="${m.cost||0}"` : 'placeholder="0"'}>
-            </div>
-            <div><label>과세구분</label>
-              <select id="matchTax_${g.optionId}">
-                <option value="exempt"${!m || m.taxType==='exempt' ? ' selected' : ''}>면세</option>
-                <option value="taxable"${m && m.taxType==='taxable' ? ' selected' : ''}>과세</option>
-              </select>
-            </div>
-            <div><label>&nbsp;</label>
-              <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}','${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">저장</button>
-            </div>
+          <div id="matchAutoHint_${g.optionId}" style="display:none;font-size:11px;margin-bottom:8px;padding:7px 11px;border-radius:6px;background:var(--surface2)"></div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="font-size:12px;white-space:nowrap;color:var(--text-dim)">B2B 상품 연결</label>
+            <select id="matchB2BSelect_${g.optionId}" style="flex:1;min-width:180px;font-size:12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:5px 8px;outline:none" onchange="onMatchB2BSelect('${g.optionId}')">
+              ${selectOpts}
+            </select>
+            <input type="hidden" id="matchB2BName_${g.optionId}" value="${curKey.replace(/"/g,'&quot;')}">
+            <button class="btn btn-primary btn-sm" onclick="saveOptionMatching('${g.optionId}','${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">저장</button>
           </div>
         </div>
       </td>
@@ -3814,18 +3819,18 @@ async function renderProfit() {
       matchHtml += '</tbody></table>';
     }
 
-    // 수동매칭 — optionMatchings 기반
+    // 수동매칭 — optionMatchings 기반 (구형 데이터, B2B 연결로 업그레이드 권장)
     if (manualItems.length) {
-      matchHtml += `<div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:4px">수동매칭 항목</div>
-        <table class="profit-table" style="margin-top:4px"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>공급처</th><th>공급가</th><th></th></tr></thead><tbody>`;
+      matchHtml += `<div style="margin-top:14px;font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:4px">수동매칭 항목 <span style="font-weight:400;color:var(--text-dim)">(B2B 상품 연결로 변경 권장)</span></div>
+        <table class="profit-table" style="margin-top:4px"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>기존 공급처</th><th>기존 공급가</th><th></th></tr></thead><tbody>`;
       manualItems.forEach(g => {
         const m = optionMatchings[g.optionId];
         matchHtml += `<tr>
           <td>${g.productName}</td><td>${g.optionName||'-'}</td>
           <td style="font-family:var(--mono)">${g.optionId}</td>
-          <td>${m.supplierName}</td>
-          <td style="font-family:var(--mono)">${(m.cost||0).toLocaleString('ko-KR')}원</td>
-          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}',this,'${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">변경</button></td>
+          <td style="color:var(--text-dim)">${m.supplierName}</td>
+          <td style="font-family:var(--mono);color:var(--text-dim)">${(m.cost||0).toLocaleString('ko-KR')}원</td>
+          <td><button class="btn btn-ghost btn-xs" onclick="showMatchForm('${g.optionId}',this,'${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}')">B2B 연결</button></td>
         </tr>${matchFormHtml(g, 6)}`;
       });
       matchHtml += '</tbody></table>';
@@ -3864,7 +3869,7 @@ async function renderProfit() {
           <td style="font-family:var(--mono)">${g.qty}</td>
           <td style="font-family:var(--mono)">${Math.round(realRevenue).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);color:var(--red)">${Math.round(fee).toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono)">${cost !== null ? Math.round(cost).toLocaleString('ko-KR') + '원' : '<span style="color:var(--yellow)">미매칭</span>'}</td>
+          <td style="font-family:var(--mono)">${cost !== null ? Math.round(cost).toLocaleString('ko-KR') + '원' : resolved.source === 'auto_no_price' ? `<span style="color:var(--yellow)" title="B2B 매입가 탭에 해당 날짜 이력을 먼저 입력해주세요">⚠️ B2B 이력 없음</span>` : '<span style="color:var(--yellow)">미매칭</span>'}</td>
           <td style="font-family:var(--mono);color:var(--red)">${Math.round(realAdCost).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono)">${Math.round(vat).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);font-weight:600;color:${netProfit === null ? 'var(--text-dim)' : netProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${netProfit !== null ? Math.round(netProfit).toLocaleString('ko-KR') + '원' : '-'}</td>
@@ -3999,188 +4004,95 @@ function showMatchForm(optionId, btn, productName, optionName) {
   if (!row) return;
   const isHidden = row.style.display === 'none' || row.style.display === '';
   row.style.display = isHidden ? 'table-row' : 'none';
-  if (!isHidden) return; // closing — skip auto-fill
+  if (!isHidden) return;
+  // 드롭다운 현재값 기준으로 힌트 즉시 표시
+  onMatchB2BSelect(optionId);
+}
 
-  const hintEl     = document.getElementById('matchAutoHint_'   + optionId);
-  const supplierEl = document.getElementById('matchSupplier_'   + optionId);
-  const costEl     = document.getElementById('matchCost_'       + optionId);
-  const b2bMapEl   = document.getElementById('matchB2BMapRow_'  + optionId);
+function onMatchB2BSelect(optionId) {
+  const selectEl = document.getElementById('matchB2BSelect_' + optionId);
+  const hintEl   = document.getElementById('matchAutoHint_'  + optionId);
+  const hiddenEl = document.getElementById('matchB2BName_'   + optionId);
+  if (!selectEl) return;
 
-  if (!productName) return;
+  const val = selectEl.value;
+  if (hiddenEl) hiddenEl.value = val;
+  if (!val) { if (hintEl) hintEl.style.display = 'none'; return; }
 
+  const [b2bName, b2bUnit] = val.split('\t');
   const refDate = document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0, 10);
   const d = String(refDate).replace(/\./g, '-').slice(0, 10);
 
-  // 1단계: product_name_mapping에서 등록상품명+옵션명 → B2B 상품명+단위 매핑 확인
-  const pnm = productNameMappings.find(m =>
-    m.registered_name === productName && (m.option_name || '') === (optionName || '')
-  ) || productNameMappings.find(m =>
-    m.registered_name === productName && !m.option_name
-  );
-  const lookupName = pnm ? pnm.b2b_name : productName;
-  const lookupUnit = pnm ? (pnm.b2b_unit || '') : '';
-
-  // 2단계: B2B 매입가 이력에서 상품명+단위 기준 조회
-  const matches = b2bPriceHistory.filter(p => {
-    if (p.product_name !== lookupName) return false;
-    if (lookupUnit && (p.unit || '') !== lookupUnit) return false;
-    if (p.start_date && d < p.start_date) return false;
-    if (p.end_date   && d > p.end_date)   return false;
-    return true;
-  });
-  const best = matches.length ? matches.reduce((a, b) => b.id > a.id ? b : a) : null;
-
-  if (best) {
-    // 자동 매칭 성공
-    if (supplierEl) {
-      const opt = [...supplierEl.options].find(o => o.value === best.supplier_name);
-      if (opt) supplierEl.value = best.supplier_name;
-    }
-    if (costEl) costEl.value = best.cost;
-    if (hintEl) {
-      const b2bLabel = best.unit ? `${best.product_name} ${best.unit}` : best.product_name;
-      hintEl.innerHTML = `✓ B2B 이력 자동 불러옴${pnm ? ` (<em>${productName}${optionName ? ' / '+optionName : ''}</em> → <em>${b2bLabel}</em>)` : ''} — <strong>${best.supplier_name}</strong> / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong> (${best.start_date}~${best.end_date || '진행중'})`;
-      hintEl.style.color = 'var(--green)';
-      hintEl.style.display = 'block';
-    }
-    if (b2bMapEl) b2bMapEl.style.display = 'none';
-  } else {
-    // 자동 매칭 실패 — B2B 상품명+단위 연결 드롭다운 표시
-    if (hintEl) {
-      const mappedLabel = pnm ? `${pnm.b2b_name}${pnm.b2b_unit ? ' '+pnm.b2b_unit : ''}` : null;
-      hintEl.textContent = mappedLabel
-        ? `매핑된 B2B 상품 "${mappedLabel}"의 ${d} 기준 이력 없음 — 아래에서 다시 연결하세요`
-        : `등록상품 "${productName}${optionName ? ' / '+optionName : ''}"과 일치하는 B2B 이력 없음 — B2B 상품을 연결하세요`;
-      hintEl.style.color = 'var(--text-dim)';
-      hintEl.style.display = 'block';
-    }
-    if (b2bMapEl) {
-      // B2B 상품명+단위 조합 목록 생성 (예: "브로콜리 1kg")
-      const b2bItems = [];
-      const seen = new Set();
-      b2bPriceHistory.forEach(p => {
-        if (!p.product_name) return;
-        const key = p.product_name + '\t' + (p.unit || '');
-        if (!seen.has(key)) { seen.add(key); b2bItems.push({ name: p.product_name, unit: p.unit || '' }); }
-      });
-      b2bItems.sort((a, b) => (a.name + a.unit).localeCompare(b.name + b.unit, 'ko'));
-      const selectEl = b2bMapEl.querySelector('select');
-      if (selectEl) {
-        const curKey = pnm ? (pnm.b2b_name + '\t' + (pnm.b2b_unit || '')) : '';
-        selectEl.innerHTML = `<option value="">-- B2B 상품 선택 --</option>` +
-          b2bItems.map(item => {
-            const val = item.name + '\t' + item.unit;
-            const label = item.unit ? `${item.name} ${item.unit}` : item.name;
-            return `<option value="${val.replace(/"/g, '&quot;')}"${curKey === val ? ' selected' : ''}>${label}</option>`;
-          }).join('');
-        selectEl.onchange = () => {
-          const [selName, selUnit] = selectEl.value.split('\t');
-          applyB2BSelection(optionId, selName, selUnit || '', d, supplierEl, costEl, hintEl);
-        };
-        if (pnm) applyB2BSelection(optionId, pnm.b2b_name, pnm.b2b_unit || '', d, supplierEl, costEl, hintEl);
-      }
-      b2bMapEl.style.display = 'flex';
-    }
-  }
-}
-
-function applyB2BSelection(optionId, b2bName, b2bUnit, refDate, supplierEl, costEl, hintEl) {
-  if (!b2bName) return;
-  const d = String(refDate).replace(/\./g, '-').slice(0, 10);
-  const matches = b2bPriceHistory.filter(p => {
+  const best = b2bPriceHistory.filter(p => {
     if (p.product_name !== b2bName) return false;
     if (b2bUnit && (p.unit || '') !== b2bUnit) return false;
     if (p.start_date && d < p.start_date) return false;
     if (p.end_date   && d > p.end_date)   return false;
     return true;
-  });
-  const best = matches.length ? matches.reduce((a, b) => b.id > a.id ? b : a) : null;
-  const label = b2bUnit ? `${b2bName} ${b2bUnit}` : b2bName;
-  if (best) {
-    if (supplierEl) {
-      const opt = [...supplierEl.options].find(o => o.value === best.supplier_name);
-      if (opt) supplierEl.value = best.supplier_name;
-    }
-    if (costEl) costEl.value = best.cost;
-    if (hintEl) {
-      hintEl.innerHTML = `✓ <strong>${label}</strong> 선택 — <strong>${best.supplier_name}</strong> / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong>`;
+  }).reduce((acc, p) => (!acc || p.id > acc.id) ? p : acc, null);
+
+  if (hintEl) {
+    const label = b2bUnit ? `${b2bName} ${b2bUnit}` : b2bName;
+    if (best) {
+      hintEl.innerHTML = `✓ <strong>${label}</strong> — ${best.supplier_name} / <strong>${Number(best.cost).toLocaleString('ko-KR')}원</strong> (${best.start_date}~${best.end_date||'진행중'})`;
       hintEl.style.color = 'var(--green)';
-      hintEl.style.display = 'block';
+    } else {
+      hintEl.innerHTML = `⚠️ <strong>${label}</strong> 기준 <strong>${d}</strong> 날짜의 B2B 이력이 없습니다.<br><strong>B2B 매입가 탭에 해당 날짜 이력을 먼저 입력해주세요.</strong>`;
+      hintEl.style.color = 'var(--yellow)';
     }
-  } else {
-    if (hintEl) {
-      hintEl.textContent = `"${label}" 기준 ${refDate} 이력 없음`;
-      hintEl.style.color = 'var(--text-dim)';
-      hintEl.style.display = 'block';
-    }
+    hintEl.style.display = 'block';
   }
-  // 선택된 B2B 상품명+단위를 hidden input에 저장 (저장 시 매핑에 활용)
-  const mapHiddenEl = document.getElementById('matchB2BName_' + optionId);
-  if (mapHiddenEl) mapHiddenEl.value = b2bName + '\t' + b2bUnit;
 }
 
+// ── 하위호환: 이전 코드가 참조하던 함수 (더 이상 사용 안 함, 빈 stub 유지) ──
+function applyB2BSelection(optionId, b2bName, b2bUnit, refDate, supplierEl, costEl, hintEl) {
+  const selectEl = document.getElementById('matchB2BSelect_' + optionId);
+  if (selectEl) {
+    const key = b2bName + '\t' + (b2bUnit || '');
+    const opt = [...selectEl.options].find(o => o.value === key);
+    if (opt) { selectEl.value = key; onMatchB2BSelect(optionId); }
+  }
+}
+
+// ── 이전 showMatchForm 내부 코드 잔재 (삭제 불가한 문법 구조) stub ──
 async function saveOptionMatching(optionId, productName, optionName) {
-  const supplierEl = document.getElementById('matchSupplier_' + optionId);
-  const costEl     = document.getElementById('matchCost_'     + optionId);
-  const taxEl      = document.getElementById('matchTax_'      + optionId);
-  if (!supplierEl || !costEl || !taxEl) return;
-  const supplierName = supplierEl.value;
-  const cost = parseFloat(costEl.value) || 0;
-  const taxType = taxEl.value;
-  if (!cost) { alert('공급가를 입력하세요'); return; }
+  const b2bNameEl = document.getElementById('matchB2BName_' + optionId);
+  const raw = b2bNameEl ? b2bNameEl.value.trim() : '';
+  if (!raw) { alert('B2B 상품을 선택하세요'); return; }
 
   if (!productName) {
     const order = orders.find(o => o['옵션ID'] === optionId);
     productName = order ? order['등록상품명'] : '';
     optionName  = order ? (order['등록옵션명'] || '') : '';
   }
-  optionMatchings[optionId] = { supplierName, cost, taxType, productName };
-  localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
+  const [b2bName, b2bUnit] = raw.split('\t');
+  const entry = { registered_name: productName, option_name: optionName || '', b2b_name: b2bName, b2b_unit: b2bUnit || '' };
 
   if (currentUser) {
-    try { await fetch('/api/cost-mappings/' + encodeURIComponent(optionId), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ supplierName, cost, taxType, productName }) }); } catch(e) {}
-
-    // B2B 상품명+단위 연결 선택값이 있으면 product_name_mapping 저장
-    const b2bNameEl = document.getElementById('matchB2BName_' + optionId);
-    const raw = b2bNameEl ? b2bNameEl.value.trim() : '';
-    if (raw && productName) {
-      const [b2bName, b2bUnit] = raw.split('\t');
-      try {
-        const r = await fetch('/api/product-name-mappings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ registered_name: productName, option_name: optionName || '', b2b_name: b2bName, b2b_unit: b2bUnit || '' }),
-        });
-        if (r.ok) {
-          const saved = await r.json();
-          const idx = productNameMappings.findIndex(m =>
-            m.registered_name === productName && (m.option_name || '') === (optionName || '')
-          );
-          if (idx >= 0) productNameMappings[idx] = saved;
-          else productNameMappings.push(saved);
-        }
-      } catch(e) {}
-    }
+    try {
+      const r = await fetch('/api/product-name-mappings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      });
+      if (r.ok) {
+        const saved = await r.json();
+        const idx = productNameMappings.findIndex(m =>
+          m.registered_name === productName && (m.option_name || '') === (optionName || '')
+        );
+        if (idx >= 0) productNameMappings[idx] = saved;
+        else productNameMappings.push(saved);
+      }
+    } catch(e) {}
+  } else {
+    const idx = productNameMappings.findIndex(m =>
+      m.registered_name === productName && (m.option_name || '') === (optionName || '')
+    );
+    const local = { id: Date.now(), ...entry };
+    if (idx >= 0) productNameMappings[idx] = local;
+    else productNameMappings.push(local);
+    localStorage.setItem('productNameMappings', JSON.stringify(productNameMappings));
   }
-
-  // B2B 매입가 이력도 업데이트
-  const today = new Date().toLocaleDateString('ko-KR');
-  const supIdx = suppliers.findIndex(s => s.name === supplierName);
-  if (supIdx >= 0) {
-    // 옵션ID를 상품명으로 활용하여 B2B에 기록
-    const existingB2B = b2bProducts.find(p => p.name === optionId);
-    if (existingB2B) {
-      while (existingB2B.prices.length <= supIdx) existingB2B.prices.push(0);
-      existingB2B.prices[supIdx] = cost;
-    } else {
-      const newPrices = new Array(suppliers.length).fill(0);
-      if (supIdx >= 0) newPrices[supIdx] = cost;
-      b2bProducts.push({ id: Date.now(), name: optionId, unit: '옵션', prices: newPrices, prevLowest: 0, imageUrl: '', detailUrl: '', shareUrl: '' });
-    }
-    localStorage.setItem('b2bProducts', JSON.stringify(b2bProducts));
-    saveToServer('b2bProducts', b2bProducts);
-  }
-
   renderProfit();
 }
 
