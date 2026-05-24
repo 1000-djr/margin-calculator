@@ -377,7 +377,7 @@ function calcDerived(u){
   return { revBefore, revAfter, commission, cost, actualAd, tax, profit, rate };
 }
 
-function fmtW(n){return '₩'+fmt(Math.round(n));}
+function fmtW(n){return fmt(Math.round(n))+'원';}
 function fmtRate(r){
   const c=r>=0?'#34c759':'#ff3b30';
   return `<span style="color:${c};font-weight:600">${r>=0?'+':''}${r.toFixed(1)}%</span>`;
@@ -574,7 +574,7 @@ function renderDetail({user,monthly_stats,ad_stats}){
     <tr>
       <td>${(m.month||'').slice(0,7)}</td>
       <td>${fmt(m.orders)}</td>
-      <td>₩${fmt(m.revenue)}</td>
+      <td>${fmt(m.revenue)}원</td>
     </tr>
   `).join('') || '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:12px">데이터 없음</td></tr>';
 
@@ -582,8 +582,8 @@ function renderDetail({user,monthly_stats,ad_stats}){
     <div class="detail-row"><span class="key">이메일</span><span class="val">${user.email||'—'}</span></div>
     <div class="detail-row"><span class="key">가입일</span><span class="val">${fmtDate(user.created_at)}</span></div>
     <div class="detail-row"><span class="key">상태</span><span class="val">${badgeHtml(user.status)}${user.is_admin?' <span class="badge admin">어드민</span>':''}</span></div>
-    <div class="detail-row"><span class="key">총 광고비</span><span class="val">₩${fmt(ad_stats?.total_ad_cost||0)}</span></div>
-    <div class="detail-row"><span class="key">실 광고비</span><span class="val">₩${fmt(ad_stats?.total_actual_ad_cost||0)}</span></div>
+    <div class="detail-row"><span class="key">총 광고비</span><span class="val">${fmt(ad_stats?.total_ad_cost||0)}원</span></div>
+    <div class="detail-row"><span class="key">실 광고비</span><span class="val">${fmt(ad_stats?.total_actual_ad_cost||0)}원</span></div>
     <div class="detail-row"><span class="key">총 클릭수</span><span class="val">${fmt(ad_stats?.total_clicks||0)}</span></div>
     <div class="section-sub">월별 매출</div>
     <table class="monthly-table">
