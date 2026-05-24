@@ -209,6 +209,26 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .shortcut-card-actions { display: flex; gap: 6px; }
 .shortcut-open-btn { flex: 1; padding: 6px 10px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: var(--sans); transition: background 0.15s; }
 .shortcut-open-btn:hover { background: #0077ed; }
+/* 바로가기 드롭다운 */
+.shortcut-dropdown-wrap { position: relative; }
+.shortcut-dropdown-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 16px; cursor: pointer; line-height: 1; transition: background 0.15s; box-shadow: var(--shadow-sm); }
+.shortcut-dropdown-btn:hover { background: var(--surface3); }
+.shortcut-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.13); z-index: 200; overflow: hidden; }
+.shortcut-dropdown.open { display: block; }
+.sc-dd-item { display: flex; align-items: center; gap: 0; border-bottom: 1px solid var(--border); }
+.sc-dd-item:last-of-type { border-bottom: none; }
+.sc-dd-link { flex: 1; display: flex; flex-direction: column; padding: 10px 14px; text-decoration: none; transition: background 0.12s; gap: 2px; min-width: 0; }
+.sc-dd-link:hover { background: var(--surface2); }
+.sc-dd-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-dd-url { font-size: 11px; color: var(--text-dim); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-dd-del { background: none; border: none; color: var(--text-dim); font-size: 16px; padding: 0 12px; cursor: pointer; flex-shrink: 0; transition: color 0.12s; }
+.sc-dd-del:hover { color: var(--red); }
+.sc-dd-empty { font-size: 13px; color: var(--text-dim); padding: 14px 14px 8px; }
+.sc-dd-add-row { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--border); background: var(--surface2); }
+.sc-dd-input { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; padding: 5px 8px; outline: none; font-family: var(--sans); }
+.sc-dd-input:focus { border-color: var(--accent); }
+.sc-dd-add-btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: var(--sans); white-space: nowrap; transition: background 0.15s; }
+.sc-dd-add-btn:hover { background: #0077ed; }
 /* 판매 매체 선택 */
 .platform-toggle { display: flex; flex-wrap: wrap; gap: 6px; }
 .platform-btn { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -519,6 +539,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <p>쿠팡 위탁 · B2B 매입가 실시간 관리</p>
     </div>
     <div class="header-right" style="display:flex;align-items:center;gap:12px;margin-left:auto">
+      <!-- 바로가기 드롭다운 -->
+      <div class="shortcut-dropdown-wrap" id="shortcutDropdownWrap">
+        <button class="shortcut-dropdown-btn" onclick="toggleShortcutDropdown(event)" title="바로가기">🔗</button>
+        <div class="shortcut-dropdown" id="shortcutDropdown"></div>
+      </div>
 <div class="auth-area">
         <div class="user-profile" id="userProfile">
           <img id="userAvatar" class="user-avatar" src="" alt="프로필">
@@ -531,8 +556,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <div class="tabs">
     <button class="tab active" onclick="switchTab('calc', this)">💰 마진 계산</button>
     <button class="tab" onclick="switchTab('b2b', this)">📦 B2B 매입가</button>
-    <button class="tab" onclick="switchTab('history', this)">📋 계산 이력</button>
-    <button class="tab" onclick="switchTab('shortcuts', this)">🔗 바로가기</button>
     <button class="tab" onclick="switchTab('settings', this)">⚙️ 설정</button>
     <button class="tab" onclick="switchTab('orders', this)">📋 주문서</button>
     <button class="tab" onclick="switchTab('ads', this)">📢 광고</button>
@@ -669,6 +692,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <button class="btn btn-primary" id="saveCalcBtn" onclick="saveCalc()">💾 이력 저장</button>
       <button class="btn btn-ghost" onclick="resetCalc()">초기화</button>
     </div>
+    <hr class="divider" style="margin-top:28px">
+    <div class="section-label" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
+      <span>계산 이력</span>
+      <button class="btn btn-danger btn-sm" onclick="clearHistory()">이력 전체 삭제</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>
+    </div>
   </div>
 
   <!-- ══ B2B 매입가 탭 ════════════════════════════════════════════ -->
@@ -728,17 +759,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
-  <!-- ══ 계산 이력 탭 ══════════════════════════════════════════════ -->
-  <div class="panel" id="tab-history">
-    <div class="section-label">계산 이력</div>
-    <div class="history-list" id="historyList">
-      <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-danger btn-sm" onclick="clearHistory()">이력 전체 삭제</button>
-    </div>
-  </div>
-
   <!-- ══ 설정 탭 ══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-settings">
     <div class="section-label">판매 매체 관리</div>
@@ -767,29 +787,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <tbody id="platListBody"></tbody>
       </table>
     </div>
-  </div>
-
-  <!-- ══ 바로가기 탭 ════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-shortcuts">
-    <div class="section-label">사이트 바로가기 등록</div>
-    <div class="card">
-      <div class="card-title"><span class="dot"></span>새 바로가기 추가</div>
-      <div class="field-row">
-        <div class="field">
-          <label>사이트 이름</label>
-          <input type="text" id="scNameInput" placeholder="예: AdminPlus">
-        </div>
-        <div class="field">
-          <label>URL</label>
-          <input type="text" id="scUrlInput" placeholder="https://www.adminplus.co.kr">
-        </div>
-      </div>
-      <div class="btn-row" style="margin-top:12px">
-        <button class="btn btn-primary" onclick="addShortcut()">+ 바로가기 추가</button>
-      </div>
-    </div>
-    <div class="section-label">등록된 바로가기</div>
-    <div id="shortcutGrid" class="shortcut-grid"></div>
   </div>
 
   <!-- ══ 주문서 탭 ══════════════════════════════════════════════════ -->
@@ -1147,7 +1144,7 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 
 // ── 탭 ↔ URL 해시 매핑 ────────────────────────────────────────────────────────
 const TAB_TO_HASH = {
-  calc: 'margin', b2b: 'b2b', history: 'history', shortcuts: 'shortcuts',
+  calc: 'margin', b2b: 'b2b',
   settings: 'settings', orders: 'orders', ads: 'ads', coupons: 'coupons', profit: 'analytics'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
@@ -1159,9 +1156,7 @@ function switchTab(name, btn, skipHistory) {
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
   if (name === 'b2b') { renderB2B(); }
-  if (name === 'calc' && costInputMode === 'b2b') { populateB2BProductSelect(); }
-  if (name === 'history') renderHistory();
-  if (name === 'shortcuts') renderShortcuts();
+  if (name === 'calc') { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
   if (name === 'settings') renderPlatformList();
   if (name === 'orders') renderOrders();
   if (name === 'ads') renderAds();
@@ -1177,7 +1172,8 @@ function switchTab(name, btn, skipHistory) {
 // 현재 URL 해시를 읽어 해당 탭 활성화
 function navigateToHash() {
   const hash = (window.location.hash || '').replace('#', '') || 'margin';
-  const name = HASH_TO_TAB[hash] || 'calc';
+  // 제거된 탭 해시 → calc로 폴백
+  const name = (hash === 'history' || hash === 'shortcuts') ? 'calc' : (HASH_TO_TAB[hash] || 'calc');
   const btn  = [...document.querySelectorAll('.tab')].find(b =>
     (b.getAttribute('onclick') || '').includes(`'${name}'`)
   );
@@ -2273,27 +2269,73 @@ function clearHistory() {
 
 // ── 바로가기 탭 ──────────────────────────────────────────────────────────────
 function renderShortcuts() {
-  const grid = document.getElementById('shortcutGrid');
+  const dd = document.getElementById('shortcutDropdown');
+  if (!dd) return;
   if (!shortcuts.length) {
-    grid.innerHTML = '<div style="color:var(--text-dim);font-size:13px;padding:20px 0">등록된 바로가기가 없습니다.</div>';
+    dd.innerHTML = `
+      <div class="sc-dd-empty">등록된 바로가기가 없습니다</div>
+      <div class="sc-dd-add-row">
+        <input id="scDdName" placeholder="이름" class="sc-dd-input">
+        <input id="scDdUrl"  placeholder="URL"  class="sc-dd-input">
+        <button class="sc-dd-add-btn" onclick="addShortcutFromDropdown()">추가</button>
+      </div>`;
     return;
   }
-  grid.innerHTML = shortcuts.map(s => `
-    <div class="shortcut-card">
-      <div>
-        <div class="shortcut-card-name">${s.name}</div>
-        <div class="shortcut-card-url">${s.url}</div>
-      </div>
-      <div class="shortcut-card-actions">
-        <button class="shortcut-open-btn" onclick="window.open('${s.url}','_blank')">열기 ↗</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteShortcut(${s.id})">삭제</button>
-      </div>
-    </div>`).join('');
+  dd.innerHTML = shortcuts.map(s => `
+    <div class="sc-dd-item">
+      <a href="${s.url}" target="_blank" rel="noopener" class="sc-dd-link">
+        <span class="sc-dd-name">${s.name}</span>
+        <span class="sc-dd-url">${s.url}</span>
+      </a>
+      <button class="sc-dd-del" onclick="deleteShortcut(${s.id})" title="삭제">×</button>
+    </div>`).join('') + `
+    <div class="sc-dd-add-row">
+      <input id="scDdName" placeholder="이름" class="sc-dd-input">
+      <input id="scDdUrl"  placeholder="URL"  class="sc-dd-input">
+      <button class="sc-dd-add-btn" onclick="addShortcutFromDropdown()">추가</button>
+    </div>`;
+}
+
+function toggleShortcutDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('shortcutDropdown');
+  const isOpen = dd.classList.contains('open');
+  if (!isOpen) renderShortcuts();
+  dd.classList.toggle('open', !isOpen);
+}
+
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('shortcutDropdownWrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('shortcutDropdown')?.classList.remove('open');
+  }
+});
+
+async function addShortcutFromDropdown() {
+  const name = document.getElementById('scDdName')?.value.trim();
+  const url  = document.getElementById('scDdUrl')?.value.trim();
+  if (!name || !url) { alert('이름과 URL을 모두 입력하세요'); return; }
+  if (currentUser) {
+    try {
+      const data = await fetch('/api/shortcuts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, url }),
+      }).then(r => r.json());
+      shortcuts.push(data);
+    } catch(e) { shortcuts.push({ id: Date.now(), name, url }); }
+  } else {
+    shortcuts.push({ id: Date.now(), name, url });
+  }
+  localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts));
+  renderShortcuts();
 }
 
 async function addShortcut() {
-  const name = document.getElementById('scNameInput').value.trim();
-  const url  = document.getElementById('scUrlInput').value.trim();
+  // 설정 탭 입력 (존재할 경우 fallback)
+  const nameEl = document.getElementById('scNameInput');
+  const urlEl  = document.getElementById('scUrlInput');
+  const name = nameEl?.value.trim();
+  const url  = urlEl?.value.trim();
   if (!name || !url) { alert('사이트 이름과 URL을 모두 입력하세요'); return; }
   if (currentUser) {
     try {
@@ -2307,8 +2349,8 @@ async function addShortcut() {
     shortcuts.push({ id: Date.now(), name, url });
   }
   localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts));
-  document.getElementById('scNameInput').value = '';
-  document.getElementById('scUrlInput').value = '';
+  if (nameEl) nameEl.value = '';
+  if (urlEl)  urlEl.value  = '';
   renderShortcuts();
 }
 
