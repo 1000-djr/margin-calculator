@@ -32,11 +32,25 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
         u.status,
         u.is_admin,
         u.created_at,
-        COALESCE(SUM(o.payment_amount + o.shipping_fee), 0)::BIGINT AS total_revenue,
-        COUNT(DISTINCT o.id)::INTEGER                                AS total_orders
+        COALESCE(o.total_before, 0)      AS total_revenue_before,
+        COALESCE(o.total_orders, 0)      AS total_orders,
+        COALESCE(ar.total_actual_ad, 0)  AS total_actual_ad_cost,
+        COALESCE(c.total_coupon, 0)      AS total_coupon_discount
       FROM users u
-      LEFT JOIN orders o ON o.user_id = u.id AND o.is_excluded = FALSE
-      GROUP BY u.id
+      LEFT JOIN (
+        SELECT user_id,
+               SUM(payment_amount + shipping_fee)::BIGINT AS total_before,
+               COUNT(*)::INTEGER                          AS total_orders
+        FROM orders WHERE is_excluded = FALSE GROUP BY user_id
+      ) o ON o.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, SUM(actual_ad_cost)::NUMERIC(14,2) AS total_actual_ad
+        FROM ad_reports GROUP BY user_id
+      ) ar ON ar.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, SUM(discount_amount)::NUMERIC(14,2) AS total_coupon
+        FROM coupons GROUP BY user_id
+      ) c ON c.user_id = u.id
       ORDER BY u.created_at DESC
     `);
     res.json(rows);

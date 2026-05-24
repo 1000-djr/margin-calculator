@@ -36,7 +36,7 @@ main{max-width:1100px;margin:0 auto;padding:32px 24px}
 .section-title{font-size:17px;font-weight:600;margin-bottom:14px;color:#1d1d1f}
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
-.table-wrap{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;margin-bottom:32px}
+.table-wrap{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow-x:auto;margin-bottom:32px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead{background:#f5f5f7}
 thead th{padding:12px 16px;text-align:left;font-weight:500;color:#8e8e93;
@@ -132,8 +132,10 @@ tbody td{padding:13px 16px;vertical-align:middle}
     <div class="stat-card"><div class="label">승인된 유저</div><div class="value green" id="statActive">—</div></div>
     <div class="stat-card"><div class="label">대기 중</div><div class="value" id="statPending" style="color:#ff9f0a">—</div></div>
     <div class="stat-card"><div class="label">차단됨</div><div class="value red" id="statBlocked">—</div></div>
-    <div class="stat-card"><div class="label">전체 주문 수</div><div class="value" id="statOrders">—</div></div>
-    <div class="stat-card"><div class="label">전체 매출 합계</div><div class="value" id="statRevenue">—</div></div>
+    <div class="stat-card"><div class="label">전체 매출(쿠폰전)</div><div class="value" id="statRevenueBefore">—</div></div>
+    <div class="stat-card"><div class="label">전체 매출(쿠폰후)</div><div class="value" id="statRevenueAfter">—</div></div>
+    <div class="stat-card"><div class="label">전체 광고비(실)</div><div class="value red" id="statAdCost">—</div></div>
+    <div class="stat-card"><div class="label">전체 마진(단순)</div><div class="value green" id="statMargin">—</div></div>
   </div>
 
   <div class="section-title">유저 목록</div>
@@ -141,16 +143,21 @@ tbody td{padding:13px 16px;vertical-align:middle}
     <table>
       <thead>
         <tr>
-          <th>유저</th>
+          <th>이름</th>
+          <th>이메일</th>
           <th>가입일</th>
           <th>상태</th>
-          <th>주문 수</th>
-          <th>매출 합계</th>
-          <th>액션</th>
+          <th>총매출(쿠폰전)</th>
+          <th>총매출(쿠폰후)</th>
+          <th>광고비(실)</th>
+          <th>마진<span style="font-size:10px;font-weight:400;margin-left:2px">※단순</span></th>
+          <th>마진율</th>
+          <th>승인/차단</th>
+          <th>어드민</th>
         </tr>
       </thead>
       <tbody id="userTbody">
-        <tr><td colspan="6" class="empty"><div class="spinner"></div></td></tr>
+        <tr><td colspan="11" class="empty"><div class="spinner"></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -196,8 +203,25 @@ async function loadUsers(){
     renderStats(allUsers);
     renderTable(allUsers);
   }catch(e){
-    document.getElementById('userTbody').innerHTML=`<tr><td colspan="6" class="empty">오류: ${e.message}</td></tr>`;
+    document.getElementById('userTbody').innerHTML=`<tr><td colspan="11" class="empty">오류: ${e.message}</td></tr>`;
   }
+}
+
+// 유저별 파생 수치 계산
+function calcDerived(u){
+  const before  = Number(u.total_revenue_before)  || 0;
+  const coupon  = Number(u.total_coupon_discount)  || 0;
+  const adCost  = Number(u.total_actual_ad_cost)   || 0;
+  const after   = Math.max(before - coupon, 0);
+  const margin  = after - adCost;                          // 단순 마진 (원가·수수료 미포함)
+  const rate    = after > 0 ? (margin / after * 100) : 0;
+  return { before, coupon, adCost, after, margin, rate };
+}
+
+function fmtW(n){return '₩'+fmt(Math.round(n));}
+function fmtRate(r){
+  const c = r>=0?'#34c759':'#ff3b30';
+  return `<span style="color:${c};font-weight:600">${r>=0?'+':''}${r.toFixed(1)}%</span>`;
 }
 
 function renderStats(users){
@@ -205,40 +229,55 @@ function renderStats(users){
   document.getElementById('statActive').textContent=users.filter(u=>u.status==='active').length;
   document.getElementById('statPending').textContent=users.filter(u=>u.status==='pending').length;
   document.getElementById('statBlocked').textContent=users.filter(u=>u.status==='blocked').length;
-  document.getElementById('statOrders').textContent=fmt(users.reduce((s,u)=>s+Number(u.total_orders),0));
-  document.getElementById('statRevenue').textContent='₩'+fmt(users.reduce((s,u)=>s+Number(u.total_revenue),0));
+  const totals = users.reduce((s,u)=>{
+    const d=calcDerived(u);
+    s.before+=d.before; s.after+=d.after; s.ad+=d.adCost; s.margin+=d.margin;
+    return s;
+  },{before:0,after:0,ad:0,margin:0});
+  document.getElementById('statRevenueBefore').textContent=fmtW(totals.before);
+  document.getElementById('statRevenueAfter').textContent=fmtW(totals.after);
+  document.getElementById('statAdCost').textContent=fmtW(totals.ad);
+  document.getElementById('statMargin').textContent=fmtW(totals.margin);
 }
 
 function renderTable(users){
   const tbody=document.getElementById('userTbody');
-  if(!users.length){tbody.innerHTML='<tr><td colspan="6" class="empty">유저가 없습니다.</td></tr>';return;}
-  tbody.innerHTML=users.map(u=>`
+  if(!users.length){tbody.innerHTML='<tr><td colspan="11" class="empty">유저가 없습니다.</td></tr>';return;}
+  tbody.innerHTML=users.map(u=>{
+    const d=calcDerived(u);
+    return `
     <tr onclick="openDetail(${u.id})">
       <td>
-        ${u.picture?`<img class="avatar" src="${u.picture}" onerror="this.style.display='none'">`:
-          `<span class="avatar-placeholder">${(u.name||'?')[0]}</span>`}
-        <span class="user-name">${u.name||'—'}</span>
-        <div class="user-email">${u.email||'—'}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${u.picture?`<img class="avatar" src="${u.picture}" onerror="this.style.display='none'">`:
+            `<span class="avatar-placeholder">${(u.name||'?')[0]}</span>`}
+          <span class="user-name">${u.name||'—'}</span>
+        </div>
       </td>
+      <td><span class="user-email" style="font-size:12px;color:#8e8e93">${u.email||'—'}</span></td>
       <td>${fmtDate(u.created_at)}</td>
       <td>
         ${badgeHtml(u.status)}
         ${u.is_admin?'<span class="badge admin" style="margin-left:4px">어드민</span>':''}
       </td>
-      <td>${fmt(u.total_orders)}</td>
-      <td>₩${fmt(u.total_revenue)}</td>
+      <td>${fmtW(d.before)}</td>
+      <td>${fmtW(d.after)}</td>
+      <td style="color:#ff3b30">${fmtW(d.adCost)}</td>
+      <td style="color:${d.margin>=0?'#34c759':'#ff3b30'};font-weight:600">${fmtW(d.margin)}</td>
+      <td>${fmtRate(d.rate)}</td>
       <td onclick="event.stopPropagation()">
         <div class="btn-group">
           ${u.status!=='active' ?`<button class="btn btn-approve" onclick="setStatus(${u.id},'active')">승인</button>`:''}
-          ${u.status!=='pending'?`<button class="btn btn-pending" onclick="setStatus(${u.id},'pending')">대기</button>`:''}
           ${u.status!=='blocked'?`<button class="btn btn-block"   onclick="setStatus(${u.id},'blocked')">차단</button>`:''}
-          ${u.is_admin
-            ?`<button class="btn btn-unadmin" onclick="toggleAdmin(${u.id},false)">어드민 해제</button>`
-            :`<button class="btn btn-admin"   onclick="toggleAdmin(${u.id},true)">어드민 부여</button>`}
         </div>
       </td>
-    </tr>
-  `).join('');
+      <td onclick="event.stopPropagation()">
+        ${u.is_admin
+          ?`<button class="btn btn-unadmin" onclick="toggleAdmin(${u.id},false)">해제</button>`
+          :`<button class="btn btn-admin"   onclick="toggleAdmin(${u.id},true)">부여</button>`}
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 function badgeHtml(status){
