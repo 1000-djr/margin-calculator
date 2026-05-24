@@ -31,7 +31,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
         GREATEST(
           o.payment_amount + o.shipping_fee
           - COALESCE((
-              SELECT SUM(c.discount_amount)
+              SELECT c.discount_amount
               FROM coupons c
               WHERE c.user_id = o.user_id
                 AND c.option_ids @> jsonb_build_array(o.option_id)
@@ -42,6 +42,8 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
                 AND (c.end_at IS NULL
                   OR SUBSTRING(o.order_date,1,10)
                      <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+              ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
+              LIMIT 1
             ), 0),
           0
         )                                                 AS net_sale,
@@ -165,7 +167,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
         GREATEST(
           o.payment_amount + o.shipping_fee
           - COALESCE((
-              SELECT SUM(c.discount_amount)
+              SELECT c.discount_amount
               FROM coupons c
               WHERE c.user_id = o.user_id
                 AND c.option_ids @> jsonb_build_array(o.option_id)
@@ -176,6 +178,8 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
                 AND (c.end_at IS NULL
                   OR SUBSTRING(o.order_date,1,10)
                      <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+              ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
+              LIMIT 1
             ), 0),
           0
         )                                                 AS net_sale,
