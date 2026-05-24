@@ -4,8 +4,9 @@ const session    = require('express-session');
 const connectPg  = require('connect-pg-simple');
 const { initDB, pool } = require('./db');
 const { router: authRouter, passport } = require('./auth');
-const apiRouter  = require('./api');
-const scheduler  = require('./scheduler');
+const apiRouter   = require('./api');
+const adminRouter = require('./admin');
+const scheduler   = require('./scheduler');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -35,8 +36,13 @@ app.use(passport.session());
 // ─── 라우터 ──────────────────────────────────────────────────────────────────
 app.use('/', authRouter);
 app.use('/api', apiRouter);
+app.use('/', adminRouter);
 
 app.get('/', (req, res) => {
+  // 로그인된 유저 중 pending/blocked이면 대기 페이지로
+  if (req.user && req.user.status !== 'active') {
+    return res.redirect('/pending');
+  }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 

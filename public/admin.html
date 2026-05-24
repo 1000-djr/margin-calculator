@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin — 마진계산기</title>
+<style>
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+     background:#f5f5f7;color:#1d1d1f;min-height:100vh}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+header{background:#fff;border-bottom:1px solid #e5e5ea;
+       padding:0 32px;height:52px;display:flex;align-items:center;
+       justify-content:space-between;position:sticky;top:0;z-index:100}
+.logo{font-size:15px;font-weight:600;color:#1d1d1f;display:flex;align-items:center;gap:8px}
+.logo span{font-size:11px;font-weight:500;background:#ff3b30;color:#fff;
+           padding:2px 7px;border-radius:4px;letter-spacing:.3px}
+.header-right{display:flex;align-items:center;gap:16px}
+.back-btn{font-size:13px;color:#0071e3;text-decoration:none;font-weight:500}
+.back-btn:hover{text-decoration:underline}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+main{max-width:1100px;margin:0 auto;padding:32px 24px}
+
+/* ── Stats Cards ─────────────────────────────────────────────────────────── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:28px}
+.stat-card{background:#fff;border-radius:14px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.stat-card .label{font-size:12px;color:#8e8e93;margin-bottom:6px}
+.stat-card .value{font-size:24px;font-weight:600;color:#1d1d1f}
+.stat-card .value.green{color:#34c759}
+.stat-card .value.red{color:#ff3b30}
+
+/* ── Section Title ───────────────────────────────────────────────────────── */
+.section-title{font-size:17px;font-weight:600;margin-bottom:14px;color:#1d1d1f}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.table-wrap{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;margin-bottom:32px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{background:#f5f5f7}
+thead th{padding:12px 16px;text-align:left;font-weight:500;color:#8e8e93;
+         font-size:12px;border-bottom:1px solid #e5e5ea;white-space:nowrap}
+tbody tr{border-bottom:1px solid #f2f2f7;cursor:pointer;transition:background .12s}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:#f5f5f7}
+tbody td{padding:13px 16px;vertical-align:middle}
+
+/* ── Avatar ──────────────────────────────────────────────────────────────── */
+.avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px}
+.avatar-placeholder{width:30px;height:30px;border-radius:50%;background:#e5e5ea;
+                    display:inline-flex;align-items:center;justify-content:center;
+                    font-size:12px;color:#8e8e93;margin-right:8px;vertical-align:middle}
+.user-name{font-weight:500}
+.user-email{font-size:11px;color:#8e8e93;margin-top:2px}
+
+/* ── Status Badge ────────────────────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;
+       font-size:11px;font-weight:500;white-space:nowrap}
+.badge.active  {background:#d1fae5;color:#065f46}
+.badge.pending {background:#fef3c7;color:#92400e}
+.badge.blocked {background:#fee2e2;color:#991b1b}
+.badge.admin   {background:#ede9fe;color:#5b21b6}
+
+/* ── Action Buttons ──────────────────────────────────────────────────────── */
+.btn-group{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:500;
+     cursor:pointer;transition:opacity .15s;white-space:nowrap}
+.btn:hover{opacity:.8}
+.btn:disabled{opacity:.4;cursor:default}
+.btn-approve{background:#34c759;color:#fff}
+.btn-block  {background:#ff3b30;color:#fff}
+.btn-pending{background:#ff9f0a;color:#fff}
+.btn-admin  {background:#5856d6;color:#fff}
+.btn-unadmin{background:#e5e5ea;color:#1d1d1f}
+
+/* ── Detail Modal ────────────────────────────────────────────────────────── */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);
+                display:flex;align-items:center;justify-content:center;z-index:200;
+                opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-backdrop.open{opacity:1;pointer-events:auto}
+.modal{background:#fff;border-radius:18px;padding:28px 28px 24px;
+       max-width:560px;width:92%;max-height:85vh;overflow-y:auto;
+       transform:translateY(16px);transition:transform .2s;
+       box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.modal-backdrop.open .modal{transform:translateY(0)}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.modal-title{font-size:16px;font-weight:600}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#8e8e93;
+             width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.modal-close:hover{background:#f2f2f7}
+.detail-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2f2f7;font-size:13px}
+.detail-row:last-child{border-bottom:none}
+.detail-row .key{color:#8e8e93;font-weight:500}
+.detail-row .val{font-weight:500;text-align:right}
+.monthly-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.monthly-table th{background:#f5f5f7;padding:7px 10px;text-align:left;color:#8e8e93;font-weight:500}
+.monthly-table td{padding:7px 10px;border-bottom:1px solid #f5f5f7}
+.section-sub{font-size:13px;font-weight:600;margin:16px 0 6px}
+
+/* ── Empty State ─────────────────────────────────────────────────────────── */
+.empty{text-align:center;padding:48px;color:#8e8e93;font-size:14px}
+
+/* ── Loading ─────────────────────────────────────────────────────────────── */
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid #e5e5ea;
+         border-top-color:#0071e3;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(60px);
+       background:#1d1d1f;color:#fff;padding:10px 20px;border-radius:980px;
+       font-size:13px;font-weight:500;transition:transform .25s;pointer-events:none;z-index:300}
+#toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span>ADMIN</span>
+    마진계산기 관리자
+  </div>
+  <div class="header-right">
+    <a href="/" class="back-btn">← 앱으로 돌아가기</a>
+  </div>
+</header>
+
+<main>
+  <!-- 요약 카드 -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card"><div class="label">전체 유저</div><div class="value" id="statTotal">—</div></div>
+    <div class="stat-card"><div class="label">승인된 유저</div><div class="value green" id="statActive">—</div></div>
+    <div class="stat-card"><div class="label">대기 중</div><div class="value" id="statPending" style="color:#ff9f0a">—</div></div>
+    <div class="stat-card"><div class="label">차단됨</div><div class="value red" id="statBlocked">—</div></div>
+    <div class="stat-card"><div class="label">전체 주문 수</div><div class="value" id="statOrders">—</div></div>
+    <div class="stat-card"><div class="label">전체 매출 합계</div><div class="value" id="statRevenue">—</div></div>
+  </div>
+
+  <div class="section-title">유저 목록</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>유저</th>
+          <th>가입일</th>
+          <th>상태</th>
+          <th>주문 수</th>
+          <th>매출 합계</th>
+          <th>액션</th>
+        </tr>
+      </thead>
+      <tbody id="userTbody">
+        <tr><td colspan="6" class="empty"><div class="spinner"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- 상세 모달 -->
+<div class="modal-backdrop" id="detailBackdrop" onclick="closeDetail(event)">
+  <div class="modal" id="detailModal">
+    <div class="modal-header">
+      <div class="modal-title" id="detailTitle">유저 상세</div>
+      <button class="modal-close" onclick="closeDetailBtn()">✕</button>
+    </div>
+    <div id="detailBody"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let allUsers = [];
+
+// ── 유틸 ──────────────────────────────────────────────────────────────────────
+function fmt(n){return Number(n).toLocaleString('ko-KR');}
+function fmtDate(d){if(!d)return'—';return d.slice(0,10);}
+function showToast(msg,dur=2200){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+// ── 데이터 로드 ───────────────────────────────────────────────────────────────
+async function loadUsers(){
+  try{
+    const r=await fetch('/admin/users');
+    if(!r.ok){
+      if(r.status===401||r.status===403){
+        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,sans-serif;color:#ff3b30;font-size:15px">접근 권한이 없습니다.</div>';
+        return;
+      }
+      throw new Error(await r.text());
+    }
+    allUsers=await r.json();
+    renderStats(allUsers);
+    renderTable(allUsers);
+  }catch(e){
+    document.getElementById('userTbody').innerHTML=`<tr><td colspan="6" class="empty">오류: ${e.message}</td></tr>`;
+  }
+}
+
+function renderStats(users){
+  document.getElementById('statTotal').textContent=users.length;
+  document.getElementById('statActive').textContent=users.filter(u=>u.status==='active').length;
+  document.getElementById('statPending').textContent=users.filter(u=>u.status==='pending').length;
+  document.getElementById('statBlocked').textContent=users.filter(u=>u.status==='blocked').length;
+  document.getElementById('statOrders').textContent=fmt(users.reduce((s,u)=>s+Number(u.total_orders),0));
+  document.getElementById('statRevenue').textContent='₩'+fmt(users.reduce((s,u)=>s+Number(u.total_revenue),0));
+}
+
+function renderTable(users){
+  const tbody=document.getElementById('userTbody');
+  if(!users.length){tbody.innerHTML='<tr><td colspan="6" class="empty">유저가 없습니다.</td></tr>';return;}
+  tbody.innerHTML=users.map(u=>`
+    <tr onclick="openDetail(${u.id})">
+      <td>
+        ${u.picture?`<img class="avatar" src="${u.picture}" onerror="this.style.display='none'">`:
+          `<span class="avatar-placeholder">${(u.name||'?')[0]}</span>`}
+        <span class="user-name">${u.name||'—'}</span>
+        <div class="user-email">${u.email||'—'}</div>
+      </td>
+      <td>${fmtDate(u.created_at)}</td>
+      <td>
+        ${badgeHtml(u.status)}
+        ${u.is_admin?'<span class="badge admin" style="margin-left:4px">어드민</span>':''}
+      </td>
+      <td>${fmt(u.total_orders)}</td>
+      <td>₩${fmt(u.total_revenue)}</td>
+      <td onclick="event.stopPropagation()">
+        <div class="btn-group">
+          ${u.status!=='active' ?`<button class="btn btn-approve" onclick="setStatus(${u.id},'active')">승인</button>`:''}
+          ${u.status!=='pending'?`<button class="btn btn-pending" onclick="setStatus(${u.id},'pending')">대기</button>`:''}
+          ${u.status!=='blocked'?`<button class="btn btn-block"   onclick="setStatus(${u.id},'blocked')">차단</button>`:''}
+          ${u.is_admin
+            ?`<button class="btn btn-unadmin" onclick="toggleAdmin(${u.id},false)">어드민 해제</button>`
+            :`<button class="btn btn-admin"   onclick="toggleAdmin(${u.id},true)">어드민 부여</button>`}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function badgeHtml(status){
+  const map={active:'승인',pending:'대기',blocked:'차단'};
+  return `<span class="badge ${status}">${map[status]||status}</span>`;
+}
+
+// ── 상태 변경 ─────────────────────────────────────────────────────────────────
+async function setStatus(id,status){
+  try{
+    const r=await fetch(`/admin/users/${id}/status`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status})
+    });
+    if(!r.ok)throw new Error(await r.text());
+    const updated=await r.json();
+    const u=allUsers.find(x=>x.id===id);
+    if(u)u.status=updated.status;
+    renderTable(allUsers);renderStats(allUsers);
+    showToast(`상태가 '${status}'로 변경되었습니다.`);
+  }catch(e){showToast('오류: '+e.message);}
+}
+
+async function toggleAdmin(id,isAdmin){
+  try{
+    const r=await fetch(`/admin/users/${id}/admin`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({is_admin:isAdmin})
+    });
+    if(!r.ok)throw new Error(await r.text());
+    const updated=await r.json();
+    const u=allUsers.find(x=>x.id===id);
+    if(u)u.is_admin=updated.is_admin;
+    renderTable(allUsers);
+    showToast(isAdmin?'어드민 권한을 부여했습니다.':'어드민 권한을 해제했습니다.');
+  }catch(e){showToast('오류: '+e.message);}
+}
+
+// ── 상세 모달 ─────────────────────────────────────────────────────────────────
+async function openDetail(id){
+  const backdrop=document.getElementById('detailBackdrop');
+  document.getElementById('detailTitle').textContent='유저 상세 로드 중…';
+  document.getElementById('detailBody').innerHTML='<div style="text-align:center;padding:32px"><div class="spinner"></div></div>';
+  backdrop.classList.add('open');
+  try{
+    const r=await fetch(`/admin/users/${id}`);
+    if(!r.ok)throw new Error(await r.text());
+    const data=await r.json();
+    renderDetail(data);
+  }catch(e){
+    document.getElementById('detailBody').innerHTML=`<p style="color:#ff3b30;font-size:13px">오류: ${e.message}</p>`;
+  }
+}
+
+function renderDetail({user,monthly_stats,ad_stats}){
+  document.getElementById('detailTitle').textContent=user.name||user.email||'유저 상세';
+  const monthly=monthly_stats.map(m=>`
+    <tr>
+      <td>${(m.month||'').slice(0,7)}</td>
+      <td>${fmt(m.orders)}</td>
+      <td>₩${fmt(m.revenue)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:12px">데이터 없음</td></tr>';
+
+  document.getElementById('detailBody').innerHTML=`
+    <div class="detail-row"><span class="key">이메일</span><span class="val">${user.email||'—'}</span></div>
+    <div class="detail-row"><span class="key">가입일</span><span class="val">${fmtDate(user.created_at)}</span></div>
+    <div class="detail-row"><span class="key">상태</span><span class="val">${badgeHtml(user.status)}${user.is_admin?' <span class="badge admin">어드민</span>':''}</span></div>
+    <div class="detail-row"><span class="key">총 광고비</span><span class="val">₩${fmt(ad_stats?.total_ad_cost||0)}</span></div>
+    <div class="detail-row"><span class="key">실 광고비</span><span class="val">₩${fmt(ad_stats?.total_actual_ad_cost||0)}</span></div>
+    <div class="detail-row"><span class="key">총 클릭수</span><span class="val">${fmt(ad_stats?.total_clicks||0)}</span></div>
+    <div class="section-sub">월별 매출</div>
+    <table class="monthly-table">
+      <thead><tr><th>월</th><th>주문수</th><th>매출</th></tr></thead>
+      <tbody>${monthly}</tbody>
+    </table>
+  `;
+}
+
+function closeDetail(e){
+  if(e.target===document.getElementById('detailBackdrop'))closeDetailBtn();
+}
+function closeDetailBtn(){
+  document.getElementById('detailBackdrop').classList.remove('open');
+}
+
+// ── 초기화 ────────────────────────────────────────────────────────────────────
+loadUsers();
+</script>
+</body>
+</html>
