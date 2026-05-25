@@ -918,8 +918,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="field"><label>할인금액 (원)</label><input type="number" id="couponDiscount" placeholder="0" min="0"></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>사용기간 시작일시</label><input type="datetime-local" id="couponStartAt" step="60"></div>
-        <div class="field"><label>사용기간 종료일시</label><input type="datetime-local" id="couponEndAt" step="60"></div>
+        <div class="field"><label>사용기간 시작일시</label>
+          <div style="display:flex;gap:6px">
+            <input type="date" id="couponStartDate" style="flex:1">
+            <input type="time" id="couponStartTime" style="width:90px">
+          </div>
+        </div>
+        <div class="field"><label>사용기간 종료일시</label>
+          <div style="display:flex;gap:6px">
+            <input type="date" id="couponEndDate" style="flex:1">
+            <input type="time" id="couponEndTime" style="width:90px">
+          </div>
+        </div>
       </div>
       <div class="field">
         <label>적용 옵션ID <span style="font-weight:400;color:var(--text-dim)">(쉼표 또는 엔터로 구분)</span></label>
@@ -3562,7 +3572,8 @@ function parseOptionIds(raw) {
 
 function resetCouponForm() {
   editingCouponId = null;
-  ['couponName','couponCouponId','couponDiscount','couponStartAt','couponEndAt'].forEach(id => {
+  ['couponName','couponCouponId','couponDiscount',
+   'couponStartDate','couponStartTime','couponEndDate','couponEndTime'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -3577,24 +3588,28 @@ function editCoupon(id) {
   if (!c) return;
   editingCouponId = id;
 
-  // UTC ISO → datetime-local 입력값 (KST 로컬 시간 기준 "YYYY-MM-DDTHH:mm")
-  const toLocalDatetime = (utcStr) => {
-    if (!utcStr) return '';
+  // UTC ISO → KST 로컬 시간으로 date/time 분리
+  const fillDatetime = (utcStr, dateId, timeId) => {
+    const dateEl = document.getElementById(dateId);
+    const timeEl = document.getElementById(timeId);
+    if (!dateEl || !timeEl) return;
+    if (!utcStr) { dateEl.value = ''; timeEl.value = ''; return; }
     const d = new Date(utcStr);
-    if (isNaN(d.getTime())) return '';
+    if (isNaN(d.getTime())) { dateEl.value = ''; timeEl.value = ''; return; }
     const Y  = d.getFullYear();
     const Mo = String(d.getMonth() + 1).padStart(2, '0');
     const D  = String(d.getDate()).padStart(2, '0');
     const H  = String(d.getHours()).padStart(2, '0');
     const Mi = String(d.getMinutes()).padStart(2, '0');
-    return `${Y}-${Mo}-${D}T${H}:${Mi}`;
+    dateEl.value = `${Y}-${Mo}-${D}`;
+    timeEl.value = `${H}:${Mi}`;
   };
 
   document.getElementById('couponName').value       = c.name || '';
   document.getElementById('couponCouponId').value   = c.coupon_id || '';
   document.getElementById('couponDiscount').value   = c.discount_amount || '';
-  document.getElementById('couponStartAt').value    = toLocalDatetime(c.start_at);
-  document.getElementById('couponEndAt').value      = toLocalDatetime(c.end_at);
+  fillDatetime(c.start_at, 'couponStartDate', 'couponStartTime');
+  fillDatetime(c.end_at,   'couponEndDate',   'couponEndTime');
   document.getElementById('couponOptionIds').value  = Array.isArray(c.option_ids) ? c.option_ids.join('\n') : '';
   document.getElementById('couponFormTitle').textContent = '쿠폰 수정';
   document.getElementById('couponSaveBtn').textContent   = '수정 저장';
@@ -3606,9 +3621,17 @@ async function saveCoupon() {
   const name            = document.getElementById('couponName').value.trim();
   const coupon_id       = document.getElementById('couponCouponId').value.trim();
   const discount_amount = parseFloat(document.getElementById('couponDiscount').value) || 0;
-  const start_at        = document.getElementById('couponStartAt').value;
-  const end_at          = document.getElementById('couponEndAt').value;
   const option_ids      = parseOptionIds(document.getElementById('couponOptionIds').value);
+
+  // date + time 합쳐서 로컬 시간 기준 ISO 문자열 생성
+  const combineDateTime = (dateId, timeId) => {
+    const dateVal = document.getElementById(dateId)?.value;
+    const timeVal = document.getElementById(timeId)?.value || '00:00';
+    if (!dateVal) return '';
+    return new Date(`${dateVal}T${timeVal}`).toISOString();
+  };
+  const start_at = combineDateTime('couponStartDate', 'couponStartTime');
+  const end_at   = combineDateTime('couponEndDate',   'couponEndTime');
 
   if (!name)            { alert('쿠폰명을 입력하세요'); return; }
   if (!discount_amount) { alert('할인금액을 입력하세요'); return; }
