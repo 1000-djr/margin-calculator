@@ -162,7 +162,10 @@ router.get('/orders/summary', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT
         TO_CHAR(MAX(created_at) AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS last_uploaded,
-        MAX(REPLACE(LEFT(order_date, 10), '.', '-'))                              AS latest_order_date
+        (SELECT order_date FROM orders
+          WHERE user_id = $1
+          ORDER BY REPLACE(LEFT(order_date, 10), '.', '-') DESC, order_date DESC
+          LIMIT 1)                                                                 AS latest_order_date
       FROM orders
       WHERE user_id = $1
     `, [req.user.id]);
