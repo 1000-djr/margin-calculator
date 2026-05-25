@@ -299,6 +299,17 @@ router.delete('/orders', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.delete('/orders/:id', requireAuth, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM orders WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: '주문을 찾을 수 없습니다.' });
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 광고보고서 ───────────────────────────────────────────────────────────────
 router.get('/ad-reports', requireAuth, async (req, res) => {
   try {

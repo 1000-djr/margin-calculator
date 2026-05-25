@@ -2785,7 +2785,7 @@ function renderOrders() {
   if (!thead || !tbody) return;
 
   const activeCols = ordersVisibleCols || ORDER_DISPLAY_COLS;
-  thead.innerHTML = '<tr><th>인식여부</th>' + activeCols.map(c => `<th>${c}</th>`).join('') + '</tr>';
+  thead.innerHTML = '<tr><th>인식여부</th>' + activeCols.map(c => `<th>${c}</th>`).join('') + '<th></th></tr>';
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="${activeCols.length + 1}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     return;
@@ -2802,6 +2802,10 @@ function renderOrders() {
           <div style="position:absolute;top:2px;left:${thumbLeft};width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s;box-shadow:0 1px 3px #0004"></div>
         </div>
       </div>
+    </td>`;
+    const dbId = o['번호'] || '';
+    const deleteBtn = `<td style="text-align:center;white-space:nowrap">
+      <button onclick="deleteOrder(${dbId ? dbId : 'null'},'${safeNum}')" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px;padding:2px 6px" title="삭제">🗑</button>
     </td>`;
     return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => {
       if (c === '쿠폰적용매출') {
@@ -2825,8 +2829,29 @@ function renderOrders() {
         }
       }
       return `<td>${cellVal}</td>`;
-    }).join('') + '</tr>';
+    }).join('') + deleteBtn + '</tr>';
   }).join('');
+}
+
+async function deleteOrder(dbId, orderNumber) {
+  const label = orderNumber ? `주문번호: ${orderNumber}` : `DB ID: ${dbId}`;
+  if (!confirm(`이 주문건을 삭제할까요?\n(${label})`)) return;
+
+  // 로컬에서 제거
+  orders = orders.filter(o => String(o['번호']) !== String(dbId) && o['주문번호'] !== orderNumber);
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+
+  // DB에서 삭제
+  if (currentUser && dbId) {
+    try {
+      const res = await fetch(`/api/orders/${dbId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('[deleteOrder] DB 삭제 실패:', err.error);
+      }
+    } catch(e) { console.error('[deleteOrder] 네트워크 오류:', e); }
+  }
+  renderOrders();
 }
 
 async function deleteAllOrders() {
