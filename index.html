@@ -945,7 +945,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table" style="white-space:normal">
         <thead><tr>
-          <th>쿠폰명</th><th>쿠폰ID</th><th>할인금액</th><th>사용기간</th><th>옵션ID 수</th><th>상태</th><th></th>
+          <th>쿠폰명</th><th>쿠폰ID</th><th>할인금액</th><th id="couponPeriodTh" onclick="toggleCouponSort()" style="cursor:pointer;user-select:none">사용기간 <span id="couponSortIcon"></span></th><th>옵션ID 수</th><th>상태</th><th></th>
         </tr></thead>
         <tbody id="couponTbody"></tbody>
       </table>
@@ -1232,6 +1232,7 @@ let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let editingCouponId = null;
+let couponSortDir = null; // null | 'asc' | 'desc'
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
 let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
@@ -3570,6 +3571,11 @@ function parseOptionIds(raw) {
   return raw.split(/[\n,]/).map(s => s.trim()).filter(Boolean);
 }
 
+function toggleCouponSort() {
+  couponSortDir = couponSortDir === 'asc' ? 'desc' : 'asc';
+  renderCoupons();
+}
+
 function resetCouponForm() {
   editingCouponId = null;
   ['couponName','couponCouponId','couponDiscount',
@@ -3722,10 +3728,22 @@ function renderCoupons() {
   const totalPayment = orders.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
   const now = new Date();
 
+  // 정렬 아이콘 업데이트
+  const iconEl = document.getElementById('couponSortIcon');
+  if (iconEl) iconEl.textContent = couponSortDir === 'asc' ? '▲' : couponSortDir === 'desc' ? '▼' : '';
+
+  // start_at 기준 정렬
+  const sorted = [...coupons].sort((a, b) => {
+    if (!couponSortDir) return 0;
+    const ta = a.start_at ? new Date(a.start_at).getTime() : 0;
+    const tb = b.start_at ? new Date(b.start_at).getTime() : 0;
+    return couponSortDir === 'asc' ? ta - tb : tb - ta;
+  });
+
   if (!coupons.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px">등록된 쿠폰이 없습니다</td></tr>`;
   } else {
-    tbody.innerHTML = coupons.map(c => {
+    tbody.innerHTML = sorted.map(c => {
       const applied = getCouponAppliedOrders(c);
       const discountTotal = (c.discount_amount || 0) * applied.length;
       totalDiscount += discountTotal;
