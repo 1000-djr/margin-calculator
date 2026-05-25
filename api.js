@@ -947,9 +947,28 @@ router.get('/returns', requireAuth, async (req, res) => {
 router.post('/returns/bulk', requireAuth, async (req, res) => {
   const items = req.body;
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items 배열 필수' });
+
+  // 첫 번째 행의 전체 키 출력 (실제 컬럼명 확인용)
+  if (items[0]?.raw_data) {
+    console.log('[returns/bulk] raw_data 첫 번째 행 키:', Object.keys(items[0].raw_data));
+  }
+  console.log('[returns/bulk] items[0] 전체 키:', Object.keys(items[0] || {}));
+
   let inserted = 0, skipped = 0;
+  const orderNums = [];
+
   try {
     for (const r of items) {
+      // 실제 쿠팡 컬럼명 기준으로 직접 추출 (raw_data에서 재추출)
+      const raw = r.raw_data || {};
+      const productName  = raw['노출상품명'] || raw['상품명']  || r.product_name  || null;
+      const optionName   = raw['옵션']       || raw['옵션명']  || r.option_name   || null;
+      const orderNumber  = raw['주문번호']   || r.order_number || null;
+
+      console.log('[returns/bulk] productName:', productName, '| optionName:', optionName, '| orderNumber:', orderNumber);
+
+      if (orderNumber) orderNums.push(orderNumber);
+
       const result = await pool.query(`
         INSERT INTO returns (
           user_id, received_at, receipt_number, delivery_status, return_status,
@@ -965,48 +984,49 @@ router.post('/returns/bulk', requireAuth, async (req, res) => {
         ON CONFLICT (user_id, receipt_number) DO NOTHING
       `, [
         req.user.id,
-        r.received_at         || null,
+        r.received_at             || null,
         r.receipt_number,
-        r.delivery_status     || null,
-        r.return_status       || null,
-        r.warehousing_status  || null,
-        r.warehousing_method  || null,
-        r.warehousing_tracking|| null,
-        r.product_name        || null,
-        r.option_name         || null,
-        parseInt(r.quantity)  || 1,
-        r.return_reason       || null,
+        r.delivery_status         || null,
+        r.return_status           || null,
+        r.warehousing_status      || null,
+        r.warehousing_method      || null,
+        r.warehousing_tracking    || null,
+        productName,
+        optionName,
+        parseInt(r.quantity)      || 1,
+        r.return_reason           || null,
         parseInt(r.return_shipping_fee) || 0,
-        r.shipping_fee_burden || null,
-        parseInt(r.refund_amount)       || 0,
-        r.recipient_masked    || null,
-        r.phone_masked        || null,
-        r.return_address_masked     || null,
-        r.collection_address_masked || null,
-        r.order_number        || null,
-        r.expected_ship_date  || null,
-        r.warehousing_complete_date || null,
-        r.return_complete_date      || null,
-        r.receipt_channel     || null,
-        r.option_id           || null,
+        r.shipping_fee_burden     || null,
+        parseInt(r.refund_amount) || 0,
+        r.recipient_masked        || null,
+        r.phone_masked            || null,
+        r.return_address_masked       || null,
+        r.collection_address_masked   || null,
+        orderNumber,
+        r.expected_ship_date      || null,
+        r.warehousing_complete_date   || null,
+        r.return_complete_date        || null,
+        r.receipt_channel         || null,
+        r.option_id               || null,
         r.raw_data ? JSON.stringify(r.raw_data) : null,
       ]);
       if (result.rowCount > 0) inserted++; else skipped++;
     }
 
-    // 업로드된 주문번호 기준으로 orders 테이블에서 반품 자동 미인식 처리
-    const orderNums = items.map(r => r.order_number).filter(Boolean);
+    // 주문번호 기준 orders 테이블 반품 자동 미인식 처리
     let ordersUpdated = 0;
     if (orderNums.length) {
+      console.log('[returns/bulk] 주문 반품 처리 대상 주문번호:', orderNums.length, '건');
       const { rowCount } = await pool.query(`
         UPDATE orders
-           SET is_excluded   = TRUE,
+           SET is_excluded    = TRUE,
                exclusion_type = 'return'
          WHERE user_id = $1
            AND order_number = ANY($2::text[])
            AND is_excluded = FALSE
       `, [req.user.id, orderNums]);
       ordersUpdated = rowCount;
+      console.log('[returns/bulk] orders 반품 처리 완료:', ordersUpdated, '건');
     }
 
     res.json({ inserted, skipped, ordersUpdated });
