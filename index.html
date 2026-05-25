@@ -1236,6 +1236,8 @@ let couponSortDir = null; // null | 'asc' | 'desc'
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
 let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
+let ordersSortCol = '주문일'; // 기본 정렬 컬럼
+let ordersSortDir = 'desc';  // 기본 내림차순
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    || '{}');
 let profitTaxTypeMap   = JSON.parse(localStorage.getItem('profitTaxTypeMap')   || '{}');
@@ -2799,12 +2801,26 @@ function renderOrders() {
   if (!thead || !tbody) return;
 
   const activeCols = ordersVisibleCols || ORDER_DISPLAY_COLS;
-  thead.innerHTML = '<tr><th>인식여부</th>' + activeCols.map(c => `<th>${c}</th>`).join('') + '<th></th></tr>';
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="${activeCols.length + 1}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+  const SORTABLE = ['주문일', '등록상품명'];
+  thead.innerHTML = '<tr><th>인식여부</th>' + activeCols.map(c => {
+    if (!SORTABLE.includes(c)) return `<th>${c}</th>`;
+    const icon = ordersSortCol === c ? (ordersSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th style="cursor:pointer;user-select:none" onclick="setOrdersSort('${c}')">${c}${icon}</th>`;
+  }).join('') + '<th></th></tr>';
+
+  // 정렬
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    const va = a[ordersSortCol] || '';
+    const vb = b[ordersSortCol] || '';
+    const cmp = va.localeCompare(vb, 'ko');
+    return ordersSortDir === 'asc' ? cmp : -cmp;
+  });
+
+  if (!sortedFiltered.length) {
+    tbody.innerHTML = `<tr><td colspan="${activeCols.length + 2}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     return;
   }
-  tbody.innerHTML = filtered.map(o => {
+  tbody.innerHTML = sortedFiltered.map(o => {
     const isExcluded = o.is_excluded;
     const safeNum = (o['주문번호'] || '').replace(/'/g, "\\'");
     const trackBg   = isExcluded ? '#9ca3af' : 'var(--green)';
@@ -2888,6 +2904,16 @@ async function deleteOrder(dbId, orderNumber) {
         console.error('[deleteOrder] DB 삭제 실패:', err.error);
       }
     } catch(e) { console.error('[deleteOrder] 네트워크 오류:', e); }
+  }
+  renderOrders();
+}
+
+function setOrdersSort(col) {
+  if (ordersSortCol === col) {
+    ordersSortDir = ordersSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    ordersSortCol = col;
+    ordersSortDir = 'asc';
   }
   renderOrders();
 }
