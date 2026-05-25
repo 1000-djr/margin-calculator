@@ -1045,6 +1045,39 @@ router.delete('/returns', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.delete('/returns/:id', requireAuth, async (req, res) => {
+  const { restore_order } = req.body || {};
+  try {
+    // 삭제 전 주문번호 조회
+    const { rows } = await pool.query(
+      'SELECT order_number FROM returns WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: '반품 없음' });
+    const orderNumber = rows[0].order_number;
+
+    await pool.query(
+      'DELETE FROM returns WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+
+    let orderRestored = false;
+    if (restore_order && orderNumber) {
+      const { rowCount } = await pool.query(`
+        UPDATE orders
+           SET is_excluded    = FALSE,
+               exclusion_type = 'normal'
+         WHERE user_id = $1
+           AND order_number = $2
+           AND exclusion_type = 'return'
+      `, [req.user.id, orderNumber]);
+      orderRestored = rowCount > 0;
+    }
+
+    res.json({ deleted: 1, orderNumber, orderRestored });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.put('/returns/:id/process', requireAuth, async (req, res) => {
   const VALID_TYPES = ['seller', 'buyer', 'other'];
   const { return_type, return_cost, process_memo } = req.body;

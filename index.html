@@ -1117,6 +1117,25 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 반품 삭제 확인 모달 ══════════════════════════════════════════════ -->
+<div id="returnDeleteBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1001;align-items:center;justify-content:center" onclick="closeReturnDeleteConfirm(event)">
+  <div style="background:var(--surface);border-radius:16px;padding:28px;max-width:400px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.18);position:relative" onclick="event.stopPropagation()">
+    <button onclick="closeReturnDeleteConfirm()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;color:var(--text-dim);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px">반품 삭제</div>
+    <div id="returnDeleteDesc" style="font-size:13px;color:var(--text-sub);margin-bottom:18px;line-height:1.6"></div>
+    <div id="returnDeleteOrderRow" style="display:none;margin-bottom:16px;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+        <input type="checkbox" id="returnDeleteRestoreOrder" checked style="width:15px;height:15px">
+        <span>연결된 주문 (<span id="returnDeleteOrderNum" style="font-family:var(--mono);font-size:12px"></span>)의 반품 미인식도 함께 해제</span>
+      </label>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeReturnDeleteConfirm()">취소</button>
+      <button class="btn" onclick="confirmReturnDelete()" style="background:#ef4444;color:#fff;border:none">삭제</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 광고 리포트 안내 모달 ════════════════════════════════════════ -->
 <div id="adGuideBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center" onclick="closeAdGuideModal(event)">
   <div style="background:var(--surface);border-radius:16px;padding:28px 28px 24px;max-width:520px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.18);position:relative" onclick="event.stopPropagation()">
@@ -4849,7 +4868,10 @@ async function renderReturns() {
         <td><span style="font-size:11px;font-weight:600;color:${tinfo.color};padding:2px 8px;background:${tinfo.color}18;border-radius:4px">${tinfo.label}</span></td>
         <td style="text-align:right;font-family:var(--mono)">${row.return_cost ? Math.round(row.return_cost).toLocaleString('ko-KR') : '-'}</td>
         <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)" title="${memo}">${row.process_memo||''}</td>
-        <td><button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'')})" style="font-size:11px;padding:3px 8px">처리</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'')})" style="font-size:11px;padding:3px 8px">처리</button>
+          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:4px">삭제</button>
+        </td>
       </tr>`;
     }).join('');
   } catch(e) {
@@ -4908,6 +4930,47 @@ function openReturnProcessModal(id, returnType, returnCost, memo) {
 function closeReturnProcessModal(e) {
   if (e && e.target !== document.getElementById('returnProcessBackdrop')) return;
   document.getElementById('returnProcessBackdrop').style.display = 'none';
+}
+
+let _returnDeleteId = null;
+
+function openReturnDeleteConfirm(id, receiptNumber, orderNumber) {
+  _returnDeleteId = id;
+  document.getElementById('returnDeleteDesc').textContent =
+    `이 반품건을 삭제할까요? (접수번호: ${receiptNumber})`;
+  const orderRow = document.getElementById('returnDeleteOrderRow');
+  const orderNumEl = document.getElementById('returnDeleteOrderNum');
+  if (orderNumber) {
+    orderNumEl.textContent = orderNumber;
+    orderRow.style.display = 'block';
+    document.getElementById('returnDeleteRestoreOrder').checked = true;
+  } else {
+    orderRow.style.display = 'none';
+  }
+  document.getElementById('returnDeleteBackdrop').style.display = 'flex';
+}
+
+function closeReturnDeleteConfirm(e) {
+  if (e && e.target !== document.getElementById('returnDeleteBackdrop')) return;
+  document.getElementById('returnDeleteBackdrop').style.display = 'none';
+  _returnDeleteId = null;
+}
+
+async function confirmReturnDelete() {
+  if (!_returnDeleteId) return;
+  const restoreOrder = document.getElementById('returnDeleteRestoreOrder')?.checked ?? true;
+  try {
+    const r = await fetch(`/api/returns/${_returnDeleteId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restore_order: restoreOrder }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById('returnDeleteBackdrop').style.display = 'none';
+    _returnDeleteId = null;
+    renderReturns();
+    loadReturnsSummary();
+  } catch(e) { alert(e.message); }
 }
 
 async function submitReturnProcess() {
