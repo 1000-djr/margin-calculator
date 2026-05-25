@@ -254,6 +254,22 @@ router.put('/orders/:orderNumber/exclude', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.put('/orders/bulk-update', requireAuth, async (req, res) => {
+  const { ids, is_excluded, exclusion_type = 'normal' } = req.body;
+  if (!Array.isArray(ids) || !ids.length)
+    return res.status(400).json({ error: 'ids 배열 필수' });
+  const VALID = ['normal','fake_order','return','other'];
+  const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE orders SET is_excluded=$1, exclusion_type=$2
+       WHERE user_id=$3 AND id = ANY($4::int[])`,
+      [!!is_excluded, safeType, req.user.id, ids]
+    );
+    res.json({ updated: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/orders/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
   if (!items.length) return res.json({ inserted: 0 });

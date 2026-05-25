@@ -855,6 +855,15 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
     <div id="ordersSummary" class="summary-cards"></div>
+    <div id="ordersBulkBar" style="display:none;background:#1e293b;color:#fff;border-radius:10px;padding:10px 16px;margin-bottom:8px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
+      <span id="ordersBulkCount" style="font-size:13px;font-weight:600;flex:1">0건 선택됨</span>
+      <button onclick="bulkUpdateOrders('normal')"     class="btn btn-sm" style="background:#22c55e;color:#fff;border:none">인식</button>
+      <button onclick="bulkUpdateOrders('fake_order')" class="btn btn-sm" style="background:#f97316;color:#fff;border:none">가구매</button>
+      <button onclick="bulkUpdateOrders('return')"     class="btn btn-sm" style="background:#ef4444;color:#fff;border:none">반품</button>
+      <button onclick="bulkUpdateOrders('other')"      class="btn btn-sm" style="background:#9ca3af;color:#fff;border:none">기타</button>
+      <button onclick="bulkDeleteOrders()"             class="btn btn-sm" style="background:#7f1d1d;color:#fff;border:none">🗑 삭제</button>
+      <button onclick="clearOrderSelection()"          class="btn btn-sm" style="background:transparent;color:#94a3b8;border:1px solid #475569">취소</button>
+    </div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="data-table-wrap">
         <table class="data-table">
@@ -1249,6 +1258,7 @@ let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersSortCol = '주문일'; // 기본 정렬 컬럼
 let ordersSortDir = 'desc';  // 기본 내림차순
+let selectedOrderNums = new Set(); // 체크된 주문번호
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    || '{}');
 let profitTaxTypeMap   = JSON.parse(localStorage.getItem('profitTaxTypeMap')   || '{}');
@@ -2862,19 +2872,26 @@ function renderOrders() {
 
   const activeCols = ordersVisibleCols || ORDER_DISPLAY_COLS;
   const SORTABLE = ['주문일', '등록상품명'];
-  thead.innerHTML = '<tr><th>인식여부</th>' + activeCols.map(c => {
-    if (!SORTABLE.includes(c)) return `<th>${c}</th>`;
-    const icon = ordersSortCol === c ? (ordersSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    return `<th style="cursor:pointer;user-select:none" onclick="setOrdersSort('${c}')">${c}${icon}</th>`;
-  }).join('') + '<th></th></tr>';
 
-  // 정렬
+  // 정렬 (헤더 전체 선택 계산에도 필요)
   const sortedFiltered = [...filtered].sort((a, b) => {
     const va = a[ordersSortCol] || '';
     const vb = b[ordersSortCol] || '';
     const cmp = va.localeCompare(vb, 'ko');
     return ordersSortDir === 'asc' ? cmp : -cmp;
   });
+
+  const allNums = sortedFiltered.map(o => o['주문번호']);
+  const allChecked = allNums.length > 0 && allNums.every(n => selectedOrderNums.has(n));
+  thead.innerHTML = '<tr>'
+    + `<th style="text-align:center;width:32px"><input type="checkbox" ${allChecked?'checked':''} onchange="toggleAllOrderSelect(this)" style="cursor:pointer"></th>`
+    + '<th>인식여부</th>'
+    + activeCols.map(c => {
+      if (!SORTABLE.includes(c)) return `<th>${c}</th>`;
+      const icon = ordersSortCol === c ? (ordersSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+      return `<th style="cursor:pointer;user-select:none" onclick="setOrdersSort('${c}')">${c}${icon}</th>`;
+    }).join('')
+    + '<th></th></tr>';
 
   if (!sortedFiltered.length) {
     tbody.innerHTML = `<tr><td colspan="${activeCols.length + 2}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
@@ -2895,10 +2912,14 @@ function renderOrders() {
       </select>
     </td>`;
     const dbId = o['번호'] || '';
+    const isChecked = selectedOrderNums.has(o['주문번호']);
+    const checkCell = `<td style="text-align:center;width:32px">
+      <input type="checkbox" data-num="${safeNum}" ${isChecked?'checked':''} onchange="toggleOrderSelect('${safeNum}',this.checked)" style="cursor:pointer">
+    </td>`;
     const deleteBtn = `<td style="text-align:center;white-space:nowrap">
       <button onclick="deleteOrder(${dbId ? dbId : 'null'},'${safeNum}')" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px;padding:2px 6px" title="삭제">🗑</button>
     </td>`;
-    return `<tr${rowStyle}>${toggleBtn}` + activeCols.map(c => {
+    return `<tr${rowStyle}>${checkCell}${toggleBtn}` + activeCols.map(c => {
       if (c === '쿠폰적용매출') {
         const pay  = parseFloat(o['결제액']) || 0;
         const ship = parseFloat(o['배송비']) || 0;
@@ -2922,6 +2943,7 @@ function renderOrders() {
       return `<td>${cellVal}</td>`;
     }).join('') + deleteBtn + '</tr>';
   }).join('');
+  updateOrdersBulkBar();
 }
 
 async function loadAdsSummary() {
@@ -2966,6 +2988,93 @@ async function deleteOrder(dbId, orderNumber) {
       }
     } catch(e) { console.error('[deleteOrder] 네트워크 오류:', e); }
   }
+  renderOrders();
+}
+
+function updateOrdersBulkBar() {
+  const bar = document.getElementById('ordersBulkBar');
+  const cnt = document.getElementById('ordersBulkCount');
+  if (!bar) return;
+  const n = selectedOrderNums.size;
+  if (n > 0) { bar.style.display = 'flex'; cnt.textContent = `${n}건 선택됨`; }
+  else        { bar.style.display = 'none'; }
+}
+
+function toggleOrderSelect(orderNum, checked) {
+  if (checked) selectedOrderNums.add(orderNum);
+  else         selectedOrderNums.delete(orderNum);
+  updateOrdersBulkBar();
+  // 헤더 체크박스 상태 갱신
+  const allNums = [...document.querySelectorAll('#ordersTbody input[type=checkbox]')].map(el => el.closest('tr')).filter(Boolean);
+  const headerCb = document.querySelector('#ordersThead input[type=checkbox]');
+  if (headerCb) {
+    const bodyBoxes = document.querySelectorAll('#ordersTbody input[type=checkbox]');
+    headerCb.checked = bodyBoxes.length > 0 && [...bodyBoxes].every(b => b.checked);
+  }
+}
+
+function toggleAllOrderSelect(headerCb) {
+  const bodyBoxes = document.querySelectorAll('#ordersTbody input[type=checkbox]');
+  bodyBoxes.forEach(cb => {
+    const num = cb.dataset.num;
+    if (!num) return;
+    if (headerCb.checked) selectedOrderNums.add(num);
+    else                  selectedOrderNums.delete(num);
+  });
+  renderOrders();
+}
+
+function clearOrderSelection() {
+  selectedOrderNums.clear();
+  renderOrders();
+}
+
+async function bulkUpdateOrders(exclusionType) {
+  if (!selectedOrderNums.size) return;
+  const isExcluded = exclusionType !== 'normal';
+  const nums = [...selectedOrderNums];
+
+  // 로컬 업데이트
+  orders.forEach(o => {
+    if (nums.includes(o['주문번호'])) {
+      o.is_excluded    = isExcluded;
+      o.exclusion_type = exclusionType;
+    }
+  });
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+
+  // DB 업데이트 (ids 기반)
+  if (currentUser) {
+    const ids = orders.filter(o => nums.includes(o['주문번호'])).map(o => o['번호']).filter(Boolean);
+    if (ids.length) {
+      try {
+        await fetch('/api/orders/bulk-update', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids, is_excluded: isExcluded, exclusion_type: exclusionType })
+        });
+      } catch(e) {}
+    }
+  }
+  selectedOrderNums.clear();
+  renderOrders();
+}
+
+async function bulkDeleteOrders() {
+  if (!selectedOrderNums.size) return;
+  if (!confirm(`선택한 ${selectedOrderNums.size}건을 삭제할까요?`)) return;
+  const nums = [...selectedOrderNums];
+  for (const num of nums) {
+    const o = orders.find(x => x['주문번호'] === num);
+    if (!o) continue;
+    const dbId = o['번호'];
+    orders = orders.filter(x => x['주문번호'] !== num);
+    if (currentUser && dbId) {
+      try { await fetch(`/api/orders/${dbId}`, { method: 'DELETE' }); } catch(e) {}
+    }
+  }
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+  selectedOrderNums.clear();
   renderOrders();
 }
 
