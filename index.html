@@ -941,7 +941,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
     <div class="section-label">쿠폰 목록</div>
-    <div id="couponSummary" class="summary-cards"></div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table" style="white-space:normal">
         <thead><tr>
@@ -3750,8 +3749,6 @@ function renderCoupons() {
     }
   }
 
-  let totalDiscount = 0;
-  const totalPayment = orders.reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
   const now = new Date();
 
   // 정렬 아이콘 업데이트
@@ -3772,7 +3769,6 @@ function renderCoupons() {
     tbody.innerHTML = sorted.map(c => {
       const applied = getCouponAppliedOrders(c);
       const discountTotal = (c.discount_amount || 0) * applied.length;
-      totalDiscount += discountTotal;
 
       const startAt = c.start_at ? new Date(c.start_at) : null;
       const endAt   = c.end_at   ? new Date(c.end_at)   : null;
@@ -3811,15 +3807,6 @@ function renderCoupons() {
     }).join('');
   }
 
-  const realRevenue = totalPayment - totalDiscount;
-  const summaryEl = document.getElementById('couponSummary');
-  if (summaryEl) {
-    summaryEl.innerHTML = `
-      <div class="summary-card"><div class="summary-card-label">총 결제액</div><div class="summary-card-value green">${totalPayment.toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총 쿠폰할인</div><div class="summary-card-value red">${totalDiscount.toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">실매출</div><div class="summary-card-value">${realRevenue.toLocaleString('ko-KR')}원</div></div>
-    `;
-  }
 }
 
 async function deleteCoupon(id) {
