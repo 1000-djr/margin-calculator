@@ -493,8 +493,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 <div id="bulkExcludeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 8px 40px #0008;opacity:1">
     <div style="font-size:20px;font-weight:700;margin-bottom:8px">🚫 주문번호 일괄 미인식</div>
-    <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">미인식 처리할 주문번호를 입력하세요.<br>여러 개는 줄바꿈 또는 쉼표로 구분합니다.</div>
-    <textarea id="bulkExcludeTextarea" rows="8"
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">미인식 처리할 주문번호를 입력하세요.<br>여러 개는 줄바꿈 또는 쉼표로 구분합니다.</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">미인식 사유</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="bulkTypeNormal"    onclick="setBulkExcludeType('normal')"     class="btn btn-sm"        style="border:2px solid #6b7280;color:#6b7280">인식취소</button>
+        <button id="bulkTypeFakeOrder" onclick="setBulkExcludeType('fake_order')" class="btn btn-sm active" style="border:2px solid #f97316;color:#f97316">가구매</button>
+        <button id="bulkTypeReturn"    onclick="setBulkExcludeType('return')"     class="btn btn-sm"        style="border:2px solid #ef4444;color:#ef4444">반품</button>
+        <button id="bulkTypeOther"     onclick="setBulkExcludeType('other')"      class="btn btn-sm"        style="border:2px solid #9ca3af;color:#9ca3af">기타</button>
+      </div>
+    </div>
+    <textarea id="bulkExcludeTextarea" rows="6"
       style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:var(--mono);resize:vertical"
       placeholder="예시:&#10;11234567890&#10;11234567891&#10;11234567892"></textarea>
     <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
@@ -829,9 +838,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="section-label">필터</div>
     <div class="card">
       <div class="btn-row" style="margin-bottom:10px">
-        <button class="btn btn-sm active" id="ordersFilterAll"      onclick="setOrdersFilter('all')">전체</button>
-        <button class="btn btn-sm"        id="ordersFilterIncluded" onclick="setOrdersFilter('included')">인식</button>
-        <button class="btn btn-sm"        id="ordersFilterExcluded" onclick="setOrdersFilter('excluded')">미인식</button>
+        <button class="btn btn-sm active" id="ordersFilterAll"        onclick="setOrdersFilter('all')">전체</button>
+        <button class="btn btn-sm"        id="ordersFilterIncluded"  onclick="setOrdersFilter('included')">인식</button>
+        <button class="btn btn-sm"        id="ordersFilterExcluded"  onclick="setOrdersFilter('excluded')">미인식 전체</button>
+        <button class="btn btn-sm"        id="ordersFilterFakeOrder" onclick="setOrdersFilter('fake_order')" style="color:#f97316">가구매</button>
+        <button class="btn btn-sm"        id="ordersFilterReturn"    onclick="setOrdersFilter('return')"     style="color:#ef4444">반품</button>
+        <button class="btn btn-sm"        id="ordersFilterOther"     onclick="setOrdersFilter('other')"      style="color:#6b7280">기타</button>
       </div>
       <div class="filter-row">
         <div class="field"><label>주문일 시작</label><input type="date" id="ordersDateFrom"></div>
@@ -2693,35 +2705,75 @@ function applyColSettings() {
   renderOrders();
 }
 
+const EXCLUSION_TYPES = {
+  normal:     { label: '인식',   color: 'var(--green)', bg: 'var(--green)' },
+  fake_order: { label: '가구매', color: '#f97316',      bg: '#f97316' },
+  return:     { label: '반품',   color: '#ef4444',      bg: '#ef4444' },
+  other:      { label: '기타',   color: '#9ca3af',      bg: '#9ca3af' },
+};
+
 function setOrdersFilter(mode) {
   ordersExcludeFilter = mode;
-  ['All','Included','Excluded'].forEach(m => {
-    const btn = document.getElementById('ordersFilter' + m);
-    if (btn) btn.classList.toggle('active', mode === m.toLowerCase());
+  const btnMap = {
+    all: 'All', included: 'Included', excluded: 'Excluded',
+    fake_order: 'FakeOrder', return: 'Return', other: 'Other',
+  };
+  Object.keys(btnMap).forEach(m => {
+    const btn = document.getElementById('ordersFilter' + btnMap[m]);
+    if (btn) btn.classList.toggle('active', mode === m);
   });
   renderOrders();
 }
 
-async function toggleOrderExclude(orderNumber) {
+async function setOrderExclusionType(orderNumber, exclusionType) {
   const idx = orders.findIndex(o => o['주문번호'] === orderNumber);
   if (idx === -1) return;
-  const newVal = !orders[idx].is_excluded;
-  orders[idx].is_excluded = newVal;
+  const isExcluded = exclusionType !== 'normal';
+  orders[idx].is_excluded    = isExcluded;
+  orders[idx].exclusion_type = exclusionType;
   localStorage.setItem('ordersData', JSON.stringify(orders));
   if (currentUser) {
     try {
       await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/exclude`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_excluded: newVal })
+        body: JSON.stringify({ is_excluded: isExcluded, exclusion_type: exclusionType })
       });
     } catch(e) {}
   }
   renderOrders();
 }
 
+async function toggleOrderExclude(orderNumber) {
+  const idx = orders.findIndex(o => o['주문번호'] === orderNumber);
+  if (idx === -1) return;
+  // 인식 ↔ 가구매 토글 (기본 동작)
+  const cur = orders[idx].exclusion_type || 'normal';
+  const next = cur === 'normal' ? 'fake_order' : 'normal';
+  await setOrderExclusionType(orderNumber, next);
+}
+
+let bulkExcludeType = 'fake_order';
+
+function setBulkExcludeType(type) {
+  bulkExcludeType = type;
+  ['Normal','FakeOrder','Return','Other'].forEach(t => {
+    const id = 'bulkType' + t;
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', id === 'bulkType' + type.split('_').map((w,i) => i===0 ? w[0].toUpperCase()+w.slice(1) : w[0].toUpperCase()+w.slice(1)).join(''));
+  });
+  // simpler: just match by type value stored in onclick
+  ['normal','fake_order','return','other'].forEach(t => {
+    const map = { normal:'Normal', fake_order:'FakeOrder', return:'Return', other:'Other' };
+    const el = document.getElementById('bulkType' + map[t]);
+    if (el) el.classList.toggle('active', t === type);
+  });
+}
+
 function openBulkExcludeModal() {
   document.getElementById('bulkExcludeTextarea').value = '';
+  bulkExcludeType = 'fake_order';
+  setBulkExcludeType('fake_order');
   document.getElementById('bulkExcludeModal').style.display = 'flex';
 }
 
@@ -2734,10 +2786,11 @@ async function confirmBulkExclude() {
   const numbers = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
   if (!numbers.length) { alert('주문번호를 입력해주세요'); return; }
 
+  const isExcluded = bulkExcludeType !== 'normal';
   let updatedCount = 0;
   numbers.forEach(num => {
     const o = orders.find(x => x['주문번호'] === num);
-    if (o) { o.is_excluded = true; updatedCount++; }
+    if (o) { o.is_excluded = isExcluded; o.exclusion_type = bulkExcludeType; updatedCount++; }
   });
   localStorage.setItem('ordersData', JSON.stringify(orders));
 
@@ -2746,7 +2799,7 @@ async function confirmBulkExclude() {
       await fetch('/api/orders/exclude-bulk', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_numbers: numbers, is_excluded: true })
+        body: JSON.stringify({ order_numbers: numbers, is_excluded: isExcluded, exclusion_type: bulkExcludeType })
       });
     } catch(e) {}
   }
@@ -2775,11 +2828,17 @@ function renderOrders() {
     return true;
   });
 
-  const excludedCount = dateFiltered.filter(o => o.is_excluded).length;
+  const excludedCount   = dateFiltered.filter(o => o.is_excluded).length;
+  const fakeOrderCount  = dateFiltered.filter(o => o.exclusion_type === 'fake_order').length;
+  const returnCount     = dateFiltered.filter(o => o.exclusion_type === 'return').length;
+  const otherCount      = dateFiltered.filter(o => o.exclusion_type === 'other').length;
 
   let filtered = dateFiltered;
-  if (ordersExcludeFilter === 'included') filtered = dateFiltered.filter(o => !o.is_excluded);
-  else if (ordersExcludeFilter === 'excluded') filtered = dateFiltered.filter(o => o.is_excluded);
+  if (ordersExcludeFilter === 'included')   filtered = dateFiltered.filter(o => !o.is_excluded);
+  else if (ordersExcludeFilter === 'excluded')   filtered = dateFiltered.filter(o => o.is_excluded);
+  else if (ordersExcludeFilter === 'fake_order') filtered = dateFiltered.filter(o => o.exclusion_type === 'fake_order');
+  else if (ordersExcludeFilter === 'return')     filtered = dateFiltered.filter(o => o.exclusion_type === 'return');
+  else if (ordersExcludeFilter === 'other')      filtered = dateFiltered.filter(o => o.exclusion_type === 'other');
 
   // 요약
   const totalAmt = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
@@ -2788,7 +2847,9 @@ function renderOrders() {
   if (summaryEl) {
     summaryEl.innerHTML = `
       <div class="summary-card"><div class="summary-card-label">총 주문수(인식)</div><div class="summary-card-value">${(dateFiltered.length - excludedCount).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">미인식</div><div class="summary-card-value" style="color:var(--red)">${excludedCount.toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">가구매</div><div class="summary-card-value" style="color:#f97316">${fakeOrderCount.toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">반품</div><div class="summary-card-value" style="color:#ef4444">${returnCount.toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">기타 미인식</div><div class="summary-card-value" style="color:#9ca3af">${otherCount.toLocaleString('ko-KR')}건</div></div>
       <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${totalAmt.toLocaleString('ko-KR')}원</div></div>
       <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${totalShip.toLocaleString('ko-KR')}원</div></div>
     `;
@@ -2820,17 +2881,18 @@ function renderOrders() {
     return;
   }
   tbody.innerHTML = sortedFiltered.map(o => {
-    const isExcluded = o.is_excluded;
+    const exType  = o.exclusion_type || 'normal';
+    const exInfo  = EXCLUSION_TYPES[exType] || EXCLUSION_TYPES.normal;
     const safeNum = (o['주문번호'] || '').replace(/'/g, "\\'");
-    const trackBg   = isExcluded ? '#9ca3af' : 'var(--green)';
-    const thumbLeft = isExcluded ? '2px' : 'calc(100% - 18px)';
-    const rowStyle = isExcluded ? ' style="opacity:0.4"' : '';
+    const rowStyle = o.is_excluded ? ' style="opacity:0.45"' : '';
     const toggleBtn = `<td style="text-align:center;white-space:nowrap">
-      <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer" onclick="toggleOrderExclude('${safeNum}')">
-        <div style="width:36px;height:20px;background:${trackBg};border-radius:10px;position:relative;transition:background .2s;flex-shrink:0">
-          <div style="position:absolute;top:2px;left:${thumbLeft};width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s;box-shadow:0 1px 3px #0004"></div>
-        </div>
-      </div>
+      <select onchange="setOrderExclusionType('${safeNum}',this.value)"
+        style="font-size:11px;padding:2px 4px;border-radius:6px;border:1.5px solid ${exInfo.color};color:${exInfo.color};background:white;cursor:pointer;font-weight:600">
+        <option value="normal"     ${exType==='normal'     ?'selected':''}>인식</option>
+        <option value="fake_order" ${exType==='fake_order' ?'selected':''}>가구매</option>
+        <option value="return"     ${exType==='return'     ?'selected':''}>반품</option>
+        <option value="other"      ${exType==='other'      ?'selected':''}>기타</option>
+      </select>
     </td>`;
     const dbId = o['번호'] || '';
     const deleteBtn = `<td style="text-align:center;white-space:nowrap">
@@ -4276,7 +4338,16 @@ async function renderProfit() {
           <div class="summary-card"><div class="summary-card-label">총광고비(실)</div><div class="summary-card-value red">${s.actual_ad_cost.toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(tax).toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">ROAS</div><div class="summary-card-value ${roasGood ? 'green' : 'red'}">${roas}</div></div>
-          ${s.excluded_count > 0 ? `<div class="summary-card"><div class="summary-card-label">미인식 제외</div><div class="summary-card-value" style="color:var(--red)">${s.excluded_count.toLocaleString('ko-KR')}건</div></div>` : ''}
+          ${(() => {
+            const fake   = orders.filter(o => o.exclusion_type === 'fake_order').length;
+            const ret    = orders.filter(o => o.exclusion_type === 'return').length;
+            const other  = orders.filter(o => o.exclusion_type === 'other').length;
+            const parts  = [];
+            if (fake)  parts.push(`<div class="summary-card"><div class="summary-card-label">가구매 제외</div><div class="summary-card-value" style="color:#f97316">${fake.toLocaleString('ko-KR')}건</div></div>`);
+            if (ret)   parts.push(`<div class="summary-card"><div class="summary-card-label">반품 제외</div><div class="summary-card-value" style="color:#ef4444">${ret.toLocaleString('ko-KR')}건</div></div>`);
+            if (other) parts.push(`<div class="summary-card"><div class="summary-card-label">기타 제외</div><div class="summary-card-value" style="color:#9ca3af">${other.toLocaleString('ko-KR')}건</div></div>`);
+            return parts.join('');
+          })()}
         </div>
       `;
     } else {

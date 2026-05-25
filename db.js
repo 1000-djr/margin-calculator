@@ -240,9 +240,10 @@ async function initDB() {
   `);
 
   await pool.query(`
-    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS start_date  DATE;
-    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS end_date    DATE;
-    ALTER TABLE orders     ADD COLUMN IF NOT EXISTS is_excluded BOOLEAN DEFAULT FALSE;
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS start_date      DATE;
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS end_date        DATE;
+    ALTER TABLE orders     ADD COLUMN IF NOT EXISTS is_excluded      BOOLEAN DEFAULT FALSE;
+    ALTER TABLE orders     ADD COLUMN IF NOT EXISTS exclusion_type   VARCHAR(20) DEFAULT 'normal';
   `);
 
   await pool.query(`

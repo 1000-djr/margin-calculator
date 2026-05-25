@@ -220,30 +220,35 @@ router.get('/orders', requireAuth, async (req, res) => {
       '우편번호':            '',
       '수취인 주소':         r.recipient_address_masked,
       'is_excluded':         r.is_excluded || false,
+      'exclusion_type':      r.exclusion_type || 'normal',
     })));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/orders/exclude-bulk', requireAuth, async (req, res) => {
-  const { order_numbers, is_excluded } = req.body;
+  const { order_numbers, is_excluded, exclusion_type = 'normal' } = req.body;
   if (!Array.isArray(order_numbers) || !order_numbers.length)
     return res.status(400).json({ error: 'order_numbers 배열 필수' });
+  const VALID = ['normal','fake_order','return','other'];
+  const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
   try {
     const result = await pool.query(
-      `UPDATE orders SET is_excluded=$1
-       WHERE user_id=$2 AND order_number = ANY($3::varchar[])`,
-      [is_excluded !== false, req.user.id, order_numbers]
+      `UPDATE orders SET is_excluded=$1, exclusion_type=$2
+       WHERE user_id=$3 AND order_number = ANY($4::varchar[])`,
+      [is_excluded !== false, safeType, req.user.id, order_numbers]
     );
     res.json({ updated: result.rowCount });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/orders/:orderNumber/exclude', requireAuth, async (req, res) => {
-  const { is_excluded } = req.body;
+  const { is_excluded, exclusion_type = 'normal' } = req.body;
+  const VALID = ['normal','fake_order','return','other'];
+  const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
   try {
     await pool.query(
-      'UPDATE orders SET is_excluded=$1 WHERE order_number=$2 AND user_id=$3',
-      [!!is_excluded, req.params.orderNumber, req.user.id]
+      'UPDATE orders SET is_excluded=$1, exclusion_type=$2 WHERE order_number=$3 AND user_id=$4',
+      [!!is_excluded, safeType, req.params.orderNumber, req.user.id]
     );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
