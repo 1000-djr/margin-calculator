@@ -993,7 +993,23 @@ router.post('/returns/bulk', requireAuth, async (req, res) => {
       ]);
       if (result.rowCount > 0) inserted++; else skipped++;
     }
-    res.json({ inserted, skipped });
+
+    // 업로드된 주문번호 기준으로 orders 테이블에서 반품 자동 미인식 처리
+    const orderNums = items.map(r => r.order_number).filter(Boolean);
+    let ordersUpdated = 0;
+    if (orderNums.length) {
+      const { rowCount } = await pool.query(`
+        UPDATE orders
+           SET is_excluded   = TRUE,
+               exclusion_type = 'return'
+         WHERE user_id = $1
+           AND order_number = ANY($2::text[])
+           AND is_excluded = FALSE
+      `, [req.user.id, orderNums]);
+      ordersUpdated = rowCount;
+    }
+
+    res.json({ inserted, skipped, ordersUpdated });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

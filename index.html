@@ -1068,13 +1068,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <table class="profit-table" id="returnsTable">
           <thead><tr>
             <th style="width:32px"><input type="checkbox" id="returnsSelectAll" onclick="toggleAllReturnsSelect(this)"></th>
-            <th>수령일</th>
+            <th>접수일</th>
             <th>접수번호</th>
-            <th>상품명</th>
-            <th>옵션명</th>
+            <th>주문번호</th>
+            <th>노출상품명</th>
+            <th>옵션</th>
             <th>수량</th>
-            <th>환불금액</th>
-            <th>반품비</th>
+            <th>환불예정금액</th>
+            <th>반품배송비</th>
             <th>반품유형</th>
             <th>반품비용</th>
             <th>메모</th>
@@ -4822,22 +4823,24 @@ async function renderReturns() {
   if (type && type !== 'all') params.set('return_type', type);
   const tbody = document.getElementById('returnsTbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
   try {
     const r = await fetch('/api/returns?' + params.toString());
     const rows = await r.json();
     selectedReturnIds = new Set();
     updateReturnsSelectionUI();
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px">반품 내역이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">반품 내역이 없습니다</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(row => {
       const tinfo = RETURN_TYPE_LABELS[row.return_type] || RETURN_TYPE_LABELS.other;
+      const memo  = (row.process_memo || '').replace(/"/g, '&quot;');
       return `<tr>
         <td><input type="checkbox" data-id="${row.id}" onclick="toggleReturnSelect(this)"></td>
         <td>${row.received_at ? row.received_at.slice(0,10) : '-'}</td>
         <td style="font-family:var(--mono);font-size:11px">${row.receipt_number||'-'}</td>
+        <td style="font-family:var(--mono);font-size:11px">${row.order_number||'-'}</td>
         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.product_name||''}">${row.product_name||'-'}</td>
         <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.option_name||''}">${row.option_name||'-'}</td>
         <td style="text-align:right">${row.quantity||1}</td>
@@ -4845,12 +4848,12 @@ async function renderReturns() {
         <td style="text-align:right;font-family:var(--mono)">${(row.return_shipping_fee||0).toLocaleString('ko-KR')}</td>
         <td><span style="font-size:11px;font-weight:600;color:${tinfo.color};padding:2px 8px;background:${tinfo.color}18;border-radius:4px">${tinfo.label}</span></td>
         <td style="text-align:right;font-family:var(--mono)">${row.return_cost ? Math.round(row.return_cost).toLocaleString('ko-KR') : '-'}</td>
-        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)" title="${row.process_memo||''}">${row.process_memo||''}</td>
-        <td><button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'').replace(/'/g,"\\'")})" style="font-size:11px;padding:3px 8px">처리</button></td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)" title="${memo}">${row.process_memo||''}</td>
+        <td><button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'')})" style="font-size:11px;padding:3px 8px">처리</button></td>
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
   }
 }
 
@@ -4939,28 +4942,28 @@ async function handleReturnsUpload(event) {
     if (!raw.length) { if (statusEl) statusEl.textContent = '데이터 없음'; return; }
 
     const COL = {
-      received_at:              ['접수일시', '수령일'],
+      received_at:              ['접수일', '접수일시', '수령일'],
       receipt_number:           ['접수번호'],
-      delivery_status:          ['배송 현황'],
-      return_status:            ['반품 현황'],
-      warehousing_status:       ['입고 현황'],
-      warehousing_method:       ['입고 방법'],
-      warehousing_tracking:     ['입고 운송장 번호'],
-      product_name:             ['상품명', '등록 상품명'],
-      option_name:              ['옵션명'],
+      delivery_status:          ['배송 현황', '배송현황'],
+      return_status:            ['반품 현황', '반품현황'],
+      warehousing_status:       ['입고 현황', '입고현황'],
+      warehousing_method:       ['입고 방법', '입고방법'],
+      warehousing_tracking:     ['입고 운송장 번호', '입고운송장번호'],
+      product_name:             ['노출상품명', '상품명', '등록 상품명'],
+      option_name:              ['옵션', '옵션명'],
       quantity:                 ['수량'],
-      return_reason:            ['반품 사유'],
-      return_shipping_fee:      ['반품 배송비'],
-      shipping_fee_burden:      ['배송비 부담'],
-      refund_amount:            ['환불 금액'],
+      return_reason:            ['반품 사유', '반품사유'],
+      return_shipping_fee:      ['반품배송비', '반품 배송비'],
+      shipping_fee_burden:      ['배송비 부담', '배송비부담'],
+      refund_amount:            ['환불예정금액', '환불 금액', '환불금액'],
       recipient_masked:         ['수취인명'],
       phone_masked:             ['휴대폰 번호', '수취인 전화번호'],
-      return_address_masked:    ['반품지 주소'],
-      collection_address_masked:['수거지 주소'],
+      return_address_masked:    ['반품지 주소', '반품지주소'],
+      collection_address_masked:['수거지 주소', '수거지주소'],
       order_number:             ['주문번호'],
-      expected_ship_date:       ['예정 출고일'],
-      warehousing_complete_date:['입고 완료일'],
-      return_complete_date:     ['반품 완료일'],
+      expected_ship_date:       ['예정 출고일', '예정출고일'],
+      warehousing_complete_date:['입고 완료일', '입고완료일'],
+      return_complete_date:     ['반품 완료일', '반품완료일'],
       receipt_channel:          ['접수 경로', '접수경로'],
       option_id:                ['옵션 ID', '옵션ID'],
     };
@@ -5010,7 +5013,7 @@ async function handleReturnsUpload(event) {
     if (statusEl) {
       const now = new Date();
       const kst = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      statusEl.textContent = `최근 업로드: ${kst} | 신규 ${d.inserted}건 / 중복 ${d.skipped}건 제외`;
+      statusEl.textContent = `최근 업로드: ${kst} | 신규 ${d.inserted}건 / 중복 ${d.skipped}건 제외` + (d.ordersUpdated ? ` | 주문 ${d.ordersUpdated}건 반품 처리` : '');
     }
     renderReturns();
     loadReturnsSummary();
