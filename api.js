@@ -902,6 +902,137 @@ router.delete('/product-name-mappings/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 반품 관리 ────────────────────────────────────────────────────────────────
+router.get('/returns/summary', requireAuth, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*)::INTEGER                              AS total_count,
+        COALESCE(SUM(return_cost),0)::NUMERIC(14,2)   AS total_cost,
+        COALESCE(SUM(refund_amount),0)::BIGINT         AS total_refund,
+        COUNT(*) FILTER (WHERE return_type='seller')::INTEGER  AS seller_count,
+        COUNT(*) FILTER (WHERE return_type='buyer')::INTEGER   AS buyer_count,
+        COUNT(*) FILTER (WHERE return_type='other')::INTEGER   AS other_count
+      FROM returns
+      WHERE user_id = $1
+        AND ($2::text IS NULL OR received_at >= $2)
+        AND ($3::text IS NULL OR received_at <= $3)
+    `, [req.user.id, start_date || null, end_date || null]);
+    res.json(rows[0] || {});
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/returns', requireAuth, async (req, res) => {
+  try {
+    const { start_date, end_date, return_type } = req.query;
+    const params = [req.user.id, start_date || null, end_date || null];
+    let typeClause = '';
+    if (return_type && return_type !== 'all') {
+      params.push(return_type);
+      typeClause = `AND return_type = $${params.length}`;
+    }
+    const { rows } = await pool.query(`
+      SELECT * FROM returns
+      WHERE user_id = $1
+        AND ($2::text IS NULL OR received_at >= $2)
+        AND ($3::text IS NULL OR received_at <= $3)
+        ${typeClause}
+      ORDER BY received_at DESC, id DESC
+    `, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/returns/bulk', requireAuth, async (req, res) => {
+  const items = req.body;
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items 배열 필수' });
+  let inserted = 0, skipped = 0;
+  try {
+    for (const r of items) {
+      const result = await pool.query(`
+        INSERT INTO returns (
+          user_id, received_at, receipt_number, delivery_status, return_status,
+          warehousing_status, warehousing_method, warehousing_tracking,
+          product_name, option_name, quantity, return_reason,
+          return_shipping_fee, shipping_fee_burden, refund_amount,
+          recipient_masked, phone_masked, return_address_masked, collection_address_masked,
+          order_number, expected_ship_date, warehousing_complete_date,
+          return_complete_date, receipt_channel, option_id, raw_data
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
+        )
+        ON CONFLICT (user_id, receipt_number) DO NOTHING
+      `, [
+        req.user.id,
+        r.received_at         || null,
+        r.receipt_number,
+        r.delivery_status     || null,
+        r.return_status       || null,
+        r.warehousing_status  || null,
+        r.warehousing_method  || null,
+        r.warehousing_tracking|| null,
+        r.product_name        || null,
+        r.option_name         || null,
+        parseInt(r.quantity)  || 1,
+        r.return_reason       || null,
+        parseInt(r.return_shipping_fee) || 0,
+        r.shipping_fee_burden || null,
+        parseInt(r.refund_amount)       || 0,
+        r.recipient_masked    || null,
+        r.phone_masked        || null,
+        r.return_address_masked     || null,
+        r.collection_address_masked || null,
+        r.order_number        || null,
+        r.expected_ship_date  || null,
+        r.warehousing_complete_date || null,
+        r.return_complete_date      || null,
+        r.receipt_channel     || null,
+        r.option_id           || null,
+        r.raw_data ? JSON.stringify(r.raw_data) : null,
+      ]);
+      if (result.rowCount > 0) inserted++; else skipped++;
+    }
+    res.json({ inserted, skipped });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/returns', requireAuth, async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids 배열 필수' });
+  try {
+    const { rowCount } = await pool.query(
+      'DELETE FROM returns WHERE user_id=$1 AND id = ANY($2::int[])',
+      [req.user.id, ids]
+    );
+    res.json({ deleted: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/returns/:id/process', requireAuth, async (req, res) => {
+  const VALID_TYPES = ['seller', 'buyer', 'other'];
+  const { return_type, return_cost, process_memo } = req.body;
+  const safeType = VALID_TYPES.includes(return_type) ? return_type : 'other';
+  try {
+    const { rows } = await pool.query(`
+      UPDATE returns
+         SET return_type  = $1,
+             return_cost  = $2,
+             process_memo = $3
+       WHERE id = $4 AND user_id = $5
+      RETURNING *
+    `, [
+      safeType,
+      parseFloat(return_cost) || 0,
+      process_memo || null,
+      req.params.id,
+      req.user.id,
+    ]);
+    if (!rows.length) return res.status(404).json({ error: '반품 없음' });
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 수익 분석 (백엔드 통합 계산) ────────────────────────────────────────────
 router.get('/analytics', requireAuth, async (req, res) => {
   try {

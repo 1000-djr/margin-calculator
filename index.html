@@ -580,6 +580,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('ads', this)">📢 광고</button>
     <button class="tab" onclick="switchTab('coupons', this)">🎟 쿠폰</button>
     <button class="tab" onclick="switchTab('profit', this)">📊 수익분석</button>
+    <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -1026,6 +1027,93 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
   </div>
+
+  <!-- ══ 반품 관리 탭 ══════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-returns">
+    <!-- 업로드 영역 -->
+    <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <div class="section-label" style="margin:0 0 4px">반품 내역 업로드</div>
+        <div style="font-size:12px;color:var(--text-dim)">쿠팡 Wing → 취소/반품 관리 → 반품 관리에서 엑셀 다운로드</div>
+      </div>
+      <label class="btn btn-primary" style="cursor:pointer;margin-left:auto">
+        📂 엑셀 업로드
+        <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleReturnsUpload(event)">
+      </label>
+      <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim)"></div>
+    </div>
+
+    <!-- 요약 카드 -->
+    <div id="returnsSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
+
+    <!-- 필터 -->
+    <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <span style="font-size:12px;color:var(--text-dim)">~</span>
+      <input type="date" id="returnsTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <select id="returnsTypeFilter" onchange="renderReturns()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <option value="all">전체 유형</option>
+        <option value="seller">판매자 귀책</option>
+        <option value="buyer">구매자 귀책</option>
+        <option value="other">미처리</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="renderReturns();loadReturnsSummary()">조회</button>
+      <span id="returnsSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
+      <button class="btn btn-sm" id="returnsDeleteBtn" onclick="bulkDeleteReturns()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
+    </div>
+
+    <!-- 테이블 -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="profit-table" id="returnsTable">
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="returnsSelectAll" onclick="toggleAllReturnsSelect(this)"></th>
+            <th>수령일</th>
+            <th>접수번호</th>
+            <th>상품명</th>
+            <th>옵션명</th>
+            <th>수량</th>
+            <th>환불금액</th>
+            <th>반품비</th>
+            <th>반품유형</th>
+            <th>반품비용</th>
+            <th>메모</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="returnsTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 반품 처리 모달 ══════════════════════════════════════════════════ -->
+<div id="returnProcessBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center" onclick="closeReturnProcessModal(event)">
+  <div style="background:var(--surface);border-radius:16px;padding:28px;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.18);position:relative" onclick="event.stopPropagation()">
+    <button onclick="closeReturnProcessModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:20px;color:var(--text-dim);cursor:pointer;line-height:1">×</button>
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px">반품 처리</div>
+    <input type="hidden" id="returnProcessId">
+    <div class="field">
+      <label>반품 유형</label>
+      <select id="returnProcessType" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+        <option value="seller">판매자 귀책</option>
+        <option value="buyer">구매자 귀책</option>
+        <option value="other">미처리</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>반품 비용 (원)</label>
+      <input type="number" id="returnProcessCost" min="0" step="1" placeholder="0" style="width:100%;box-sizing:border-box">
+    </div>
+    <div class="field">
+      <label>처리 메모</label>
+      <textarea id="returnProcessMemo" rows="3" placeholder="메모 입력" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);resize:vertical"></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn" onclick="closeReturnProcessModal()">취소</button>
+      <button class="btn btn-primary" onclick="submitReturnProcess()">저장</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ 광고 리포트 안내 모달 ════════════════════════════════════════ -->
@@ -1271,7 +1359,7 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 // ── 탭 ↔ URL 해시 매핑 ────────────────────────────────────────────────────────
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
-  orders: 'orders', ads: 'ads', coupons: 'coupons', profit: 'analytics'
+  orders: 'orders', ads: 'ads', coupons: 'coupons', profit: 'analytics', returns: 'returns'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -1292,6 +1380,7 @@ function _activateTabUI(name) {
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
   if (name === 'coupons')  { renderCoupons(); }
   if (name === 'profit')   { renderProfit(); }
+  if (name === 'returns')  { renderReturns(); loadReturnsSummary(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -4690,6 +4779,245 @@ async function saveMatchReview(oid) {
 function closeMatchModal() {
   const backdrop = document.getElementById('matchModalBackdrop');
   if (backdrop) backdrop.classList.remove('visible');
+}
+
+// ─── 반품 관리 ────────────────────────────────────────────────────────────────
+let selectedReturnIds = new Set();
+
+const RETURN_TYPE_LABELS = {
+  seller: { label: '판매자 귀책', color: '#ef4444' },
+  buyer:  { label: '구매자 귀책', color: '#f97316' },
+  other:  { label: '미처리',      color: '#9ca3af' },
+};
+
+async function loadReturnsSummary() {
+  const from = document.getElementById('returnsFrom')?.value || '';
+  const to   = document.getElementById('returnsTo')?.value   || '';
+  const params = new URLSearchParams();
+  if (from) params.set('start_date', from);
+  if (to)   params.set('end_date', to);
+  try {
+    const r = await fetch('/api/returns/summary?' + params.toString());
+    const d = await r.json();
+    const el = document.getElementById('returnsSummaryCards');
+    if (!el) return;
+    el.innerHTML = `
+      <div class="summary-card"><div class="summary-card-label">전체 반품</div><div class="summary-card-value">${(d.total_count||0).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">반품비용 합계</div><div class="summary-card-value" style="color:#ef4444">${Math.round(d.total_cost||0).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">환불금액 합계</div><div class="summary-card-value">${Math.round(d.total_refund||0).toLocaleString('ko-KR')}원</div></div>
+      <div class="summary-card"><div class="summary-card-label">판매자 귀책</div><div class="summary-card-value" style="color:#ef4444">${(d.seller_count||0).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">구매자 귀책</div><div class="summary-card-value" style="color:#f97316">${(d.buyer_count||0).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">미처리</div><div class="summary-card-value" style="color:#9ca3af">${(d.other_count||0).toLocaleString('ko-KR')}건</div></div>
+    `;
+  } catch(e) { console.error(e); }
+}
+
+async function renderReturns() {
+  const from   = document.getElementById('returnsFrom')?.value   || '';
+  const to     = document.getElementById('returnsTo')?.value     || '';
+  const type   = document.getElementById('returnsTypeFilter')?.value || 'all';
+  const params = new URLSearchParams();
+  if (from) params.set('start_date', from);
+  if (to)   params.set('end_date', to);
+  if (type && type !== 'all') params.set('return_type', type);
+  const tbody = document.getElementById('returnsTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
+  try {
+    const r = await fetch('/api/returns?' + params.toString());
+    const rows = await r.json();
+    selectedReturnIds = new Set();
+    updateReturnsSelectionUI();
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px">반품 내역이 없습니다</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(row => {
+      const tinfo = RETURN_TYPE_LABELS[row.return_type] || RETURN_TYPE_LABELS.other;
+      return `<tr>
+        <td><input type="checkbox" data-id="${row.id}" onclick="toggleReturnSelect(this)"></td>
+        <td>${row.received_at ? row.received_at.slice(0,10) : '-'}</td>
+        <td style="font-family:var(--mono);font-size:11px">${row.receipt_number||'-'}</td>
+        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.product_name||''}">${row.product_name||'-'}</td>
+        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.option_name||''}">${row.option_name||'-'}</td>
+        <td style="text-align:right">${row.quantity||1}</td>
+        <td style="text-align:right;font-family:var(--mono)">${(row.refund_amount||0).toLocaleString('ko-KR')}</td>
+        <td style="text-align:right;font-family:var(--mono)">${(row.return_shipping_fee||0).toLocaleString('ko-KR')}</td>
+        <td><span style="font-size:11px;font-weight:600;color:${tinfo.color};padding:2px 8px;background:${tinfo.color}18;border-radius:4px">${tinfo.label}</span></td>
+        <td style="text-align:right;font-family:var(--mono)">${row.return_cost ? Math.round(row.return_cost).toLocaleString('ko-KR') : '-'}</td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)" title="${row.process_memo||''}">${row.process_memo||''}</td>
+        <td><button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'').replace(/'/g,"\\'")})" style="font-size:11px;padding:3px 8px">처리</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
+  }
+}
+
+function toggleAllReturnsSelect(cb) {
+  document.querySelectorAll('#returnsTbody input[type=checkbox]').forEach(c => {
+    c.checked = cb.checked;
+    const id = parseInt(c.dataset.id);
+    if (cb.checked) selectedReturnIds.add(id); else selectedReturnIds.delete(id);
+  });
+  updateReturnsSelectionUI();
+}
+
+function toggleReturnSelect(cb) {
+  const id = parseInt(cb.dataset.id);
+  if (cb.checked) selectedReturnIds.add(id); else selectedReturnIds.delete(id);
+  updateReturnsSelectionUI();
+}
+
+function updateReturnsSelectionUI() {
+  const n = selectedReturnIds.size;
+  const infoEl = document.getElementById('returnsSelectedInfo');
+  const delBtn = document.getElementById('returnsDeleteBtn');
+  if (infoEl) infoEl.textContent = n ? `${n}건 선택됨` : '';
+  if (delBtn) delBtn.style.display = n ? 'inline-flex' : 'none';
+}
+
+async function bulkDeleteReturns() {
+  if (!selectedReturnIds.size) return;
+  if (!confirm(`선택한 ${selectedReturnIds.size}건을 삭제하시겠습니까?`)) return;
+  try {
+    const r = await fetch('/api/returns', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selectedReturnIds] }),
+    });
+    const d = await r.json();
+    alert(`${d.deleted}건 삭제되었습니다.`);
+    renderReturns();
+    loadReturnsSummary();
+  } catch(e) { alert(e.message); }
+}
+
+function openReturnProcessModal(id, returnType, returnCost, memo) {
+  document.getElementById('returnProcessId').value   = id;
+  document.getElementById('returnProcessType').value = returnType || 'other';
+  document.getElementById('returnProcessCost').value = returnCost || 0;
+  document.getElementById('returnProcessMemo').value = memo || '';
+  const bd = document.getElementById('returnProcessBackdrop');
+  bd.style.display = 'flex';
+}
+
+function closeReturnProcessModal(e) {
+  if (e && e.target !== document.getElementById('returnProcessBackdrop')) return;
+  document.getElementById('returnProcessBackdrop').style.display = 'none';
+}
+
+async function submitReturnProcess() {
+  const id   = document.getElementById('returnProcessId').value;
+  const type = document.getElementById('returnProcessType').value;
+  const cost = parseFloat(document.getElementById('returnProcessCost').value) || 0;
+  const memo = document.getElementById('returnProcessMemo').value;
+  try {
+    const r = await fetch(`/api/returns/${id}/process`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ return_type: type, return_cost: cost, process_memo: memo }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById('returnProcessBackdrop').style.display = 'none';
+    renderReturns();
+    loadReturnsSummary();
+  } catch(e) { alert(e.message); }
+}
+
+async function handleReturnsUpload(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  const statusEl = document.getElementById('returnsUploadStatus');
+  if (statusEl) statusEl.textContent = '파싱 중…';
+  try {
+    const data = await file.arrayBuffer();
+    const wb   = XLSX.read(data, { type: 'array' });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    if (!raw.length) { if (statusEl) statusEl.textContent = '데이터 없음'; return; }
+
+    const COL = {
+      received_at:              ['접수일시', '수령일'],
+      receipt_number:           ['접수번호'],
+      delivery_status:          ['배송 현황'],
+      return_status:            ['반품 현황'],
+      warehousing_status:       ['입고 현황'],
+      warehousing_method:       ['입고 방법'],
+      warehousing_tracking:     ['입고 운송장 번호'],
+      product_name:             ['상품명', '등록 상품명'],
+      option_name:              ['옵션명'],
+      quantity:                 ['수량'],
+      return_reason:            ['반품 사유'],
+      return_shipping_fee:      ['반품 배송비'],
+      shipping_fee_burden:      ['배송비 부담'],
+      refund_amount:            ['환불 금액'],
+      recipient_masked:         ['수취인명'],
+      phone_masked:             ['휴대폰 번호', '수취인 전화번호'],
+      return_address_masked:    ['반품지 주소'],
+      collection_address_masked:['수거지 주소'],
+      order_number:             ['주문번호'],
+      expected_ship_date:       ['예정 출고일'],
+      warehousing_complete_date:['입고 완료일'],
+      return_complete_date:     ['반품 완료일'],
+      receipt_channel:          ['접수 경로', '접수경로'],
+      option_id:                ['옵션 ID', '옵션ID'],
+    };
+
+    function pick(row, keys) {
+      for (const k of keys) { if (row[k] !== undefined && row[k] !== '') return String(row[k]).trim(); }
+      return '';
+    }
+
+    const items = raw.map(row => ({
+      received_at:              pick(row, COL.received_at),
+      receipt_number:           pick(row, COL.receipt_number),
+      delivery_status:          pick(row, COL.delivery_status),
+      return_status:            pick(row, COL.return_status),
+      warehousing_status:       pick(row, COL.warehousing_status),
+      warehousing_method:       pick(row, COL.warehousing_method),
+      warehousing_tracking:     pick(row, COL.warehousing_tracking),
+      product_name:             pick(row, COL.product_name),
+      option_name:              pick(row, COL.option_name),
+      quantity:                 parseInt(pick(row, COL.quantity)) || 1,
+      return_reason:            pick(row, COL.return_reason),
+      return_shipping_fee:      parseInt(String(pick(row, COL.return_shipping_fee)).replace(/,/g,'')) || 0,
+      shipping_fee_burden:      pick(row, COL.shipping_fee_burden),
+      refund_amount:            parseInt(String(pick(row, COL.refund_amount)).replace(/,/g,'')) || 0,
+      recipient_masked:         pick(row, COL.recipient_masked),
+      phone_masked:             pick(row, COL.phone_masked),
+      return_address_masked:    pick(row, COL.return_address_masked),
+      collection_address_masked:pick(row, COL.collection_address_masked),
+      order_number:             pick(row, COL.order_number),
+      expected_ship_date:       pick(row, COL.expected_ship_date),
+      warehousing_complete_date:pick(row, COL.warehousing_complete_date),
+      return_complete_date:     pick(row, COL.return_complete_date),
+      receipt_channel:          pick(row, COL.receipt_channel),
+      option_id:                pick(row, COL.option_id),
+      raw_data:                 row,
+    })).filter(r => r.receipt_number);
+
+    if (!items.length) { if (statusEl) statusEl.textContent = '접수번호 컬럼을 찾을 수 없습니다'; return; }
+    if (statusEl) statusEl.textContent = `업로드 중… (${items.length}건)`;
+
+    const r = await fetch('/api/returns/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(items),
+    });
+    const d = await r.json();
+    if (statusEl) {
+      const now = new Date();
+      const kst = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      statusEl.textContent = `최근 업로드: ${kst} | 신규 ${d.inserted}건 / 중복 ${d.skipped}건 제외`;
+    }
+    renderReturns();
+    loadReturnsSummary();
+  } catch(e) {
+    if (statusEl) statusEl.textContent = `오류: ${e.message}`;
+    console.error(e);
+  }
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

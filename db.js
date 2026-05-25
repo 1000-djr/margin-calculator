@@ -337,6 +337,44 @@ async function initDB() {
     console.log(`[db] ad_placement 백필 완료: ${backfilled}행 업데이트`);
   }
 
+  // 반품 관리 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS returns (
+      id                       SERIAL PRIMARY KEY,
+      user_id                  INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      received_at              VARCHAR(50),
+      receipt_number           VARCHAR(100) NOT NULL,
+      delivery_status          VARCHAR(100),
+      return_status            VARCHAR(100),
+      warehousing_status       VARCHAR(100),
+      warehousing_method       VARCHAR(100),
+      warehousing_tracking     VARCHAR(200),
+      product_name             TEXT,
+      option_name              TEXT,
+      quantity                 INTEGER DEFAULT 1,
+      return_reason            TEXT,
+      return_shipping_fee      INTEGER DEFAULT 0,
+      shipping_fee_burden      VARCHAR(100),
+      refund_amount            INTEGER DEFAULT 0,
+      recipient_masked         VARCHAR(100),
+      phone_masked             VARCHAR(50),
+      return_address_masked    TEXT,
+      collection_address_masked TEXT,
+      order_number             VARCHAR(100),
+      expected_ship_date       VARCHAR(50),
+      warehousing_complete_date VARCHAR(50),
+      return_complete_date     VARCHAR(50),
+      receipt_channel          VARCHAR(100),
+      option_id                VARCHAR(100),
+      return_cost              NUMERIC(12,2) DEFAULT 0,
+      return_type              VARCHAR(20)  DEFAULT 'other',
+      process_memo             TEXT,
+      raw_data                 JSONB,
+      created_at               TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, receipt_number)
+    );
+  `);
+
   console.log('[db] Tables ready');
 }
 
