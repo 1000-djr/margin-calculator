@@ -3704,7 +3704,15 @@ function renderCoupons() {
         ? ` <span title="동일 기간·옵션ID에 다른 쿠폰과 겹칩니다. 할인금액이 큰 쿠폰 1개만 적용됩니다." style="background:#f59e0b;color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;cursor:help">⚠️ 중복</span>`
         : '';
 
-      const fmt = dt => dt ? dt.toLocaleString('ko-KR', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '-';
+      const fmt = dt => {
+        if (!dt) return '-';
+        const Y  = dt.getFullYear();
+        const Mo = String(dt.getMonth() + 1).padStart(2, '0');
+        const D  = String(dt.getDate()).padStart(2, '0');
+        const H  = String(dt.getHours()).padStart(2, '0');
+        const Mi = String(dt.getMinutes()).padStart(2, '0');
+        return `${Y}-${Mo}-${D} ${H}:${Mi}`;
+      };
       const period = `${fmt(startAt)} ~ ${fmt(endAt)}`;
       const optCount = Array.isArray(c.option_ids) ? c.option_ids.length : 0;
 
