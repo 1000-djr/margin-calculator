@@ -918,8 +918,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="field"><label>할인금액 (원)</label><input type="number" id="couponDiscount" placeholder="0" min="0"></div>
       </div>
       <div class="field-row">
-        <div class="field"><label>사용기간 시작일시</label><input type="datetime-local" id="couponStartAt"></div>
-        <div class="field"><label>사용기간 종료일시</label><input type="datetime-local" id="couponEndAt"></div>
+        <div class="field"><label>사용기간 시작일시</label><input type="datetime-local" id="couponStartAt" step="60"></div>
+        <div class="field"><label>사용기간 종료일시</label><input type="datetime-local" id="couponEndAt" step="60"></div>
       </div>
       <div class="field">
         <label>적용 옵션ID <span style="font-weight:400;color:var(--text-dim)">(쉼표 또는 엔터로 구분)</span></label>
