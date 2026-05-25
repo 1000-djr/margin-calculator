@@ -865,6 +865,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="upload-area-text">클릭하여 광고 리포트 엑셀 파일 선택 (.xlsx, .xls)<br>날짜+옵션ID+캠페인ID 기준 중복 제거됩니다</div>
       </div>
       <input type="file" id="adsFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleAdsUpload(this)">
+      <div id="adsSummaryBar" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:16px"></div>
     </div>
     <div class="section-label">필터</div>
     <div class="card">
@@ -1254,7 +1255,7 @@ function _activateTabUI(name) {
   if (name === 'b2b')      { renderB2B(); }
   if (name === 'calc')   { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
   if (name === 'orders') { renderOrders(); loadOrdersSummary(); }
-  if (name === 'ads')      { renderAds(); }
+  if (name === 'ads')      { renderAds(); loadAdsSummary(); }
   if (name === 'coupons')  { renderCoupons(); }
   if (name === 'profit')   { renderProfit(); }
 }
@@ -2835,6 +2836,18 @@ function renderOrders() {
   }).join('');
 }
 
+async function loadAdsSummary() {
+  const el = document.getElementById('adsSummaryBar');
+  if (!el || !currentUser) return;
+  try {
+    const data = await fetch('/api/ad-reports/summary').then(r => r.json());
+    const parts = [];
+    if (data.last_uploaded)     parts.push(`최근 업로드: ${data.last_uploaded}`);
+    if (data.latest_report_date) parts.push(`최신 광고일: ${data.latest_report_date}`);
+    el.textContent = parts.length ? parts.join(' / ') : '';
+  } catch(e) { el.textContent = ''; }
+}
+
 async function loadOrdersSummary() {
   const el = document.getElementById('ordersSummaryBar');
   if (!el || !currentUser) return;
@@ -2934,6 +2947,7 @@ function handleAdsUpload(input) {
             const dbResult = dbRes.ok ? await dbRes.json() : {};
             console.log('[ads] DB 저장:', dbResult);
             renderAds();
+            loadAdsSummary();
             alert(`${toAdd.length}건 처리됨\nDB 저장: ${dbResult.inserted ?? '?'}건 / 중복스킵: ${dbResult.skipped ?? '?'}건 / 실패: ${dbResult.failed ?? 0}건\n(총 ${adReports.length}건)`);
             return;
           } catch(e) { console.error('[ads] DB 저장 오류:', e); }

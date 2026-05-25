@@ -327,6 +327,19 @@ router.delete('/orders/:id', requireAuth, async (req, res) => {
 });
 
 // ─── 광고보고서 ───────────────────────────────────────────────────────────────
+router.get('/ad-reports/summary', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        TO_CHAR(MAX(created_at) AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS last_uploaded,
+        MAX(report_date)                                                           AS latest_report_date
+      FROM ad_reports
+      WHERE user_id = $1
+    `, [req.user.id]);
+    res.json(rows[0] || { last_uploaded: null, latest_report_date: null });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/ad-reports', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
