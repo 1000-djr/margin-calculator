@@ -821,7 +821,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="upload-area-text">클릭하여 주문서 엑셀 파일 선택 (.xlsx, .xls)<br>기존 주문과 합산되며 주문번호 기준 중복 제거됩니다</div>
       </div>
       <input type="file" id="ordersFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleOrdersUpload(this)">
-      <div class="btn-row" style="margin-top:10px;margin-bottom:0">
+      <div id="ordersSummaryBar" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:16px"></div>
+      <div class="btn-row" style="margin-top:8px;margin-bottom:0">
         <button class="btn btn-ghost btn-sm" onclick="openBulkExcludeModal()">🚫 주문번호 일괄 미인식</button>
       </div>
     </div>
@@ -1252,7 +1253,7 @@ function _activateTabUI(name) {
   if (btn) btn.classList.add('active');
   if (name === 'b2b')      { renderB2B(); }
   if (name === 'calc')   { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
-  if (name === 'orders') { renderOrders(); }
+  if (name === 'orders') { renderOrders(); loadOrdersSummary(); }
   if (name === 'ads')      { renderAds(); }
   if (name === 'coupons')  { renderCoupons(); }
   if (name === 'profit')   { renderProfit(); }
@@ -2606,6 +2607,7 @@ function handleOrdersUpload(input) {
         const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
         if (matchedIds.length > 0) showMatchingReviewModal(matchedIds, toAdd);
         renderOrders();
+        loadOrdersSummary();
         alert(`${toAdd.length}건 추가됨 (총 ${orders.length}건)`);
       };
 
@@ -2831,6 +2833,18 @@ function renderOrders() {
       return `<td>${cellVal}</td>`;
     }).join('') + deleteBtn + '</tr>';
   }).join('');
+}
+
+async function loadOrdersSummary() {
+  const el = document.getElementById('ordersSummaryBar');
+  if (!el || !currentUser) return;
+  try {
+    const data = await fetch('/api/orders/summary').then(r => r.json());
+    const parts = [];
+    if (data.last_uploaded) parts.push(`최근 업로드: ${data.last_uploaded}`);
+    if (data.latest_order_date) parts.push(`최신 주문일: ${data.latest_order_date}`);
+    el.textContent = parts.length ? parts.join(' / ') : '';
+  } catch(e) { el.textContent = ''; }
 }
 
 async function deleteOrder(dbId, orderNumber) {
