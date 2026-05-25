@@ -3576,12 +3576,25 @@ function editCoupon(id) {
   const c = coupons.find(x => x.id == id);
   if (!c) return;
   editingCouponId = id;
+
+  // UTC ISO → datetime-local 입력값 (KST 로컬 시간 기준 "YYYY-MM-DDTHH:mm")
+  const toLocalDatetime = (utcStr) => {
+    if (!utcStr) return '';
+    const d = new Date(utcStr);
+    if (isNaN(d.getTime())) return '';
+    const Y  = d.getFullYear();
+    const Mo = String(d.getMonth() + 1).padStart(2, '0');
+    const D  = String(d.getDate()).padStart(2, '0');
+    const H  = String(d.getHours()).padStart(2, '0');
+    const Mi = String(d.getMinutes()).padStart(2, '0');
+    return `${Y}-${Mo}-${D}T${H}:${Mi}`;
+  };
+
   document.getElementById('couponName').value       = c.name || '';
   document.getElementById('couponCouponId').value   = c.coupon_id || '';
   document.getElementById('couponDiscount').value   = c.discount_amount || '';
-  // datetime-local 입력 형식: "YYYY-MM-DDTHH:mm"
-  document.getElementById('couponStartAt').value    = c.start_at ? c.start_at.slice(0, 16) : '';
-  document.getElementById('couponEndAt').value      = c.end_at   ? c.end_at.slice(0, 16)   : '';
+  document.getElementById('couponStartAt').value    = toLocalDatetime(c.start_at);
+  document.getElementById('couponEndAt').value      = toLocalDatetime(c.end_at);
   document.getElementById('couponOptionIds').value  = Array.isArray(c.option_ids) ? c.option_ids.join('\n') : '';
   document.getElementById('couponFormTitle').textContent = '쿠폰 수정';
   document.getElementById('couponSaveBtn').textContent   = '수정 저장';
