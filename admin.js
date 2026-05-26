@@ -11,8 +11,9 @@ const { calculateProfit } = require('./profit');
 
 // ─── 어드민 미들웨어 ──────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
-  if (!req.user)          return res.status(401).json({ error: '로그인이 필요합니다.' });
-  if (!req.user.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
+  const admin = req.originalAdmin || req.user;
+  if (!admin)          return res.status(401).json({ error: '로그인이 필요합니다.' });
+  if (!admin.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
   next();
 }
 

@@ -657,6 +657,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
 <!-- ══ 메인 앱 (로그인 후 표시) ══════════════════════════════════════════ -->
 <div class="app" id="app" style="display:none">
+  <!-- 대리접속 배너 -->
+  <div id="impersonateBanner" style="display:none;background:#f97316;color:#fff;padding:10px 20px;display:none;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;margin-bottom:12px;border-radius:10px">
+    <span id="impersonateBannerText"></span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a href="/admin" style="color:#fff;text-decoration:underline;font-size:12px">어드민 페이지</a>
+      <button onclick="exitImpersonate()" style="background:#fff;color:#f97316;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">원래 계정으로 돌아가기</button>
+    </div>
+  </div>
   <div class="header">
     <div class="header-icon">🌾</div>
     <div>
@@ -1540,20 +1548,38 @@ function updateAuthUI() {
   const loginScreen = document.getElementById('loginScreen');
   const appEl       = document.getElementById('app');
   const userProfile = document.getElementById('userProfile');
+  const banner      = document.getElementById('impersonateBanner');
+
   if (currentUser) {
     loginScreen.style.display = 'none';
     appEl.style.display       = 'block';
     userProfile.style.display = 'flex';
     document.getElementById('userAvatar').src       = currentUser.picture || '';
     document.getElementById('userName').textContent = currentUser.name   || '';
-    document.getElementById('adminBtn').style.display = currentUser.is_admin ? 'inline-block' : 'none';
+    // 대리접속 중이면 어드민 버튼 숨김 (배너의 '어드민 페이지' 링크로 대체)
+    document.getElementById('adminBtn').style.display = (currentUser.is_admin && !currentUser._impersonating) ? 'inline-block' : 'none';
+
+    // 대리접속 배너
+    if (currentUser._impersonating && banner) {
+      document.getElementById('impersonateBannerText').textContent =
+        `어드민 대리접속 중: ${currentUser.name || ''} (${currentUser.email || ''})`;
+      banner.style.display = 'flex';
+    } else if (banner) {
+      banner.style.display = 'none';
+    }
   } else {
     loginScreen.style.display = 'flex';
     appEl.style.display       = 'none';
     userProfile.style.display = 'none';
+    if (banner) banner.style.display = 'none';
   }
   // auth 확인 완료 후 정확한 화면이 결정된 다음 한 번만 fade-in
   document.body.style.opacity = '1';
+}
+
+async function exitImpersonate() {
+  await fetch('/api/admin/impersonate/exit', { method: 'POST' });
+  await checkAuth();
 }
 
 async function loadUserData() {

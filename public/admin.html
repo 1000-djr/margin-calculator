@@ -408,11 +408,12 @@ function renderTable(users){
     const d=calcDerived(u);
     return `
     <tr onclick="openDetail(${u.id})" style="${rowBg(u)}">
-      <td>
+      <td onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;gap:6px">
           ${u.picture?`<img class="avatar" src="${u.picture}" onerror="this.style.display='none'">`:
             `<span class="avatar-placeholder">${(u.name||'?')[0]}</span>`}
-          <span class="user-name">${u.name||'—'}</span>
+          <span class="user-name" style="cursor:pointer" onclick="openDetail(${u.id})">${u.name||'—'}</span>
+          ${!u.is_admin?`<button class="btn" onclick="impersonate(${u.id})" style="padding:2px 7px;font-size:11px;background:#f97316;color:#fff;border:none;border-radius:5px;cursor:pointer;margin-left:2px" title="대리접속">접속</button>`:''}
         </div>
       </td>
       <td><span style="font-size:12px;color:#8e8e93">${u.email||'—'}</span></td>
@@ -598,6 +599,17 @@ function closeDetail(e){
 }
 function closeDetailBtn(){
   document.getElementById('detailBackdrop').classList.remove('open');
+}
+
+// ── 대리접속 ──────────────────────────────────────────────────────────────────
+async function impersonate(userId) {
+  if (!confirm('해당 계정으로 대리접속하시겠습니까?')) return;
+  try {
+    const res = await fetch(`/api/admin/impersonate/${userId}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || '대리접속 실패'); return; }
+    window.location.href = '/';
+  } catch(e) { alert(e.message); }
 }
 
 // ── 초기화 ────────────────────────────────────────────────────────────────────

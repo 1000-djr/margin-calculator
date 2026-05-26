@@ -19,7 +19,43 @@ function requireAuth(req, res, next) {
 
 // ─── 현재 유저 정보 ───────────────────────────────────────────────────────────
 router.get('/auth/me', (req, res) => {
-  res.json(req.user || null);
+  if (!req.user) return res.json(null);
+  const user = { ...req.user };
+  if (req.originalAdmin) {
+    user._impersonating    = true;
+    user._originalAdmin    = { id: req.originalAdmin.id, name: req.originalAdmin.name, is_admin: req.originalAdmin.is_admin };
+    user.is_admin          = false; // 대리접속 중에는 어드민 버튼 숨김 (어드민 페이지는 별도 링크로)
+    user._originalIsAdmin  = true;
+  }
+  res.json(user);
+});
+
+// ─── 어드민 대리접속 ──────────────────────────────────────────────────────────
+function requireRealAdmin(req, res, next) {
+  const admin = req.originalAdmin || req.user;
+  if (!admin)          return res.status(401).json({ error: '로그인이 필요합니다.' });
+  if (!admin.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
+  next();
+}
+
+router.post('/admin/impersonate/exit', requireRealAdmin, (req, res) => {
+  delete req.session.impersonating_user_id;
+  res.json({ ok: true });
+});
+
+router.post('/admin/impersonate/:userId', requireRealAdmin, async (req, res) => {
+  try {
+    const adminUser = req.originalAdmin || req.user;
+    const targetId  = parseInt(req.params.userId);
+    if (targetId === adminUser.id) return res.status(400).json({ error: '자기 자신은 대리접속할 수 없습니다.' });
+
+    const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [targetId]);
+    if (!rows.length) return res.status(404).json({ error: '유저 없음' });
+    if (rows[0].is_admin) return res.status(400).json({ error: '어드민 계정은 대리접속할 수 없습니다.' });
+
+    req.session.impersonating_user_id = targetId;
+    res.json({ ok: true, user: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── 유저 데이터 키-값 저장소 ─────────────────────────────────────────────────

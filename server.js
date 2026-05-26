@@ -33,6 +33,23 @@ app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
+// ─── 대리접속 미들웨어 ───────────────────────────────────────────────────────
+// passport 세션 복원 후, impersonating_user_id가 있으면 req.user를 교체
+app.use(async (req, res, next) => {
+  if (req.session?.impersonating_user_id && req.user?.is_admin) {
+    try {
+      const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.impersonating_user_id]);
+      if (rows.length) {
+        req.originalAdmin = req.user;   // 원래 어드민 보관
+        req.user = rows[0];             // 대리접속 유저로 교체
+      }
+    } catch (e) {
+      console.error('[impersonate] 유저 조회 실패', e);
+    }
+  }
+  next();
+});
+
 // ─── 라우터 ──────────────────────────────────────────────────────────────────
 app.use('/', authRouter);
 app.use('/api', apiRouter);
