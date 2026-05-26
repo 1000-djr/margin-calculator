@@ -1446,15 +1446,35 @@ router.get('/fake-orders', requireAuth, async (req, res) => {
   try {
     const { order_date } = req.query;
     const { rows } = await pool.query(
-      `SELECT id, order_number, product_name, option_name, quantity,
-              payment_amount, shipping_fee,
-              payment_amount + shipping_fee AS net_sale,
-              exclusion_type
-         FROM orders
-        WHERE user_id = $1
-          AND ($2::text IS NULL OR SUBSTRING(order_date,1,10) = $2)
-          AND exclusion_type = 'fake_order'
-        ORDER BY id DESC`,
+      `SELECT o.id, o.order_number, o.product_name, o.option_name, o.quantity,
+              o.payment_amount, o.shipping_fee,
+              o.payment_amount + o.shipping_fee AS net_sale,
+              GREATEST(
+                o.payment_amount + o.shipping_fee
+                - COALESCE((
+                    SELECT c.discount_amount
+                    FROM coupons c
+                    WHERE c.user_id = o.user_id
+                      AND c.option_ids @> jsonb_build_array(o.option_id)
+                      AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                      AND (c.start_at IS NULL
+                        OR SUBSTRING(o.order_date,1,10)
+                           >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+                      AND (c.end_at IS NULL
+                        OR SUBSTRING(o.order_date,1,10)
+                           <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+                    ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
+                    LIMIT 1
+                  ), 0),
+                0
+              ) AS net_sale_after_coupon,
+              o.exclusion_type
+         FROM orders o
+        WHERE o.user_id = $1
+          AND ($2::text IS NULL OR SUBSTRING(o.order_date,1,10) = $2)
+          AND o.exclusion_type = 'fake_order'
+          AND o.is_excluded = TRUE
+        ORDER BY o.id DESC`,
       [req.user.id, order_date || null]
     );
     res.json(rows);

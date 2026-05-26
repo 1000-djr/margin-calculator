@@ -1418,7 +1418,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <table class="profit-table" style="min-width:580px">
           <thead><tr>
             <th style="width:36px"><input type="checkbox" id="frSelectAll" onchange="toggleSelectAllFakeOrders(this)"></th>
-            <th>주문번호</th><th>상품명</th><th>수량</th><th>실매출</th><th>예상비용</th>
+            <th>주문번호</th><th>상품명</th><th>수량</th><th>쿠폰적용매출</th><th>예상비용</th>
           </tr></thead>
           <tbody id="fakeOrderTbody"></tbody>
         </table>
@@ -6393,7 +6393,8 @@ async function loadFakeOrdersForDate() {
 
 function calcFakeOrderCost(order, vendor) {
   if (!vendor) return 0;
-  const netSale = (parseInt(order.payment_amount) || 0) + (parseInt(order.shipping_fee) || 0);
+  const netSale = parseFloat(order.net_sale_after_coupon)
+    || ((parseInt(order.payment_amount) || 0) + (parseInt(order.shipping_fee) || 0));
   const base = parseFloat(vendor.delivery_fee) + parseFloat(vendor.process_fee)
     + netSale * parseFloat(vendor.tax_rate) / 100
     + netSale * 0.1166;
@@ -6413,7 +6414,7 @@ function renderFakeOrders() {
   const vendor = fakeVendors.find(v => v.id == vendorId);
   tbody.innerHTML = fakeOrdersForDate.map(o => {
     const cost = vendor ? calcFakeOrderCost(o, vendor).toLocaleString('ko-KR') + '원' : '-';
-    const netSale = ((parseInt(o.payment_amount)||0) + (parseInt(o.shipping_fee)||0)).toLocaleString('ko-KR');
+    const netSale = (parseFloat(o.net_sale_after_coupon) || ((parseInt(o.payment_amount)||0) + (parseInt(o.shipping_fee)||0))).toLocaleString('ko-KR');
     return `<tr>
       <td><input type="checkbox" class="fakeOrderChk" value="${o.id}" onchange="updateFakeCostPreview()"></td>
       <td style="font-family:var(--mono);font-size:12px">${o.order_number}</td>
