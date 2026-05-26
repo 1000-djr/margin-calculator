@@ -337,6 +337,11 @@ async function initDB() {
     console.log(`[db] ad_placement 백필 완료: ${backfilled}행 업데이트`);
   }
 
+  // returns record_type (반품 / 출고중지)
+  await pool.query(`
+    ALTER TABLE returns ADD COLUMN IF NOT EXISTS record_type VARCHAR(20) DEFAULT 'return';
+  `);
+
   // orders 발주 조정 컬럼
   await pool.query(`
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS override_cost_price INTEGER;

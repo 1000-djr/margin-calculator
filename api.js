@@ -229,7 +229,7 @@ router.put('/orders/exclude-bulk', requireAuth, async (req, res) => {
   const { order_numbers, is_excluded, exclusion_type = 'normal' } = req.body;
   if (!Array.isArray(order_numbers) || !order_numbers.length)
     return res.status(400).json({ error: 'order_numbers 배열 필수' });
-  const VALID = ['normal','fake_order','return','other'];
+  const VALID = ['normal','fake_order','return','other','cancel'];
   const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
   try {
     const result = await pool.query(
@@ -243,7 +243,7 @@ router.put('/orders/exclude-bulk', requireAuth, async (req, res) => {
 
 router.put('/orders/:orderNumber/exclude', requireAuth, async (req, res) => {
   const { is_excluded, exclusion_type = 'normal' } = req.body;
-  const VALID = ['normal','fake_order','return','other'];
+  const VALID = ['normal','fake_order','return','other','cancel'];
   const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
   try {
     await pool.query(
@@ -258,7 +258,7 @@ router.put('/orders/bulk-update', requireAuth, async (req, res) => {
   const { ids, is_excluded, exclusion_type = 'normal' } = req.body;
   if (!Array.isArray(ids) || !ids.length)
     return res.status(400).json({ error: 'ids 배열 필수' });
-  const VALID = ['normal','fake_order','return','other'];
+  const VALID = ['normal','fake_order','return','other','cancel'];
   const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
   try {
     const { rowCount } = await pool.query(
@@ -1123,6 +1123,75 @@ router.post('/returns/bulk', requireAuth, async (req, res) => {
       );
       ordersUpdated = rowCount;
       console.log('[returns/bulk] orders 반품 처리 완료:', ordersUpdated, '건');
+    }
+
+    res.json({ inserted, skipped, ordersUpdated });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 출고중지 엑셀 업로드
+// 배송상태 분기:
+//   '출고중지완료' → orders만 is_excluded=true, exclusion_type='cancel'
+//   '이미출고'     → returns 행 삽입(record_type='cancel') + orders is_excluded=true, exclusion_type='cancel'
+router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
+  const items = req.body;
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items 배열 필수' });
+
+  let inserted = 0, skipped = 0, ordersUpdated = 0;
+  const cancelOrderNumbers = [];
+
+  try {
+    for (const r of items) {
+      const deliveryStatus = (r.delivery_status || '').trim();
+      const orderNumber    = r.order_number || null;
+
+      if (deliveryStatus === '이미출고') {
+        // returns 테이블에 삽입
+        const result = await pool.query(`
+          INSERT INTO returns (
+            user_id, received_at, receipt_number, delivery_status,
+            product_name, option_name, quantity, return_reason,
+            recipient_masked, phone_masked,
+            order_number, expected_ship_date, warehousing_complete_date,
+            receipt_channel, option_id, record_type, raw_data
+          ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'cancel',$16
+          )
+          ON CONFLICT (user_id, receipt_number) DO NOTHING
+        `, [
+          req.user.id,
+          r.received_at              || null,
+          r.receipt_number,
+          r.delivery_status          || null,
+          r.product_name             || null,
+          r.option_name              || null,
+          parseInt(r.quantity)       || 1,
+          r.return_reason            || null,
+          r.recipient_masked         || null,
+          r.phone_masked             || null,
+          orderNumber,
+          r.expected_ship_date       || null,
+          r.stop_complete_date       || null,
+          r.receipt_channel          || null,
+          r.option_id                || null,
+          r.raw_data ? JSON.stringify(r.raw_data) : null,
+        ]);
+        if (result.rowCount > 0) inserted++; else skipped++;
+      }
+      // 두 분기 모두 orders 처리
+      if (orderNumber) cancelOrderNumbers.push(orderNumber);
+    }
+
+    if (cancelOrderNumbers.length > 0) {
+      const { rowCount } = await pool.query(
+        `UPDATE orders
+            SET is_excluded    = TRUE,
+                exclusion_type = 'cancel'
+          WHERE user_id = $1
+            AND order_number = ANY($2)`,
+        [req.user.id, cancelOrderNumbers]
+      );
+      ordersUpdated = rowCount;
     }
 
     res.json({ inserted, skipped, ordersUpdated });
