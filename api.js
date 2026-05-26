@@ -1024,12 +1024,18 @@ router.get('/returns/summary', requireAuth, async (req, res) => {
 
 router.get('/returns', requireAuth, async (req, res) => {
   try {
-    const { start_date, end_date, return_type } = req.query;
+    const { start_date, end_date, return_type, record_type } = req.query;
     const params = [req.user.id, start_date || null, end_date || null];
     let typeClause = '';
+    let recordClause = '';
     if (return_type && return_type !== 'all') {
       params.push(return_type);
       typeClause = `AND return_type = $${params.length}`;
+    }
+    if (record_type === 'return') {
+      recordClause = `AND COALESCE(record_type, 'return') = 'return'`;
+    } else if (record_type === 'cancel') {
+      recordClause = `AND record_type = 'cancel'`;
     }
     const { rows } = await pool.query(`
       SELECT * FROM returns
@@ -1037,6 +1043,7 @@ router.get('/returns', requireAuth, async (req, res) => {
         AND ($2::text IS NULL OR received_at >= $2)
         AND ($3::text IS NULL OR received_at <= $3)
         ${typeClause}
+        ${recordClause}
       ORDER BY received_at DESC, id DESC
     `, params);
     res.json(rows);

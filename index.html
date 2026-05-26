@@ -1252,12 +1252,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
       <span style="font-size:12px;color:var(--text-dim)">~</span>
       <input type="date" id="returnsTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-      <select id="returnsTypeFilter" onchange="renderReturns()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <option value="all">전체 유형</option>
-        <option value="seller">판매자 귀책</option>
-        <option value="buyer">구매자 귀책</option>
-        <option value="other">미처리</option>
-      </select>
+      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:12px">
+        <button id="returnsRecordFilterAll"    onclick="setReturnsRecordFilter('all')"    style="padding:5px 12px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;font-weight:600">전체</button>
+        <button id="returnsRecordFilterReturn" onclick="setReturnsRecordFilter('return')" style="padding:5px 12px;border:none;background:var(--surface);color:var(--text);cursor:pointer;font-size:12px;border-left:1px solid var(--border)">반품</button>
+        <button id="returnsRecordFilterCancel" onclick="setReturnsRecordFilter('cancel')" style="padding:5px 12px;border:none;background:var(--surface);color:var(--text);cursor:pointer;font-size:12px;border-left:1px solid var(--border)">출고중지</button>
+      </div>
       <button class="btn btn-primary btn-sm" onclick="renderReturns();loadReturnsSummary()">조회</button>
       <span id="returnsSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
       <button class="btn btn-sm" id="returnsDeleteBtn" onclick="bulkDeleteReturns()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
@@ -5636,14 +5635,28 @@ async function loadReturnsSummary() {
   } catch(e) { console.error(e); }
 }
 
+let _returnsRecordFilter = 'all'; // 'all' | 'return' | 'cancel'
+
+function setReturnsRecordFilter(val) {
+  _returnsRecordFilter = val;
+  ['All','Return','Cancel'].forEach(k => {
+    const btn = document.getElementById('returnsRecordFilter' + k);
+    if (!btn) return;
+    const active = val === k.toLowerCase();
+    btn.style.background = active ? 'var(--primary)' : 'var(--surface)';
+    btn.style.color       = active ? '#fff' : 'var(--text)';
+    btn.style.fontWeight  = active ? '600' : '400';
+  });
+  renderReturns();
+}
+
 async function renderReturns() {
   const from   = document.getElementById('returnsFrom')?.value   || '';
   const to     = document.getElementById('returnsTo')?.value     || '';
-  const type   = document.getElementById('returnsTypeFilter')?.value || 'all';
   const params = new URLSearchParams();
   if (from) params.set('start_date', from);
   if (to)   params.set('end_date', to);
-  if (type && type !== 'all') params.set('return_type', type);
+  if (_returnsRecordFilter && _returnsRecordFilter !== 'all') params.set('record_type', _returnsRecordFilter);
   const tbody = document.getElementById('returnsTbody');
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
