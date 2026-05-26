@@ -211,24 +211,68 @@ router.get('/orders/summary', requireAuth, async (req, res) => {
 
 router.get('/orders', requireAuth, async (req, res) => {
   try {
-    const { start_date, end_date, exclude_excluded } = req.query;
-    console.log(`[GET /orders] user=${req.user.id} start=${start_date||'none'} end=${end_date||'none'} exclude_excluded=${exclude_excluded||'false'}`);
-    let q = 'SELECT * FROM orders WHERE user_id=$1';
+    const { start_date, end_date, exclude_excluded, offset, limit, search, exclusion_filter, sort_col, sort_dir } = req.query;
+    const usePagination = limit !== undefined;
+
+    // WHERE 절 공통 빌더
     const params = [req.user.id];
-    if (exclude_excluded === 'true') q += ' AND (is_excluded IS NULL OR is_excluded = false)';
-    // order_date는 VARCHAR(50), 'YYYY-MM-DD HH:mm' 또는 'YYYY.MM.DD' 혼용 → 앞 10자리 추출 후 점을 하이픈으로 변환해 비교
+    let where = 'user_id=$1';
+
+    // 구버전 호환 (exclude_excluded=true)
+    if (exclude_excluded === 'true') {
+      where += ' AND (is_excluded IS NULL OR is_excluded = false)';
+    }
+
+    // 날짜 필터 — order_date는 VARCHAR, 'YYYY-MM-DD HH:mm' 또는 'YYYY.MM.DD' 혼용
     if (start_date) {
       params.push(start_date);
-      q += ` AND REPLACE(LEFT(order_date, 10), '.', '-') >= $${params.length}`;
+      where += ` AND REPLACE(LEFT(order_date, 10), '.', '-') >= $${params.length}`;
     }
     if (end_date) {
       params.push(end_date);
-      q += ` AND REPLACE(LEFT(order_date, 10), '.', '-') <= $${params.length}`;
+      where += ` AND REPLACE(LEFT(order_date, 10), '.', '-') <= $${params.length}`;
     }
-    q += ' ORDER BY order_date DESC, created_at DESC';
-    const { rows } = await pool.query(q, params);
-    console.log(`[GET /orders] 결과=${rows.length}건`);
-    res.json(rows.map(r => ({
+
+    // 상품명 검색
+    if (search) {
+      params.push(`%${search.toLowerCase()}%`);
+      where += ` AND LOWER(product_name) LIKE $${params.length}`;
+    }
+
+    // 인식/미인식 필터
+    if (exclusion_filter === 'included') {
+      where += ' AND (is_excluded IS NULL OR is_excluded = false)';
+    } else if (exclusion_filter === 'excluded') {
+      where += ' AND is_excluded = true';
+    } else if (['fake_order', 'return', 'other', 'cancel'].includes(exclusion_filter)) {
+      params.push(exclusion_filter);
+      where += ` AND exclusion_type = $${params.length}`;
+    }
+
+    // 정렬
+    const sortColMap = { '주문일': 'order_date', '등록상품명': 'product_name' };
+    const dbSortCol = sortColMap[sort_col] || 'order_date';
+    const dbSortDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
+
+    // 데이터 쿼리 (공유 params 복사 후 LIMIT/OFFSET 추가)
+    const dataParams = [...params];
+    let q = `SELECT * FROM orders WHERE ${where} ORDER BY ${dbSortCol} ${dbSortDir}, created_at DESC`;
+    if (usePagination) {
+      const lim = Math.max(1, parseInt(limit) || 50);
+      const off = Math.max(0, parseInt(offset) || 0);
+      dataParams.push(lim); q += ` LIMIT $${dataParams.length}`;
+      dataParams.push(off); q += ` OFFSET $${dataParams.length}`;
+    }
+
+    const countQ = `SELECT COUNT(*) FROM orders WHERE ${where}`;
+
+    const [{ rows }, countResult] = await Promise.all([
+      pool.query(q, dataParams),
+      usePagination ? pool.query(countQ, params) : Promise.resolve({ rows: [{ count: null }] }),
+    ]);
+    console.log(`[GET /orders] user=${req.user.id} limit=${limit||'all'} offset=${offset||0} 결과=${rows.length}건`);
+
+    const mapRow = r => ({
       '번호':                r.id,
       '주문번호':            r.order_number,
       '묶음배송번호':        r.bundle_number,
@@ -257,7 +301,13 @@ router.get('/orders', requireAuth, async (req, res) => {
       '수취인 주소':         r.recipient_address_masked,
       'is_excluded':         r.is_excluded || false,
       'exclusion_type':      r.exclusion_type || 'normal',
-    })));
+    });
+
+    if (usePagination) {
+      res.json({ orders: rows.map(mapRow), total: parseInt(countResult.rows[0].count) || 0 });
+    } else {
+      res.json(rows.map(mapRow));
+    }
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

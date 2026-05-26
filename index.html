@@ -1033,9 +1033,13 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="field"><label>주문일 시작</label><input type="date" id="ordersDateFrom"></div>
         <div class="field"><label>주문일 종료</label><input type="date" id="ordersDateTo"></div>
         <div class="field"><label>상품명 검색</label><input type="text" id="ordersSearchName" placeholder="등록상품명 검색…"></div>
-        <button class="btn btn-ghost btn-sm" onclick="renderOrders()" style="margin-bottom:0">검색</button>
+        <button class="btn btn-ghost btn-sm" onclick="searchOrders()" style="margin-bottom:0">검색</button>
         <button class="btn btn-ghost btn-sm" onclick="openColSettingsModal()" style="margin-bottom:0">⚙️ 컬럼 설정</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="margin-bottom:0">전체 삭제</button>
+        <select id="ordersPageSizeSelect" onchange="setOrdersPageSize(+this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);height:30px;margin-bottom:0">
+          <option value="10">10개씩</option>
+          <option value="50" selected>50개씩</option>
+        </select>
       </div>
     </div>
     <div id="ordersSummary" class="summary-cards"></div>
@@ -1056,6 +1060,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </table>
       </div>
     </div>
+    <div id="ordersPagination" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap"></div>
   </div>
 
   <!-- ══ 광고 탭 ════════════════════════════════════════════════════ -->
@@ -1716,6 +1721,8 @@ let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersSortCol = '주문일'; // 기본 정렬 컬럼
 let ordersSortDir = 'desc';  // 기본 내림차순
+let ordersPage = 1;
+let ordersPageSize = 50;
 let selectedOrderNums = new Set(); // 체크된 주문번호
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    || '{}');
@@ -3309,6 +3316,7 @@ async function doOrdersUpload(toAdd) {
   const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
   const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
   if (matchedIds.length > 0) showMatchingReviewModal(matchedIds, toAdd);
+  ordersPage = 1;
   renderOrders();
   loadOrdersSummary();
   alert(`${toAdd.length}건 추가됨 (총 ${orders.length}건)`);
@@ -3520,6 +3528,7 @@ const EXCLUSION_TYPES = {
 
 function setOrdersFilter(mode) {
   ordersExcludeFilter = mode;
+  ordersPage = 1;
   const btnMap = {
     all: 'All', included: 'Included', excluded: 'Excluded',
     fake_order: 'FakeOrder', return: 'Return', other: 'Other',
@@ -3621,33 +3630,24 @@ async function confirmBulkExclude() {
   });
 }
 
-function renderOrders() {
-  const from = document.getElementById('ordersDateFrom')?.value;
-  const to = document.getElementById('ordersDateTo')?.value;
-  const search = (document.getElementById('ordersSearchName')?.value || '').toLowerCase();
+async function renderOrders() {
+  const from   = document.getElementById('ordersDateFrom')?.value || '';
+  const to     = document.getElementById('ordersDateTo')?.value   || '';
+  const search = (document.getElementById('ordersSearchName')?.value || '').toLowerCase().trim();
 
-  let dateFiltered = orders.filter(o => {
+  // ── 요약 카드: 로컬 전체 데이터 기반 (날짜+검색 필터만) ──────────────────────
+  const dateFiltered = orders.filter(o => {
     if (search && !o['등록상품명'].toLowerCase().includes(search)) return false;
     const d = parseOrderDate(o['주문일']);
     if (from && d && d < new Date(from)) return false;
-    if (to && d && d > new Date(to + 'T23:59:59')) return false;
+    if (to   && d && d > new Date(to + 'T23:59:59')) return false;
     return true;
   });
-
-  const excludedCount   = dateFiltered.filter(o => o.is_excluded).length;
-  const fakeOrderCount  = dateFiltered.filter(o => o.exclusion_type === 'fake_order').length;
-  const returnCount     = dateFiltered.filter(o => o.exclusion_type === 'return').length;
-  const otherCount      = dateFiltered.filter(o => o.exclusion_type === 'other').length;
-
-  let filtered = dateFiltered;
-  if (ordersExcludeFilter === 'included')   filtered = dateFiltered.filter(o => !o.is_excluded);
-  else if (ordersExcludeFilter === 'excluded')   filtered = dateFiltered.filter(o => o.is_excluded);
-  else if (ordersExcludeFilter === 'fake_order') filtered = dateFiltered.filter(o => o.exclusion_type === 'fake_order');
-  else if (ordersExcludeFilter === 'return')     filtered = dateFiltered.filter(o => o.exclusion_type === 'return');
-  else if (ordersExcludeFilter === 'other')      filtered = dateFiltered.filter(o => o.exclusion_type === 'other');
-
-  // 요약
-  const totalAmt = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
+  const excludedCount  = dateFiltered.filter(o => o.is_excluded).length;
+  const fakeOrderCount = dateFiltered.filter(o => o.exclusion_type === 'fake_order').length;
+  const returnCount    = dateFiltered.filter(o => o.exclusion_type === 'return').length;
+  const otherCount     = dateFiltered.filter(o => o.exclusion_type === 'other').length;
+  const totalAmt  = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
   const totalShip = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['배송비']) || 0), 0);
   const summaryEl = document.getElementById('ordersSummary');
   if (summaryEl) {
@@ -3661,7 +3661,7 @@ function renderOrders() {
     `;
   }
 
-  // 테이블
+  // ── 테이블: API에서 페이지 단위로 fetch ──────────────────────────────────────
   const thead = document.getElementById('ordersThead');
   const tbody = document.getElementById('ordersTbody');
   if (!thead || !tbody) return;
@@ -3669,15 +3669,64 @@ function renderOrders() {
   const activeCols = ordersVisibleCols || ORDER_DISPLAY_COLS;
   const SORTABLE = ['주문일', '등록상품명'];
 
-  // 정렬 (헤더 전체 선택 계산에도 필요)
-  const sortedFiltered = [...filtered].sort((a, b) => {
-    const va = a[ordersSortCol] || '';
-    const vb = b[ordersSortCol] || '';
-    const cmp = va.localeCompare(vb, 'ko');
-    return ordersSortDir === 'asc' ? cmp : -cmp;
-  });
+  let pageOrders = [];
+  let totalFiltered = 0;
 
-  const allNums = sortedFiltered.map(o => o['주문번호']);
+  if (currentUser) {
+    try {
+      const qs = new URLSearchParams({
+        limit:  ordersPageSize,
+        offset: (ordersPage - 1) * ordersPageSize,
+        sort_col: ordersSortCol,
+        sort_dir: ordersSortDir,
+      });
+      if (from) qs.set('start_date', from);
+      if (to)   qs.set('end_date', to);
+      if (search) qs.set('search', search);
+      if (ordersExcludeFilter !== 'all') qs.set('exclusion_filter', ordersExcludeFilter);
+
+      const res  = await fetch(`/api/orders?${qs.toString()}`);
+      const data = await res.json();
+      pageOrders   = data.orders || [];
+      totalFiltered = data.total  || 0;
+    } catch (e) {
+      console.error('[renderOrders] API fetch 실패, 로컬 폴백', e);
+      // 폴백: 로컬 orders 배열 직접 사용
+      let loc = dateFiltered;
+      if (ordersExcludeFilter === 'included')   loc = dateFiltered.filter(o => !o.is_excluded);
+      else if (ordersExcludeFilter === 'excluded')   loc = dateFiltered.filter(o => o.is_excluded);
+      else if (['fake_order','return','other'].includes(ordersExcludeFilter))
+        loc = dateFiltered.filter(o => o.exclusion_type === ordersExcludeFilter);
+      const sorted = [...loc].sort((a, b) => {
+        const cmp = (a[ordersSortCol]||'').localeCompare(b[ordersSortCol]||'', 'ko');
+        return ordersSortDir === 'asc' ? cmp : -cmp;
+      });
+      totalFiltered = sorted.length;
+      const ps = (ordersPage - 1) * ordersPageSize;
+      pageOrders = sorted.slice(ps, ps + ordersPageSize);
+    }
+  } else {
+    // 비로그인: 로컬 배열 직접 사용
+    let loc = dateFiltered;
+    if (ordersExcludeFilter === 'included')   loc = dateFiltered.filter(o => !o.is_excluded);
+    else if (ordersExcludeFilter === 'excluded')   loc = dateFiltered.filter(o => o.is_excluded);
+    else if (['fake_order','return','other'].includes(ordersExcludeFilter))
+      loc = dateFiltered.filter(o => o.exclusion_type === ordersExcludeFilter);
+    const sorted = [...loc].sort((a, b) => {
+      const cmp = (a[ordersSortCol]||'').localeCompare(b[ordersSortCol]||'', 'ko');
+      return ordersSortDir === 'asc' ? cmp : -cmp;
+    });
+    totalFiltered = sorted.length;
+    const ps = (ordersPage - 1) * ordersPageSize;
+    pageOrders = sorted.slice(ps, ps + ordersPageSize);
+  }
+
+  // 페이지 범위 보정
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / ordersPageSize));
+  if (ordersPage > totalPages) ordersPage = totalPages;
+
+  // ── 헤더 렌더 ─────────────────────────────────────────────────────────────
+  const allNums    = pageOrders.map(o => o['주문번호']);
   const allChecked = allNums.length > 0 && allNums.every(n => selectedOrderNums.has(n));
   thead.innerHTML = '<tr>'
     + `<th style="text-align:center;width:32px"><input type="checkbox" ${allChecked?'checked':''} onchange="toggleAllOrderSelect(this)" style="cursor:pointer"></th>`
@@ -3689,11 +3738,14 @@ function renderOrders() {
     }).join('')
     + '<th></th></tr>';
 
-  if (!sortedFiltered.length) {
+  if (!pageOrders.length) {
     tbody.innerHTML = `<tr><td colspan="${activeCols.length + 2}" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+    renderOrdersPagination(totalFiltered);
     return;
   }
-  tbody.innerHTML = sortedFiltered.map(o => {
+
+  // ── 바디 렌더 ─────────────────────────────────────────────────────────────
+  tbody.innerHTML = pageOrders.map(o => {
     const exType  = o.exclusion_type || 'normal';
     const exInfo  = EXCLUSION_TYPES[exType] || EXCLUSION_TYPES.normal;
     const safeNum = (o['주문번호'] || '').replace(/'/g, "\\'");
@@ -3727,7 +3779,6 @@ function renderOrders() {
         return `<td style="font-family:var(--mono)">${Math.round(net).toLocaleString('ko-KR')}원</td>`;
       }
       let cellVal = o[c] ?? '';
-      // 이미 저장된 구매확정일자가 Date.toString() 형식인 경우 변환
       if (c === '구매확정일자' && /^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4}/.test(cellVal)) {
         const d = new Date(cellVal);
         if (!isNaN(d.getTime())) {
@@ -3740,6 +3791,50 @@ function renderOrders() {
     }).join('') + deleteBtn + '</tr>';
   }).join('');
   updateOrdersBulkBar();
+  renderOrdersPagination(totalFiltered);
+}
+
+function renderOrdersPagination(total) {
+  const el = document.getElementById('ordersPagination');
+  if (!el) return;
+  const totalPages = Math.max(1, Math.ceil(total / ordersPageSize));
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const start = (ordersPage - 1) * ordersPageSize + 1;
+  const end = Math.min(ordersPage * ordersPageSize, total);
+
+  let winStart = Math.max(1, ordersPage - 2);
+  let winEnd = Math.min(totalPages, winStart + 4);
+  if (winEnd - winStart < 4) winStart = Math.max(1, winEnd - 4);
+
+  const base = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer';
+  const activeStyle = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer';
+  const disabledStyle = base + ';opacity:0.4;cursor:default';
+
+  let html = `<span style="font-size:12px;color:var(--text-dim)">${start}–${end} / ${total.toLocaleString('ko-KR')}건</span>`;
+  html += `<button onclick="goToOrdersPage(${ordersPage - 1})" ${ordersPage === 1 ? 'disabled' : ''} style="${ordersPage === 1 ? disabledStyle : base}">‹</button>`;
+  for (let p = winStart; p <= winEnd; p++) {
+    html += `<button onclick="goToOrdersPage(${p})" style="${p === ordersPage ? activeStyle : base}">${p}</button>`;
+  }
+  html += `<button onclick="goToOrdersPage(${ordersPage + 1})" ${ordersPage === totalPages ? 'disabled' : ''} style="${ordersPage === totalPages ? disabledStyle : base}">›</button>`;
+
+  el.innerHTML = html;
+}
+
+function setOrdersPageSize(n) {
+  ordersPageSize = n;
+  ordersPage = 1;
+  renderOrders();
+}
+
+function goToOrdersPage(p) {
+  ordersPage = p;
+  renderOrders();
+}
+
+function searchOrders() {
+  ordersPage = 1;
+  renderOrders();
 }
 
 async function loadAdsSummary() {
@@ -3880,6 +3975,7 @@ async function bulkDeleteOrders() {
   }
   localStorage.setItem('ordersData', JSON.stringify(orders));
   selectedOrderNums.clear();
+  ordersPage = 1;
   renderOrders();
 }
 
@@ -3890,6 +3986,7 @@ function setOrdersSort(col) {
     ordersSortCol = col;
     ordersSortDir = 'asc';
   }
+  ordersPage = 1;
   renderOrders();
 }
 
@@ -3900,6 +3997,7 @@ async function deleteAllOrders() {
   if (currentUser) {
     try { await fetch('/api/orders', { method: 'DELETE' }); } catch(e) {}
   }
+  ordersPage = 1;
   renderOrders();
 }
 
