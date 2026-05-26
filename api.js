@@ -48,6 +48,7 @@ function coupangAuth(method, urlPath, accessKey, secretKey) {
   const datetime  = coupangDatetime();
   const message   = datetime + method + path + qs;
   const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex');
+  console.log(`[coupangAuth] datetime=${datetime} method=${method} path=${path} qs=${qs.slice(0, 80)}${qs.length > 80 ? '...' : ''}`);
   return {
     auth: `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`,
     path: urlPath,
@@ -1840,7 +1841,12 @@ router.post('/coupang-keys/test', requireAuth, async (req, res) => {
     const urlPath = `/v2/providers/openapi/apis/api/v4/vendors/${vendor_id}/ordersheets?createdAtFrom=${today}&createdAtTo=${today}&status=ACCEPT&maxPerPage=1&pageIndex=1`;
     const result  = await coupangRequest('GET', urlPath, access_key, secret_key);
 
+    console.log(`[test] vendor=${vendor_id} status=${result.status} body_preview=${JSON.stringify(result.body).slice(0, 200)}`);
+
     if (result.status === 200) {
+      // 응답 구조 로그: data 타입과 nextToken 위치 확인용
+      const body = result.body;
+      console.log(`[test] data_type=${Array.isArray(body?.data) ? 'array' : typeof body?.data} nextToken_location=${body?.nextToken ? 'root' : body?.data?.nextToken ? 'data' : 'none'}`);
       res.json({ ok: true, message: '연결 성공' });
     } else {
       res.json({ ok: false, message: `HTTP ${result.status}: ${typeof result.body === 'string' ? result.body : JSON.stringify(result.body)}` });
@@ -1883,29 +1889,62 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
     if (!keyRows[0]) return res.status(400).json({ error: '쿠팡 API 키가 등록되지 않았습니다.' });
 
     const { vendor_id, access_key, secret_key: encSecret } = keyRows[0];
-    const secretKey = aesDecrypt(encSecret);
+    let secretKey;
+    try {
+      secretKey = aesDecrypt(encSecret);
+    } catch (decErr) {
+      console.error('[sync] AES 복호화 실패:', decErr.message);
+      return res.status(500).json({ error: 'API 키 복호화 실패. 키를 다시 저장해 주세요.' });
+    }
+
+    console.log(`[sync] user=${req.user.id} vendor=${vendor_id} access_key=${access_key.slice(0, 8)}... secret_len=${secretKey.length}`);
 
     // nextToken 루프로 모든 페이지 수집
+    // ※ Coupang ordersheets 응답 구조:
+    //   { code, message, data: [ {orderId, orderItems, ...}, ... ], nextToken: "..." }
+    //   → data.data 가 배열, data.nextToken 이 커서 (data.data.orderSheets/nextToken 아님)
+    // ※ nextToken 사용 시 pageIndex 를 함께 보내면 403 → 둘 중 하나만 사용
     const allItems = [];
     let nextToken  = null;
     let pageIndex  = 1;
+    let callCount  = 0;
 
     do {
-      let qs = `createdAtFrom=${start_date}&createdAtTo=${end_date}&status=ACCEPT&maxPerPage=50&pageIndex=${pageIndex}`;
-      if (nextToken) qs += `&nextToken=${encodeURIComponent(nextToken)}`;
-      const urlPath = `/v2/providers/openapi/apis/api/v4/vendors/${vendor_id}/ordersheets?${qs}`;
-      const result  = await coupangRequest('GET', urlPath, access_key, secretKey);
-
-      if (result.status !== 200) {
-        return res.status(502).json({ error: `쿠팡 API 오류 HTTP ${result.status}`, detail: result.body });
+      let qs;
+      if (nextToken) {
+        // 2페이지 이후: nextToken 만 사용, pageIndex 제외
+        qs = `createdAtFrom=${start_date}&createdAtTo=${end_date}&status=ACCEPT&maxPerPage=50&nextToken=${encodeURIComponent(nextToken)}`;
+      } else {
+        // 첫 페이지: pageIndex=1
+        qs = `createdAtFrom=${start_date}&createdAtTo=${end_date}&status=ACCEPT&maxPerPage=50&pageIndex=${pageIndex}`;
       }
 
-      const data = result.body;
-      const items = data?.data?.orderSheets || [];
+      const urlPath = `/v2/providers/openapi/apis/api/v4/vendors/${vendor_id}/ordersheets?${qs}`;
+      console.log(`[sync] call #${callCount + 1}: GET ${urlPath}`);
+
+      const result = await coupangRequest('GET', urlPath, access_key, secretKey);
+      callCount++;
+
+      console.log(`[sync] response status=${result.status} body_preview=${JSON.stringify(result.body).slice(0, 200)}`);
+
+      if (result.status !== 200) {
+        return res.status(502).json({
+          error:  `쿠팡 API 오류 HTTP ${result.status}`,
+          detail: result.body,
+          url:    urlPath.replace(secretKey, '***'), // secret_key 가 url에 없지만 안전하게
+        });
+      }
+
+      const body = result.body;
+      // data 필드가 배열인 경우(정상) vs 객체인 경우 모두 대응
+      const rawData = body?.data;
+      const items   = Array.isArray(rawData) ? rawData : (rawData?.orderSheets || rawData?.content || []);
       allItems.push(...items);
-      nextToken = data?.data?.nextToken || null;
+
+      // nextToken 은 루트 레벨에 있음 (data.nextToken 아님)
+      nextToken = body?.nextToken || body?.data?.nextToken || null;
       pageIndex++;
-    } while (nextToken && pageIndex <= 100);
+    } while (nextToken && callCount < 100);
 
     // 주문 항목 매핑 + DB upsert
     let inserted = 0;
