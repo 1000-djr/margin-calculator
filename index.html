@@ -2232,6 +2232,7 @@ function renderB2B() {
         <td style="white-space:nowrap">
           <button class="history-edit-btn" onclick="editB2BPrice(${p.id})">수정</button>
           <button class="history-del-btn"  onclick="deleteB2BPrice(${p.id})">삭제</button>
+          ${isActive ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px;color:#f97316;border-color:#f97316" onclick="endB2BPrice(${p.id})">종료</button>` : ''}
           <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px" onclick="openOrderAdjustModal(${p.id})">🔧 발주 조정</button>
         </td>
       </tr>`;
@@ -2418,6 +2419,35 @@ function editB2BPrice(id) {
   document.getElementById('b2bSaveBtn').textContent     = '수정 저장';
   document.getElementById('b2bCancelBtn').style.display = '';
   document.getElementById('tab-b2b').scrollTop = 0;
+}
+
+async function endB2BPrice(id) {
+  const p = b2bPriceHistory.find(x => x.id == id);
+  if (!p) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const endDate = prompt(`종료일을 입력하세요 (YYYY-MM-DD)`, today);
+  if (!endDate) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) { alert('날짜 형식이 올바르지 않습니다 (YYYY-MM-DD)'); return; }
+
+  try {
+    const payload = {
+      product_name:  p.product_name,
+      unit:          p.unit || '',
+      supplier_name: p.supplier_name,
+      cost:          p.cost,
+      start_date:    p.start_date,
+      end_date:      endDate,
+    };
+    await fetch(`/api/b2b-prices/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    p.end_date = endDate;
+    renderB2B();
+  } catch(e) {
+    alert('종료 처리 중 오류: ' + e.message);
+  }
 }
 
 async function saveB2BPrice() {
