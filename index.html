@@ -666,10 +666,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
   <div class="header">
-    <div class="header-icon">🌾</div>
-    <div>
-      <h1>농수산물 마진 계산기</h1>
-      <p>쿠팡 위탁 · B2B 매입가 실시간 관리</p>
+    <div onclick="switchTab('calc')" style="display:flex;align-items:center;gap:0;cursor:pointer" title="마진 계산 탭으로 이동">
+      <div class="header-icon">🌾</div>
+      <div>
+        <h1>농수산물 마진 계산기</h1>
+        <p>쿠팡 위탁 · B2B 매입가 실시간 관리</p>
+      </div>
     </div>
     <div class="header-right" style="display:flex;align-items:center;gap:12px;margin-left:auto">
       <!-- 바로가기 드롭다운 -->
