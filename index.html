@@ -834,11 +834,15 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <!-- 오버라이드 입력 -->
     <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="font-size:13px;font-weight:600;color:var(--text)">선택 주문에 적용할 공급가</div>
-      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:220px">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:220px;flex-wrap:wrap">
         <input id="orderAdjustCost" type="number" min="0" placeholder="공급가 입력 (원)"
                style="width:150px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)">
+        <select id="orderAdjustCostPreset" onchange="applyAdjustCostPreset()"
+                style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:#fff;color:var(--text);max-width:320px">
+          <option value="">— 다른 이력에서 선택 —</option>
+        </select>
         <input id="orderAdjustNote" type="text" placeholder="메모 (선택)"
-               style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)">
+               style="flex:1;min-width:140px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)">
       </div>
       <button class="btn btn-primary btn-sm" onclick="saveOrderAdjust()">선택 항목 저장</button>
       <button class="btn btn-ghost btn-sm" onclick="clearOrderAdjust()" title="선택 주문의 오버라이드 제거">오버라이드 해제</button>
@@ -2275,14 +2279,33 @@ async function openOrderAdjustModal(b2bPriceId) {
       + ` | 공급가 ${_adjB2BPrice.cost.toLocaleString('ko-KR')}원`
       + ` | ${_adjB2BPrice.start_date || '?'} ~ ${_adjB2BPrice.end_date || '진행중'}`;
 
-    document.getElementById('orderAdjustCost').value    = Math.round(_adjB2BPrice.cost);
-    document.getElementById('orderAdjustNote').value    = '';
-    document.getElementById('orderAdjustSearch').value  = '';
+    document.getElementById('orderAdjustCost').value   = Math.round(_adjB2BPrice.cost);
+    document.getElementById('orderAdjustNote').value   = '';
+    document.getElementById('orderAdjustSearch').value = '';
+
+    // 동일 상품의 다른 이력으로 드롭다운 채우기
+    const preset = document.getElementById('orderAdjustCostPreset');
+    const related = (b2bPriceHistory || []).filter(p =>
+      p.product_name === _adjB2BPrice.product_name && (p.unit || '') === (_adjB2BPrice.unit || '')
+    ).sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+    preset.innerHTML = '<option value="">— 다른 이력에서 선택 —</option>'
+      + related.map(p => {
+          const period = `${p.start_date || '?'} ~ ${p.end_date || '진행중'}`;
+          const label  = `${p.supplier_name} | ${Math.round(p.cost).toLocaleString('ko-KR')}원 | ${period}`;
+          return `<option value="${Math.round(p.cost)}">${label}</option>`;
+        }).join('');
+    preset.value = '';
+
     document.getElementById('orderAdjustModal').style.display = 'flex';
     renderOrderAdjustTable();
   } catch(e) {
     alert('조회 중 오류: ' + e.message);
   }
+}
+
+function applyAdjustCostPreset() {
+  const val = document.getElementById('orderAdjustCostPreset').value;
+  if (val) document.getElementById('orderAdjustCost').value = val;
 }
 
 function closeOrderAdjustModal() {
