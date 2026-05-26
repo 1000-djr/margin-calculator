@@ -1020,7 +1020,10 @@ router.get('/returns/summary', requireAuth, async (req, res) => {
         COUNT(*) FILTER (WHERE return_type='buyer')::INTEGER                    AS buyer_count,
         COUNT(*) FILTER (WHERE return_type='other')::INTEGER                    AS other_count,
         COUNT(*) FILTER (WHERE delivery_status='출고중지완료')::INTEGER          AS stop_complete_count,
-        COUNT(*) FILTER (WHERE delivery_status='이미출고')::INTEGER             AS already_shipped_count
+        COUNT(*) FILTER (WHERE delivery_status='이미출고')::INTEGER             AS already_shipped_count,
+        COUNT(*) FILTER (WHERE return_status='completed')::INTEGER              AS processed_complete_count,
+        COUNT(*) FILTER (WHERE return_status='transferred')::INTEGER            AS processed_transfer_count,
+        COUNT(*) FILTER (WHERE return_status IS NULL)::INTEGER                  AS pending_count
       FROM returns
       WHERE user_id = $1
         AND ($2::text IS NULL OR received_at IS NULL OR received_at >= $2)

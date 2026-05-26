@@ -5657,8 +5657,9 @@ async function loadCancelSummary() {
     if (!el) return;
     el.innerHTML = `
       <div class="summary-card"><div class="summary-card-label">전체 출고중지</div><div class="summary-card-value">${(d.total_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">출고중지완료</div><div class="summary-card-value" style="color:#f97316">${(d.stop_complete_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">이미출고</div><div class="summary-card-value" style="color:#ef4444">${(d.already_shipped_count||0).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">미처리</div><div class="summary-card-value" style="color:#9ca3af">${(d.pending_count||0).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">출고중지완료</div><div class="summary-card-value" style="color:#22c55e">${(d.processed_complete_count||0).toLocaleString('ko-KR')}건</div></div>
+      <div class="summary-card"><div class="summary-card-label">반품이관</div><div class="summary-card-value" style="color:#f97316">${(d.processed_transfer_count||0).toLocaleString('ko-KR')}건</div></div>
     `;
   } catch(e) { console.error(e); }
 }
