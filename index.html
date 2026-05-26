@@ -1437,7 +1437,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <button id="frTaxTaxable" onclick="setFakeTaxType('과세')" style="flex:1;padding:6px 14px;font-size:13px;font-weight:600;background:var(--surface2);color:var(--text-dim);border:none;cursor:pointer">과세</button>
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="saveFakeRecord()">기록 저장</button>
+        <span id="frEditBadge" style="display:none;background:#f97316;color:#fff;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700">수정 중</span>
+        <button id="frSaveBtn" class="btn btn-primary btn-sm" onclick="saveFakeRecord()">기록 저장</button>
+        <button id="frCancelEditBtn" class="btn btn-ghost btn-sm" onclick="cancelFakeEdit()" style="display:none">취소</button>
       </div>
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">해당 일자 주문 선택 (체크박스로 복수 선택)</div>
       <div style="overflow-x:auto;max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">
@@ -6526,6 +6528,8 @@ async function deleteFakeVendor(id) {
 
 let fakeOrdersForDate = [];
 let fakeTaxType = '면세';
+let editingFakeRecordId = null;
+let editingFakeRecordOrderIds = new Set();
 
 function setFakeTaxType(type) {
   fakeTaxType = type;
@@ -6625,7 +6629,8 @@ function renderFakeOrders() {
   const vendor = vendorId ? fakeVendors.find(v => String(v.id) === String(vendorId)) : null;
   console.log('[renderFakeOrders] vendorId=', vendorId, 'fakeVendors.length=', fakeVendors.length, 'vendor=', vendor, 'fakeTaxType=', fakeTaxType);
   tbody.innerHTML = fakeOrdersForDate.map(o => {
-    const done = o.already_recorded === true || o.already_recorded === 'true';
+    const done = (o.already_recorded === true || o.already_recorded === 'true')
+               && !editingFakeRecordOrderIds.has(Number(o.id));
     let detail = null;
     try { detail = vendor ? calcFakeOrderCostDetail(o, vendor, fakeTaxType) : null; } catch(e) { console.error('[calcCost]', e); }
     const costText = (detail && detail.total != null) ? detail.total.toLocaleString('ko-KR') + '원' : (vendor ? '계산오류' : '-');
@@ -6688,6 +6693,15 @@ async function saveFakeRecord() {
   }
 
   try {
+    // 수정 모드: 기존 기록 삭제 후 새로 저장
+    if (editingFakeRecordId !== null) {
+      const delRes = await fetch(`/api/fake-records/${editingFakeRecordId}`, { method: 'DELETE' });
+      if (!delRes.ok) { alert('기존 기록 삭제 실패'); return; }
+      editingFakeRecordId = null;
+      editingFakeRecordOrderIds = new Set();
+      updateFakeFormEditMode();
+    }
+
     const res = await fetch('/api/fake-records', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
@@ -6701,6 +6715,58 @@ async function saveFakeRecord() {
     await loadFakeRecords();
     alert(`기록 저장 완료: ${totalCost.toLocaleString('ko-KR')}원`);
   } catch(e) { alert(e.message); }
+}
+
+function updateFakeFormEditMode() {
+  const isEditing = editingFakeRecordId !== null;
+  const saveBtn   = document.getElementById('frSaveBtn');
+  const cancelBtn = document.getElementById('frCancelEditBtn');
+  const badge     = document.getElementById('frEditBadge');
+  if (saveBtn)   saveBtn.textContent    = isEditing ? '수정 저장' : '기록 저장';
+  if (cancelBtn) cancelBtn.style.display = isEditing ? '' : 'none';
+  if (badge)     badge.style.display    = isEditing ? '' : 'none';
+}
+
+function cancelFakeEdit() {
+  editingFakeRecordId = null;
+  editingFakeRecordOrderIds = new Set();
+  updateFakeFormEditMode();
+  renderFakeOrders(); // already_recorded 상태 복원
+}
+
+async function editFakeRecord(id) {
+  try {
+    const res = await fetch(`/api/fake-records/${id}/detail`);
+    if (!res.ok) { alert('기록 조회 실패'); return; }
+    const { record: rec } = await res.json();
+
+    // 편집 상태 설정 (renderFakeOrders가 이 Set을 참조해 체크박스를 활성화)
+    editingFakeRecordId = id;
+    editingFakeRecordOrderIds = new Set(
+      Array.isArray(rec.order_ids) ? rec.order_ids.map(Number) : []
+    );
+
+    // 폼 값 세팅
+    document.getElementById('frProceedDate').value = rec.proceed_date;
+    await loadFakeVendors();
+    document.getElementById('frVendorSelect').value = rec.vendor_id;
+    setFakeTaxType(rec.tax_type || '면세');
+
+    // 해당 일자 주문 로드 (renderFakeOrders 내부에서 editingFakeRecordOrderIds 참조)
+    await loadFakeOrdersForDate();
+
+    // 이 기록의 주문건 체크
+    document.querySelectorAll('.fakeOrderChk').forEach(chk => {
+      if (editingFakeRecordOrderIds.has(Number(chk.value))) {
+        chk.checked = true;
+      }
+    });
+    updateFakeCostPreview();
+    updateFakeFormEditMode();
+
+    // 섹션 2(일자별 진행 기록)로 스크롤
+    document.getElementById('frProceedDate').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch(e) { alert('불러오기 실패: ' + e.message); }
 }
 
 async function loadFakeRecords() {
@@ -6721,7 +6787,7 @@ function renderFakeRecords(records) {
   const totalEl = document.getElementById('fakeRecordTotal');
   if (!tbody) return;
   if (!records.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:16px">기록 없음</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:16px">기록 없음</td></tr>';
     if (totalEl) totalEl.textContent = '';
     return;
   }
@@ -6740,7 +6806,10 @@ function renderFakeRecords(records) {
       <td style="font-family:var(--mono);color:#f97316">${cost.toLocaleString('ko-KR')}원</td>
       <td><span style="background:#d1fae5;color:#065f46;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:600">비용처리완료</span></td>
       <td><button class="btn btn-ghost btn-sm" id="fakeDetailBtn-${r.id}" onclick="toggleFakeRecordDetail(${r.id})" style="font-size:11px;padding:3px 8px">▶ 상세</button></td>
-      <td><button class="btn btn-sm" onclick="deleteFakeRecord(${r.id})" style="color:#ef4444;border-color:#ef4444;font-size:11px">삭제</button></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-ghost btn-sm" onclick="editFakeRecord(${r.id})" style="font-size:11px;margin-right:4px">수정</button>
+        <button class="btn btn-sm" onclick="deleteFakeRecord(${r.id})" style="color:#ef4444;border-color:#ef4444;font-size:11px">삭제</button>
+      </td>
     </tr>`;
   }).join('');
   if (totalEl) totalEl.textContent = `합계: ${Math.round(grandTotal).toLocaleString('ko-KR')}원`;
