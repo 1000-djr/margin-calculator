@@ -569,6 +569,73 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 광고 필터링 1단계 모달 (기준 선택) ══════════════════════════════ -->
+<div id="adFilterStep1Modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="font-size:20px;font-weight:700;margin-bottom:6px">🔍 필터링 기준 선택</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:20px">업로드할 항목을 선택할 기준을 고르세요.</div>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:24px">
+      <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:14px 16px;border:2px solid var(--border);border-radius:10px;transition:.15s" id="adFilterRadioWrapCampaign"
+             onclick="selectAdFilterCriterion('campaign')">
+        <input type="radio" name="adFilterCriterion" value="campaign" id="adFilterRadioCampaign"
+               style="accent-color:var(--primary);margin-top:2px;flex-shrink:0">
+        <div>
+          <div style="font-weight:600;font-size:14px">캠페인 기준</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px">캠페인 ID / 캠페인명으로 필터링</div>
+        </div>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:14px 16px;border:2px solid var(--border);border-radius:10px;transition:.15s" id="adFilterRadioWrapProduct"
+             onclick="selectAdFilterCriterion('product')">
+        <input type="radio" name="adFilterCriterion" value="product" id="adFilterRadioProduct"
+               style="accent-color:var(--primary);margin-top:2px;flex-shrink:0">
+        <div>
+          <div style="font-weight:600;font-size:14px">상품 기준</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px">광고집행 옵션ID / 광고전환매출발생 상품명으로 필터링</div>
+        </div>
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="closeAdFilterStep1()">취소</button>
+      <button class="btn btn-primary" onclick="openAdFilterStep2()">다음 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 광고 필터링 2단계 모달 (항목 선택) ══════════════════════════════ -->
+<div id="adFilterStep2Modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:720px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="font-size:20px;font-weight:700;margin-bottom:4px">🔍 업로드 전 필터링</div>
+    <div id="adFilterStep2Subtitle" style="font-size:13px;color:var(--text-dim);margin-bottom:14px"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <input id="adFilterSearch" type="text" placeholder="검색…"
+             style="flex:1;min-width:180px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text)"
+             oninput="renderAdFilterTable()">
+      <button class="btn btn-ghost btn-sm" onclick="setAllAdFilter(true)">전체선택</button>
+      <button class="btn btn-ghost btn-sm" onclick="setAllAdFilter(false)">전체해제</button>
+      <span id="adFilterCount" style="font-size:13px;color:var(--text-dim);white-space:nowrap"></span>
+    </div>
+    <div style="overflow-y:auto;flex:1;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead id="adFilterThead">
+          <tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
+            <th style="padding:8px 10px;text-align:center;width:36px;border-bottom:1px solid var(--border)">
+              <input type="checkbox" id="adFilterSelectAll" onchange="setAllAdFilter(this.checked)" style="accent-color:var(--primary)">
+            </th>
+            <th id="adFilterTh1" style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)"></th>
+            <th id="adFilterTh2" style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody id="adFilterTbody"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;align-items:center">
+      <button class="btn btn-ghost" onclick="backToAdFilterStep1()">← 뒤로</button>
+      <button class="btn btn-ghost" onclick="closeAdFilterStep2()">취소</button>
+      <button class="btn btn-primary" onclick="uploadFilteredAds()">선택한 항목만 업로드</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 로그인 화면 ══════════════════════════════════════════════════════ -->
 <div id="loginScreen" style="display:none">
   <div class="login-card">
@@ -987,6 +1054,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <button class="btn btn-ghost btn-sm" onclick="openAdGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
     </div>
     <div class="card">
+      <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+          🔍 필터링 후 업로드
+          <input type="file" id="adsFilterFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleAdsFilterUpload(this)">
+        </label>
+      </div>
       <div class="upload-area" onclick="document.getElementById('adsFileInput').click()">
         <div class="upload-area-icon">📂</div>
         <div class="upload-area-text">클릭하여 광고 리포트 엑셀 파일 선택 (.xlsx, .xls)<br>날짜+옵션ID+캠페인ID 기준 중복 제거됩니다</div>
@@ -3662,6 +3735,25 @@ function formatAdDate(val) {
   return s;
 }
 
+// 공통 광고 업로드 실행 함수
+async function doAdUpload(toAdd) {
+  adReports = [...adReports, ...toAdd];
+  localStorage.setItem('adReportsData', JSON.stringify(adReports));
+  if (currentUser) {
+    try {
+      const dbRes = await fetch('/api/ad-reports/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) });
+      const dbResult = dbRes.ok ? await dbRes.json() : {};
+      console.log('[ads] DB 저장:', dbResult);
+      renderAds();
+      loadAdsSummary();
+      alert(`${toAdd.length}건 처리됨\nDB 저장: ${dbResult.inserted ?? '?'}건 / 중복스킵: ${dbResult.skipped ?? '?'}건 / 실패: ${dbResult.failed ?? 0}건\n(총 ${adReports.length}건)`);
+      return;
+    } catch(e) { console.error('[ads] DB 저장 오류:', e); }
+  }
+  renderAds();
+  alert(`${toAdd.length}건 추가됨 (총 ${adReports.length}건)`);
+}
+
 function handleAdsUpload(input) {
   const file = input.files[0];
   if (!file) return;
@@ -3688,47 +3780,24 @@ function handleAdsUpload(input) {
         return obj;
       });
 
-      // 중복 체크: 날짜+광고집행 옵션ID+키워드
       const adKey = r => `${r['날짜']}|${r[AD_OPTION_COL] || r['광고집행옵션ID'] || ''}|${r['키워드'] || ''}`;
       const existingKeys = new Set(adReports.map(adKey));
-      const dupReports = newReports.filter(r => existingKeys.has(adKey(r)));
+      const dupReports   = newReports.filter(r =>  existingKeys.has(adKey(r)));
       const freshReports = newReports.filter(r => !existingKeys.has(adKey(r)));
-
-      const doAdUpload = async (toAdd) => {
-        adReports = [...adReports, ...toAdd];
-        localStorage.setItem('adReportsData', JSON.stringify(adReports));
-        if (currentUser) {
-          try {
-            const dbRes = await fetch('/api/ad-reports/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) });
-            const dbResult = dbRes.ok ? await dbRes.json() : {};
-            console.log('[ads] DB 저장:', dbResult);
-            renderAds();
-            loadAdsSummary();
-            alert(`${toAdd.length}건 처리됨\nDB 저장: ${dbResult.inserted ?? '?'}건 / 중복스킵: ${dbResult.skipped ?? '?'}건 / 실패: ${dbResult.failed ?? 0}건\n(총 ${adReports.length}건)`);
-            return;
-          } catch(e) { console.error('[ads] DB 저장 오류:', e); }
-        }
-        renderAds();
-        alert(`${toAdd.length}건 추가됨 (총 ${adReports.length}건)`);
-      };
 
       if (dupReports.length === 0) {
         doAdUpload(freshReports);
       } else if (freshReports.length === 0) {
         showConfirmModal({
-          icon: '⚠️',
-          title: '중복 데이터',
+          icon: '⚠️', title: '중복 데이터',
           message: `이미 업로드된 광고 데이터입니다.<br>중복 항목 <strong>${dupReports.length}건</strong> — 업로드가 차단됩니다.`,
-          confirmText: '확인',
-          cancelText: '확인',
+          confirmText: '확인', cancelText: '확인',
         });
       } else {
         showConfirmModal({
-          icon: '⚠️',
-          title: '일부 중복 데이터',
+          icon: '⚠️', title: '일부 중복 데이터',
           message: `중복 항목 <strong>${dupReports.length}건</strong>이 있습니다.<br>신규 <strong>${freshReports.length}건</strong>만 업로드할까요?`,
-          confirmText: `신규 ${freshReports.length}건만 업로드`,
-          cancelText: '취소',
+          confirmText: `신규 ${freshReports.length}건만 업로드`, cancelText: '취소',
         }).then(ok => { if (ok) doAdUpload(freshReports); });
       }
     } catch(err) {
@@ -3737,6 +3806,190 @@ function handleAdsUpload(input) {
     input.value = '';
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ── 광고 필터링 업로드 ─────────────────────────────────────────────────────────
+let _adFilterParsedRows = [];   // 파싱된 전체 행
+let _adFilterCriterion  = '';   // 'campaign' | 'product'
+
+// 기준별 컬럼 설정
+const AD_FILTER_CFG = {
+  campaign: {
+    keyCol:  '캠페인 ID',
+    nameCol: '캠페인명',
+    th1: '캠페인 ID',
+    th2: '캠페인명',
+    subtitle: '캠페인 기준 — 업로드할 캠페인을 선택하세요.',
+    searchHint: '캠페인명 검색…',
+  },
+  product: {
+    keyCol:  '광고집행 옵션ID',
+    nameCol: '광고전환매출발생 상품명',
+    th1: '광고집행 옵션ID',
+    th2: '광고전환매출발생 상품명',
+    subtitle: '상품 기준 — 업로드할 상품(옵션ID)을 선택하세요.',
+    searchHint: '상품명 검색…',
+  },
+};
+
+function handleAdsFilterUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
+      const headers  = rows[0].map(h => String(h).trim());
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+
+      const colIdx = {};
+      AD_COLUMNS.forEach(col => { colIdx[col] = headers.indexOf(col); });
+
+      _adFilterParsedRows = dataRows.map(row => {
+        const obj = {};
+        AD_COLUMNS.forEach(col => {
+          const i = colIdx[col];
+          const raw = i >= 0 ? String(row[i] ?? '').trim() : '';
+          obj[col] = col === '날짜' ? formatAdDate(raw) : raw;
+        });
+        return obj;
+      });
+
+      if (!_adFilterParsedRows.length) { alert('유효한 데이터가 없습니다'); return; }
+
+      // 1단계 모달 오픈
+      _adFilterCriterion = 'campaign';
+      document.getElementById('adFilterRadioCampaign').checked = true;
+      highlightAdFilterRadio('campaign');
+      document.getElementById('adFilterStep1Modal').style.display = 'flex';
+    } catch(err) {
+      alert('파일 파싱 오류: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function selectAdFilterCriterion(val) {
+  _adFilterCriterion = val;
+  document.getElementById('adFilterRadio' + (val === 'campaign' ? 'Campaign' : 'Product')).checked = true;
+  highlightAdFilterRadio(val);
+}
+
+function highlightAdFilterRadio(val) {
+  document.getElementById('adFilterRadioWrapCampaign').style.borderColor = val === 'campaign' ? 'var(--primary)' : 'var(--border)';
+  document.getElementById('adFilterRadioWrapProduct').style.borderColor  = val === 'product'  ? 'var(--primary)' : 'var(--border)';
+}
+
+function closeAdFilterStep1() {
+  document.getElementById('adFilterStep1Modal').style.display = 'none';
+  _adFilterParsedRows = [];
+}
+
+function openAdFilterStep2() {
+  const chosen = document.querySelector('input[name="adFilterCriterion"]:checked');
+  if (!chosen) { alert('기준을 선택하세요'); return; }
+  _adFilterCriterion = chosen.value;
+  document.getElementById('adFilterStep1Modal').style.display = 'none';
+
+  const cfg = AD_FILTER_CFG[_adFilterCriterion];
+  document.getElementById('adFilterStep2Subtitle').textContent = cfg.subtitle;
+  document.getElementById('adFilterTh1').textContent           = cfg.th1;
+  document.getElementById('adFilterTh2').textContent           = cfg.th2;
+  document.getElementById('adFilterSearch').placeholder        = cfg.searchHint;
+  document.getElementById('adFilterSearch').value              = '';
+  document.getElementById('adFilterStep2Modal').style.display  = 'flex';
+  renderAdFilterTable();
+}
+
+function backToAdFilterStep1() {
+  document.getElementById('adFilterStep2Modal').style.display = 'none';
+  document.getElementById('adFilterStep1Modal').style.display = 'flex';
+}
+
+function closeAdFilterStep2() {
+  document.getElementById('adFilterStep2Modal').style.display = 'none';
+  _adFilterParsedRows = [];
+}
+
+function renderAdFilterTable() {
+  const cfg  = AD_FILTER_CFG[_adFilterCriterion];
+  const q    = document.getElementById('adFilterSearch').value.trim().toLowerCase();
+  const tbody = document.getElementById('adFilterTbody');
+
+  // 키 기준 중복 제거
+  const seen = new Map();
+  _adFilterParsedRows.forEach(r => {
+    const k = r[cfg.keyCol] || '';
+    if (!seen.has(k)) seen.set(k, r[cfg.nameCol] || '');
+  });
+
+  const items = [...seen.entries()]
+    .filter(([k, name]) => !q || name.toLowerCase().includes(q) || k.toLowerCase().includes(q))
+    .sort((a, b) => a[1].localeCompare(b[1], 'ko'));
+
+  tbody.innerHTML = items.map(([key, name]) =>
+    `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px 10px;text-align:center">
+        <input type="checkbox" class="ad-filter-chk" data-key="${escHtml(key)}" checked style="accent-color:var(--primary)">
+      </td>
+      <td style="padding:7px 10px;font-family:var(--mono);font-size:12px;color:var(--text-dim)">${escHtml(key)}</td>
+      <td style="padding:7px 10px">${escHtml(name)}</td>
+    </tr>`
+  ).join('') || '<tr><td colspan="3" style="padding:32px;text-align:center;color:var(--text-dim)">검색 결과가 없습니다</td></tr>';
+
+  updateAdFilterCount();
+}
+
+function updateAdFilterCount() {
+  const total   = document.querySelectorAll('.ad-filter-chk').length;
+  const checked = document.querySelectorAll('.ad-filter-chk:checked').length;
+  document.getElementById('adFilterCount').textContent = `${total}건 중 ${checked}건 선택`;
+  document.getElementById('adFilterSelectAll').checked = total > 0 && checked === total;
+  document.querySelectorAll('.ad-filter-chk').forEach(chk => { chk.onchange = updateAdFilterCount; });
+}
+
+function setAllAdFilter(checked) {
+  document.querySelectorAll('.ad-filter-chk').forEach(chk => { chk.checked = checked; });
+  document.getElementById('adFilterSelectAll').checked = checked;
+  updateAdFilterCount();
+}
+
+async function uploadFilteredAds() {
+  const cfg = AD_FILTER_CFG[_adFilterCriterion];
+  const selectedKeys = new Set(
+    [...document.querySelectorAll('.ad-filter-chk:checked')].map(c => c.dataset.key)
+  );
+  if (!selectedKeys.size) { alert('선택된 항목이 없습니다.'); return; }
+
+  const selected = _adFilterParsedRows.filter(r => selectedKeys.has(r[cfg.keyCol] || ''));
+
+  // 중복 체크 (기존 업로드 로직과 동일)
+  const adKey        = r => `${r['날짜']}|${r[AD_OPTION_COL] || r['광고집행옵션ID'] || ''}|${r['키워드'] || ''}`;
+  const existingKeys = new Set(adReports.map(adKey));
+  const dupReports   = selected.filter(r =>  existingKeys.has(adKey(r)));
+  const freshReports = selected.filter(r => !existingKeys.has(adKey(r)));
+
+  closeAdFilterStep2();
+
+  if (dupReports.length === 0) {
+    await doAdUpload(freshReports);
+  } else if (freshReports.length === 0) {
+    showConfirmModal({
+      icon: '⚠️', title: '중복 데이터',
+      message: `이미 업로드된 광고 데이터입니다.<br>중복 항목 <strong>${dupReports.length}건</strong> — 업로드가 차단됩니다.`,
+      confirmText: '확인', cancelText: '확인',
+    });
+  } else {
+    showConfirmModal({
+      icon: '⚠️', title: '일부 중복 데이터',
+      message: `중복 항목 <strong>${dupReports.length}건</strong>이 있습니다.<br>신규 <strong>${freshReports.length}건</strong>만 업로드할까요?`,
+      confirmText: `신규 ${freshReports.length}건만 업로드`, cancelText: '취소',
+    }).then(ok => { if (ok) doAdUpload(freshReports); });
+  }
 }
 
 function setAdsQuickDate(type) {
