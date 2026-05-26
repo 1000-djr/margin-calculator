@@ -418,6 +418,11 @@ async function initDB() {
     ALTER TABLE fake_purchase_vendors ADD COLUMN IF NOT EXISTS product_tax_type     VARCHAR(20) DEFAULT '면세';
   `);
 
+  // fake_purchase_records 과세유형 컬럼 추가
+  await pool.query(`
+    ALTER TABLE fake_purchase_records ADD COLUMN IF NOT EXISTS tax_type VARCHAR(20) DEFAULT '면세';
+  `);
+
   console.log('[db] Tables ready');
 }
 

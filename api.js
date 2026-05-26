@@ -1440,15 +1440,15 @@ router.get('/fake-vendors', requireAuth, async (req, res) => {
 router.post('/fake-vendors', requireAuth, async (req, res) => {
   try {
     const { vendor_name, method, review_type, delivery_fee, process_fee,
-            process_fee_vat_type, product_tax_type, product_cost } = req.body;
+            process_fee_vat_type, product_cost } = req.body;
     const { rows } = await pool.query(
       `INSERT INTO fake_purchase_vendors
          (user_id, vendor_name, method, review_type, delivery_fee, process_fee,
-          process_fee_vat_type, product_tax_type, product_cost)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+          process_fee_vat_type, product_cost)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [req.user.id, vendor_name, method || '빈박스', review_type || '별점',
        delivery_fee || 0, process_fee || 0,
-       process_fee_vat_type || '별도', product_tax_type || '면세', product_cost || 0]
+       process_fee_vat_type || '별도', product_cost || 0]
     );
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1457,15 +1457,15 @@ router.post('/fake-vendors', requireAuth, async (req, res) => {
 router.put('/fake-vendors/:id', requireAuth, async (req, res) => {
   try {
     const { vendor_name, method, review_type, delivery_fee, process_fee,
-            process_fee_vat_type, product_tax_type, product_cost } = req.body;
+            process_fee_vat_type, product_cost } = req.body;
     const { rows } = await pool.query(
       `UPDATE fake_purchase_vendors
          SET vendor_name=$1, method=$2, review_type=$3,
              delivery_fee=$4, process_fee=$5,
-             process_fee_vat_type=$6, product_tax_type=$7, product_cost=$8
-       WHERE id=$9 AND user_id=$10 RETURNING *`,
+             process_fee_vat_type=$6, product_cost=$7
+       WHERE id=$8 AND user_id=$9 RETURNING *`,
       [vendor_name, method, review_type, delivery_fee, process_fee,
-       process_fee_vat_type || '별도', product_tax_type || '면세', product_cost,
+       process_fee_vat_type || '별도', product_cost,
        req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: '없음' });
@@ -1529,7 +1529,7 @@ router.get('/fake-records', requireAuth, async (req, res) => {
     const { start_date, end_date } = req.query;
     const { rows } = await pool.query(
       `SELECT r.*, v.vendor_name, v.method, v.review_type,
-              v.delivery_fee, v.process_fee, v.tax_rate, v.product_cost
+              v.delivery_fee, v.process_fee, v.process_fee_vat_type, v.product_cost
          FROM fake_purchase_records r
          JOIN fake_purchase_vendors v ON v.id = r.vendor_id
         WHERE r.user_id = $1
@@ -1544,11 +1544,11 @@ router.get('/fake-records', requireAuth, async (req, res) => {
 
 router.post('/fake-records', requireAuth, async (req, res) => {
   try {
-    const { vendor_id, proceed_date, order_ids, total_cost } = req.body;
+    const { vendor_id, proceed_date, order_ids, total_cost, tax_type } = req.body;
     const { rows } = await pool.query(
-      `INSERT INTO fake_purchase_records (user_id, vendor_id, proceed_date, order_ids, total_cost)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.user.id, vendor_id, proceed_date, JSON.stringify(order_ids || []), total_cost || 0]
+      `INSERT INTO fake_purchase_records (user_id, vendor_id, proceed_date, order_ids, total_cost, tax_type)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.user.id, vendor_id, proceed_date, JSON.stringify(order_ids || []), total_cost || 0, tax_type || '면세']
     );
 
     // 해당 주문들의 exclusion_type을 fake_order로 설정

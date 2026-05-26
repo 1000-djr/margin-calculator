@@ -1397,13 +1397,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <option value="포함">부가세 포함 (그대로 실지급)</option>
           </select>
         </div>
-        <div class="field" style="margin-bottom:0">
-          <label>상품 과세유형</label>
-          <select id="fvProductTaxType" style="width:100%">
-            <option value="면세">면세</option>
-            <option value="과세">과세</option>
-          </select>
-        </div>
         <div class="field" style="margin-bottom:0"><label>상품원가(원, 실배송 전용)</label><input type="number" id="fvProductCost" placeholder="0" style="width:100%"></div>
       </div>
       <div style="display:flex;gap:8px">
@@ -1414,7 +1407,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div style="margin-top:14px;overflow-x:auto">
         <table class="profit-table" style="min-width:600px">
           <thead><tr>
-            <th>업체명</th><th>방식</th><th>리뷰</th><th>배송비</th><th>처리비</th><th>처리비부가세</th><th>과세유형</th><th>상품원가</th><th>수정/삭제</th>
+            <th>업체명</th><th>방식</th><th>리뷰</th><th>배송비</th><th>처리비</th><th>처리비부가세</th><th>상품원가</th><th>수정/삭제</th>
           </tr></thead>
           <tbody id="fakeVendorTbody"></tbody>
         </table>
@@ -1431,6 +1424,13 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <select id="frVendorSelect" style="min-width:140px" onchange="renderFakeOrders()">
             <option value="">-- 업체 --</option>
           </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>과세유형</label>
+          <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+            <button id="frTaxExempt" onclick="setFakeTaxType('면세')" style="flex:1;padding:6px 14px;font-size:13px;font-weight:600;background:#34c759;color:#fff;border:none;cursor:pointer">면세</button>
+            <button id="frTaxTaxable" onclick="setFakeTaxType('과세')" style="flex:1;padding:6px 14px;font-size:13px;font-weight:600;background:var(--surface2);color:var(--text-dim);border:none;cursor:pointer">과세</button>
+          </div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="saveFakeRecord()">기록 저장</button>
       </div>
@@ -1458,7 +1458,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div style="overflow-x:auto">
         <table class="profit-table" style="min-width:540px">
           <thead><tr>
-            <th>진행일자</th><th>업체명</th><th>방식</th><th>주문 수</th><th>비용합계</th><th>삭제</th>
+            <th>진행일자</th><th>업체명</th><th>방식</th><th>과세유형</th><th>주문 수</th><th>비용합계</th><th>삭제</th>
           </tr></thead>
           <tbody id="fakeRecordTbody"></tbody>
         </table>
@@ -6347,7 +6347,6 @@ function renderFakeVendors() {
       <td style="font-family:var(--mono)">${Number(v.delivery_fee).toLocaleString('ko-KR')}원</td>
       <td style="font-family:var(--mono)">${Number(v.process_fee).toLocaleString('ko-KR')}원</td>
       <td>${v.process_fee_vat_type || '별도'}</td>
-      <td>${v.product_tax_type || '면세'}</td>
       <td style="font-family:var(--mono)">${Number(v.product_cost).toLocaleString('ko-KR')}원</td>
       <td>
         <button class="btn btn-ghost btn-sm" onclick="editFakeVendor(${v.id})">수정</button>
@@ -6374,7 +6373,6 @@ async function saveFakeVendor() {
     delivery_fee:          parseFloat(document.getElementById('fvDeliveryFee').value) || 0,
     process_fee:           parseFloat(document.getElementById('fvProcessFee').value) || 0,
     process_fee_vat_type:  document.getElementById('fvProcessFeeVatType').value,
-    product_tax_type:      document.getElementById('fvProductTaxType').value,
     product_cost:          parseFloat(document.getElementById('fvProductCost').value) || 0,
   };
   if (!body.vendor_name) { alert('업체명을 입력하세요.'); return; }
@@ -6398,7 +6396,6 @@ function editFakeVendor(id) {
   document.getElementById('fvDeliveryFee').value          = v.delivery_fee;
   document.getElementById('fvProcessFee').value           = v.process_fee;
   document.getElementById('fvProcessFeeVatType').value    = v.process_fee_vat_type || '별도';
-  document.getElementById('fvProductTaxType').value       = v.product_tax_type || '면세';
   document.getElementById('fvProductCost').value          = v.product_cost;
   document.getElementById('fvCancelEdit').style.display = '';
   document.getElementById('fvVendorName').focus();
@@ -6411,7 +6408,6 @@ function cancelFakeVendorEdit() {
   document.getElementById('fvMethod').value            = '빈박스';
   document.getElementById('fvReviewType').value        = '별점';
   document.getElementById('fvProcessFeeVatType').value = '별도';
-  document.getElementById('fvProductTaxType').value    = '면세';
   document.getElementById('fvCancelEdit').style.display = 'none';
 }
 
@@ -6424,6 +6420,16 @@ async function deleteFakeVendor(id) {
 }
 
 let fakeOrdersForDate = [];
+let fakeTaxType = '면세';
+
+function setFakeTaxType(type) {
+  fakeTaxType = type;
+  document.getElementById('frTaxExempt').style.background  = type === '면세' ? '#34c759' : 'var(--surface2)';
+  document.getElementById('frTaxExempt').style.color       = type === '면세' ? '#fff'    : 'var(--text-dim)';
+  document.getElementById('frTaxTaxable').style.background = type === '과세' ? '#f97316' : 'var(--surface2)';
+  document.getElementById('frTaxTaxable').style.color      = type === '과세' ? '#fff'    : 'var(--text-dim)';
+  renderFakeOrders();
+}
 
 async function loadFakeOrdersForDate() {
   const date = document.getElementById('frProceedDate').value;
@@ -6435,7 +6441,7 @@ async function loadFakeOrdersForDate() {
   } catch(e) { fakeOrdersForDate = []; renderFakeOrders(); }
 }
 
-function calcFakeOrderCostDetail(order, vendor) {
+function calcFakeOrderCostDetail(order, vendor, taxType) {
   if (!vendor) return { total: 0, breakdown: null };
 
   const netSale = parseFloat(order.net_sale_after_coupon)
@@ -6444,7 +6450,7 @@ function calcFakeOrderCostDetail(order, vendor) {
   const deliveryFee  = parseFloat(vendor.delivery_fee) || 0;
   const processFee   = parseFloat(vendor.process_fee)  || 0;
   const vatType      = vendor.process_fee_vat_type || '별도';
-  const taxType      = vendor.product_tax_type     || '면세';
+  if (!taxType) taxType = '면세';
   const productCost  = vendor.method === '실배송' ? (parseFloat(vendor.product_cost) || 0) : 0;
 
   // 진행비 실지급 & 매입세액
@@ -6482,8 +6488,8 @@ function calcFakeOrderCostDetail(order, vendor) {
   };
 }
 
-function calcFakeOrderCost(order, vendor) {
-  return calcFakeOrderCostDetail(order, vendor).total;
+function calcFakeOrderCost(order, vendor, taxType) {
+  return calcFakeOrderCostDetail(order, vendor, taxType).total;
 }
 
 function fakeCostTooltip(detail) {
@@ -6513,7 +6519,7 @@ function renderFakeOrders() {
   const vendorId = document.getElementById('frVendorSelect').value;
   const vendor = fakeVendors.find(v => v.id == vendorId);
   tbody.innerHTML = fakeOrdersForDate.map(o => {
-    const detail = vendor ? calcFakeOrderCostDetail(o, vendor) : null;
+    const detail = vendor ? calcFakeOrderCostDetail(o, vendor, fakeTaxType) : null;
     const costText = detail ? detail.total.toLocaleString('ko-KR') + '원' : '-';
     const tooltip  = detail ? fakeCostTooltip(detail) : '';
     const netSale = (parseFloat(o.net_sale_after_coupon) || ((parseInt(o.payment_amount)||0) + (parseInt(o.shipping_fee)||0))).toLocaleString('ko-KR');
@@ -6542,7 +6548,7 @@ function updateFakeCostPreview() {
   if (vendor) {
     checked.forEach(chk => {
       const order = fakeOrdersForDate.find(o => o.id == chk.value);
-      if (order) totalCost += calcFakeOrderCost(order, vendor);
+      if (order) totalCost += calcFakeOrderCost(order, vendor, fakeTaxType);
     });
   }
   const previewEl = document.getElementById('frCostPreview');
@@ -6568,7 +6574,7 @@ async function saveFakeRecord() {
   if (vendor) {
     orderIds.forEach(oid => {
       const order = fakeOrdersForDate.find(o => o.id === oid);
-      if (order) totalCost += calcFakeOrderCost(order, vendor);
+      if (order) totalCost += calcFakeOrderCost(order, vendor, fakeTaxType);
     });
   }
 
@@ -6576,7 +6582,7 @@ async function saveFakeRecord() {
     const res = await fetch('/api/fake-records', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ vendor_id: parseInt(vendorId), proceed_date: proceedDate, order_ids: orderIds, total_cost: totalCost }),
+      body: JSON.stringify({ vendor_id: parseInt(vendorId), proceed_date: proceedDate, order_ids: orderIds, total_cost: totalCost, tax_type: fakeTaxType }),
     });
     if (!res.ok) { const e = await res.json(); alert(e.error || '저장 실패'); return; }
     // uncheck all
@@ -6606,7 +6612,7 @@ function renderFakeRecords(records) {
   const totalEl = document.getElementById('fakeRecordTotal');
   if (!tbody) return;
   if (!records.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:16px">기록 없음</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px">기록 없음</td></tr>';
     if (totalEl) totalEl.textContent = '';
     return;
   }
@@ -6619,6 +6625,7 @@ function renderFakeRecords(records) {
       <td style="font-family:var(--mono)">${r.proceed_date}</td>
       <td>${r.vendor_name}</td>
       <td>${r.method}</td>
+      <td>${r.tax_type || '면세'}</td>
       <td style="font-family:var(--mono)">${orderCount}건</td>
       <td style="font-family:var(--mono);color:#f97316">${cost.toLocaleString('ko-KR')}원</td>
       <td><button class="btn btn-sm" onclick="deleteFakeRecord(${r.id})" style="color:#ef4444;border-color:#ef4444;font-size:11px">삭제</button></td>
