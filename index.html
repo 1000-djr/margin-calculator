@@ -5662,10 +5662,14 @@ let _returnsSubTab = 'return'; // 'return' | 'cancel'
 
 function switchReturnsSubTab(tab) {
   _returnsSubTab = tab;
-  document.getElementById('returnSubPanelReturn').style.display = tab === 'return' ? '' : 'none';
-  document.getElementById('returnSubPanelCancel').style.display = tab === 'cancel' ? '' : 'none';
-  document.getElementById('returnSubTabReturn').classList.toggle('active', tab === 'return');
-  document.getElementById('returnSubTabCancel').classList.toggle('active', tab === 'cancel');
+  const panelReturn = document.getElementById('returnSubPanelReturn');
+  const panelCancel = document.getElementById('returnSubPanelCancel');
+  const btnReturn   = document.getElementById('returnSubTabReturn');
+  const btnCancel   = document.getElementById('returnSubTabCancel');
+  if (panelReturn) panelReturn.style.display = tab === 'return' ? 'block' : 'none';
+  if (panelCancel) panelCancel.style.display = tab === 'cancel' ? 'block' : 'none';
+  if (btnReturn)   btnReturn.classList.toggle('active', tab === 'return');
+  if (btnCancel)   btnCancel.classList.toggle('active', tab === 'cancel');
   if (tab === 'return') { renderReturns(); loadReturnsSummary(); }
   else                  { renderCancelShipments(); loadCancelSummary(); }
 }
