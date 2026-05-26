@@ -6322,7 +6322,7 @@ function populateFakeVendorSelect() {
   if (!sel) return;
   const cur = sel.value;
   sel.innerHTML = '<option value="">-- 업체 --</option>' +
-    fakeVendors.map(v => `<option value="${v.id}" ${v.id == cur ? 'selected' : ''}>${v.vendor_name} (${v.method})</option>`).join('');
+    fakeVendors.map(v => `<option value="${v.id}" ${v.id == cur ? 'selected' : ''}>${v.vendor_name} (${v.method} / ${v.review_type})</option>`).join('');
 }
 
 async function saveFakeVendor() {
