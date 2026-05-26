@@ -1204,7 +1204,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
-            <th>등록상품명</th><th>옵션명</th><th>수량</th><th>실매출</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>부가세</th><th>순이익</th><th>마진율</th>
+            <th id="profitProductNameTh" onclick="toggleProfitProductSort()" style="cursor:pointer;user-select:none;white-space:nowrap">등록상품명 <span id="profitProductSortIcon"></span></th><th>옵션명</th><th>수량</th><th>실매출</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>부가세</th><th>순이익</th><th>마진율</th>
           </tr></thead>
           <tbody id="profitProductTbody"></tbody>
         </table>
@@ -1572,6 +1572,7 @@ let selectedOrderNums = new Set(); // 체크된 주문번호
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    || '{}');
 let profitTaxTypeMap   = JSON.parse(localStorage.getItem('profitTaxTypeMap')   || '{}');
+let profitProductSort  = null; // null | 'asc' | 'desc'
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable', productName } }
 let productNameMappings = []; // [{ id, registered_name, option_name, b2b_name, b2b_unit }] — DB 동기화
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -4880,6 +4881,15 @@ async function saveCouponEnd() {
 }
 
 // ── 수익분석 탭 ──────────────────────────────────────────────────────────────
+function toggleProfitProductSort() {
+  if (profitProductSort === null)       profitProductSort = 'asc';
+  else if (profitProductSort === 'asc') profitProductSort = 'desc';
+  else                                  profitProductSort = null;
+  const icon = document.getElementById('profitProductSortIcon');
+  if (icon) icon.textContent = profitProductSort === 'asc' ? '▲' : profitProductSort === 'desc' ? '▼' : '';
+  renderProfit();
+}
+
 // ── 수익분석 상품별 과세구분 관리 ─────────────────────────────────────────────
 function profitTaxKey(optionId, productName, optionName) {
   return optionId || (productName + '||' + (optionName || ''));
@@ -5275,7 +5285,12 @@ async function renderProfit() {
     if (!optionMap.size) {
       productTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
-      productTbody.innerHTML = [...optionMap.values()].map(g => {
+      const productRows = [...optionMap.values()];
+      if (profitProductSort === 'asc')
+        productRows.sort((a, b) => a.productName.localeCompare(b.productName, 'ko'));
+      else if (profitProductSort === 'desc')
+        productRows.sort((a, b) => b.productName.localeCompare(a.productName, 'ko'));
+      productTbody.innerHTML = productRows.map(g => {
         const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
         const fee = realRevenue * feeRate;
         const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
