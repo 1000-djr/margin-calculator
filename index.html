@@ -2275,7 +2275,7 @@ async function openOrderAdjustModal(b2bPriceId) {
       + ` | 공급가 ${_adjB2BPrice.cost.toLocaleString('ko-KR')}원`
       + ` | ${_adjB2BPrice.start_date || '?'} ~ ${_adjB2BPrice.end_date || '진행중'}`;
 
-    document.getElementById('orderAdjustCost').value    = '';
+    document.getElementById('orderAdjustCost').value    = Math.round(_adjB2BPrice.cost);
     document.getElementById('orderAdjustNote').value    = '';
     document.getElementById('orderAdjustSearch').value  = '';
     document.getElementById('orderAdjustModal').style.display = 'flex';
