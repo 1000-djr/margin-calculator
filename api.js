@@ -1055,6 +1055,7 @@ router.get('/returns', requireAuth, async (req, res) => {
         ${recordClause}
       ORDER BY COALESCE(received_at, '') DESC, id DESC
     `, params);
+    console.log(`[GET /returns] user=${req.user.id} record_type=${record_type||'all'} → ${rows.length}건`);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

@@ -1301,7 +1301,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <thead><tr>
               <th style="width:32px"><input type="checkbox" id="cancelSelectAll" onclick="toggleAllCancelSelect(this)"></th>
               <th>접수일</th><th>접수번호</th><th>배송상태</th><th>노출상품명</th><th>옵션</th>
-              <th>수량</th><th>취소사유</th><th>주문번호</th><th>출고예정일</th><th>출고중지완료일</th><th>접수채널</th><th>옵션ID</th><th></th>
+              <th>수량</th><th>취소사유</th><th>주문번호</th><th>출고예정일</th><th>출고중지완료일</th><th>옵션ID</th><th></th>
             </tr></thead>
             <tbody id="cancelTbody"></tbody>
           </table>
@@ -5729,14 +5729,14 @@ async function renderCancelShipments() {
   params.set('record_type', 'cancel');
   const tbody = document.getElementById('cancelTbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
   try {
     const r = await fetch('/api/returns?' + params.toString());
     const rows = await r.json();
     selectedCancelIds = new Set();
     updateCancelSelectionUI();
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:var(--text-dim);padding:24px">출고중지 내역이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">출고중지 내역이 없습니다</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(row => {
@@ -5753,7 +5753,6 @@ async function renderCancelShipments() {
         <td style="font-family:var(--mono);font-size:11px">${row.order_number||'-'}</td>
         <td>${row.expected_ship_date ? row.expected_ship_date.slice(0,10) : '-'}</td>
         <td>${row.warehousing_complete_date ? row.warehousing_complete_date.slice(0,10) : '-'}</td>
-        <td style="font-size:11px">${row.receipt_channel||'-'}</td>
         <td style="font-family:var(--mono);font-size:11px">${row.option_id||'-'}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440">삭제</button>
@@ -5761,7 +5760,7 @@ async function renderCancelShipments() {
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="15" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
   }
 }
 
