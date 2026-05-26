@@ -1403,13 +1403,16 @@ router.get('/fake-vendors', requireAuth, async (req, res) => {
 
 router.post('/fake-vendors', requireAuth, async (req, res) => {
   try {
-    const { vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost } = req.body;
+    const { vendor_name, method, review_type, delivery_fee, process_fee,
+            process_fee_vat_type, product_tax_type, product_cost } = req.body;
     const { rows } = await pool.query(
       `INSERT INTO fake_purchase_vendors
-         (user_id, vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+         (user_id, vendor_name, method, review_type, delivery_fee, process_fee,
+          process_fee_vat_type, product_tax_type, product_cost)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.user.id, vendor_name, method || '빈박스', review_type || '별점',
-       delivery_fee || 0, process_fee || 0, tax_rate || 0, product_cost || 0]
+       delivery_fee || 0, process_fee || 0,
+       process_fee_vat_type || '별도', product_tax_type || '면세', product_cost || 0]
     );
     res.json(rows[0]);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1417,13 +1420,16 @@ router.post('/fake-vendors', requireAuth, async (req, res) => {
 
 router.put('/fake-vendors/:id', requireAuth, async (req, res) => {
   try {
-    const { vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost } = req.body;
+    const { vendor_name, method, review_type, delivery_fee, process_fee,
+            process_fee_vat_type, product_tax_type, product_cost } = req.body;
     const { rows } = await pool.query(
       `UPDATE fake_purchase_vendors
          SET vendor_name=$1, method=$2, review_type=$3,
-             delivery_fee=$4, process_fee=$5, tax_rate=$6, product_cost=$7
-       WHERE id=$8 AND user_id=$9 RETURNING *`,
-      [vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost,
+             delivery_fee=$4, process_fee=$5,
+             process_fee_vat_type=$6, product_tax_type=$7, product_cost=$8
+       WHERE id=$9 AND user_id=$10 RETURNING *`,
+      [vendor_name, method, review_type, delivery_fee, process_fee,
+       process_fee_vat_type || '별도', product_tax_type || '면세', product_cost,
        req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: '없음' });

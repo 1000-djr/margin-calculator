@@ -412,6 +412,12 @@ async function initDB() {
     );
   `);
 
+  // fake_purchase_vendors 부가세 유형 컬럼 추가
+  await pool.query(`
+    ALTER TABLE fake_purchase_vendors ADD COLUMN IF NOT EXISTS process_fee_vat_type VARCHAR(20) DEFAULT '별도';
+    ALTER TABLE fake_purchase_vendors ADD COLUMN IF NOT EXISTS product_tax_type     VARCHAR(20) DEFAULT '면세';
+  `);
+
   console.log('[db] Tables ready');
 }
 

@@ -1382,7 +1382,20 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </div>
         <div class="field" style="margin-bottom:0"><label>배송비(원/건)</label><input type="number" id="fvDeliveryFee" placeholder="0" style="width:100%"></div>
         <div class="field" style="margin-bottom:0"><label>처리비(원/건)</label><input type="number" id="fvProcessFee" placeholder="0" style="width:100%"></div>
-        <div class="field" style="margin-bottom:0"><label>세율(%)</label><input type="number" id="fvTaxRate" placeholder="0" step="0.01" style="width:100%"></div>
+        <div class="field" style="margin-bottom:0">
+          <label>처리비 부가세</label>
+          <select id="fvProcessFeeVatType" style="width:100%">
+            <option value="별도">부가세 별도 (×1.1 실지급)</option>
+            <option value="포함">부가세 포함 (그대로 실지급)</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>상품 과세유형</label>
+          <select id="fvProductTaxType" style="width:100%">
+            <option value="면세">면세</option>
+            <option value="과세">과세</option>
+          </select>
+        </div>
         <div class="field" style="margin-bottom:0"><label>상품원가(원, 실배송 전용)</label><input type="number" id="fvProductCost" placeholder="0" style="width:100%"></div>
       </div>
       <div style="display:flex;gap:8px">
@@ -1393,7 +1406,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div style="margin-top:14px;overflow-x:auto">
         <table class="profit-table" style="min-width:600px">
           <thead><tr>
-            <th>업체명</th><th>방식</th><th>리뷰</th><th>배송비</th><th>처리비</th><th>세율</th><th>상품원가</th><th>수정/삭제</th>
+            <th>업체명</th><th>방식</th><th>리뷰</th><th>배송비</th><th>처리비</th><th>처리비부가세</th><th>과세유형</th><th>상품원가</th><th>수정/삭제</th>
           </tr></thead>
           <tbody id="fakeVendorTbody"></tbody>
         </table>
@@ -6307,7 +6320,8 @@ function renderFakeVendors() {
       <td>${v.review_type}</td>
       <td style="font-family:var(--mono)">${Number(v.delivery_fee).toLocaleString('ko-KR')}원</td>
       <td style="font-family:var(--mono)">${Number(v.process_fee).toLocaleString('ko-KR')}원</td>
-      <td style="font-family:var(--mono)">${v.tax_rate}%</td>
+      <td>${v.process_fee_vat_type || '별도'}</td>
+      <td>${v.product_tax_type || '면세'}</td>
       <td style="font-family:var(--mono)">${Number(v.product_cost).toLocaleString('ko-KR')}원</td>
       <td>
         <button class="btn btn-ghost btn-sm" onclick="editFakeVendor(${v.id})">수정</button>
@@ -6328,13 +6342,14 @@ function populateFakeVendorSelect() {
 async function saveFakeVendor() {
   const editId = document.getElementById('fvEditId').value;
   const body = {
-    vendor_name:  document.getElementById('fvVendorName').value.trim(),
-    method:       document.getElementById('fvMethod').value,
-    review_type:  document.getElementById('fvReviewType').value,
-    delivery_fee: parseFloat(document.getElementById('fvDeliveryFee').value) || 0,
-    process_fee:  parseFloat(document.getElementById('fvProcessFee').value) || 0,
-    tax_rate:     parseFloat(document.getElementById('fvTaxRate').value) || 0,
-    product_cost: parseFloat(document.getElementById('fvProductCost').value) || 0,
+    vendor_name:           document.getElementById('fvVendorName').value.trim(),
+    method:                document.getElementById('fvMethod').value,
+    review_type:           document.getElementById('fvReviewType').value,
+    delivery_fee:          parseFloat(document.getElementById('fvDeliveryFee').value) || 0,
+    process_fee:           parseFloat(document.getElementById('fvProcessFee').value) || 0,
+    process_fee_vat_type:  document.getElementById('fvProcessFeeVatType').value,
+    product_tax_type:      document.getElementById('fvProductTaxType').value,
+    product_cost:          parseFloat(document.getElementById('fvProductCost').value) || 0,
   };
   if (!body.vendor_name) { alert('업체명을 입력하세요.'); return; }
   try {
@@ -6350,24 +6365,27 @@ async function saveFakeVendor() {
 function editFakeVendor(id) {
   const v = fakeVendors.find(x => x.id === id);
   if (!v) return;
-  document.getElementById('fvEditId').value      = v.id;
-  document.getElementById('fvVendorName').value  = v.vendor_name;
-  document.getElementById('fvMethod').value      = v.method;
-  document.getElementById('fvReviewType').value  = v.review_type;
-  document.getElementById('fvDeliveryFee').value = v.delivery_fee;
-  document.getElementById('fvProcessFee').value  = v.process_fee;
-  document.getElementById('fvTaxRate').value     = v.tax_rate;
-  document.getElementById('fvProductCost').value = v.product_cost;
+  document.getElementById('fvEditId').value               = v.id;
+  document.getElementById('fvVendorName').value           = v.vendor_name;
+  document.getElementById('fvMethod').value               = v.method;
+  document.getElementById('fvReviewType').value           = v.review_type;
+  document.getElementById('fvDeliveryFee').value          = v.delivery_fee;
+  document.getElementById('fvProcessFee').value           = v.process_fee;
+  document.getElementById('fvProcessFeeVatType').value    = v.process_fee_vat_type || '별도';
+  document.getElementById('fvProductTaxType').value       = v.product_tax_type || '면세';
+  document.getElementById('fvProductCost').value          = v.product_cost;
   document.getElementById('fvCancelEdit').style.display = '';
   document.getElementById('fvVendorName').focus();
 }
 
 function cancelFakeVendorEdit() {
-  ['fvEditId','fvVendorName','fvDeliveryFee','fvProcessFee','fvTaxRate','fvProductCost'].forEach(id => {
+  ['fvEditId','fvVendorName','fvDeliveryFee','fvProcessFee','fvProductCost'].forEach(id => {
     document.getElementById(id).value = '';
   });
-  document.getElementById('fvMethod').value     = '빈박스';
-  document.getElementById('fvReviewType').value = '별점';
+  document.getElementById('fvMethod').value            = '빈박스';
+  document.getElementById('fvReviewType').value        = '별점';
+  document.getElementById('fvProcessFeeVatType').value = '별도';
+  document.getElementById('fvProductTaxType').value    = '면세';
   document.getElementById('fvCancelEdit').style.display = 'none';
 }
 
@@ -6391,15 +6409,71 @@ async function loadFakeOrdersForDate() {
   } catch(e) { fakeOrdersForDate = []; renderFakeOrders(); }
 }
 
-function calcFakeOrderCost(order, vendor) {
-  if (!vendor) return 0;
+function calcFakeOrderCostDetail(order, vendor) {
+  if (!vendor) return { total: 0, breakdown: null };
+
   const netSale = parseFloat(order.net_sale_after_coupon)
     || ((parseInt(order.payment_amount) || 0) + (parseInt(order.shipping_fee) || 0));
-  const base = parseFloat(vendor.delivery_fee) + parseFloat(vendor.process_fee)
-    + netSale * parseFloat(vendor.tax_rate) / 100
-    + netSale * 0.1166;
-  const extra = vendor.method === '실배송' ? parseFloat(vendor.product_cost) : 0;
-  return Math.round(base + extra);
+
+  const deliveryFee  = parseFloat(vendor.delivery_fee) || 0;
+  const processFee   = parseFloat(vendor.process_fee)  || 0;
+  const vatType      = vendor.process_fee_vat_type || '별도';
+  const taxType      = vendor.product_tax_type     || '면세';
+  const productCost  = vendor.method === '실배송' ? (parseFloat(vendor.product_cost) || 0) : 0;
+
+  // 진행비 실지급 & 매입세액
+  let processFeeActual, processFeeVat;
+  if (vatType === '별도') {
+    processFeeActual = processFee * 1.1;
+    processFeeVat    = processFee * 0.1;
+  } else {
+    processFeeActual = processFee;
+    processFeeVat    = processFee / 11;
+  }
+
+  // 수수료 (공급가 기준 10.66%)
+  const commission = netSale * 0.1066;
+
+  let vatPayable = 0;
+  if (taxType === '과세') {
+    // 부가세납부액 = 매출/11 - 제품원가/11 - 수수료/11 - 진행비매입세액
+    vatPayable = netSale / 11 - productCost / 11 - commission / 11 - processFeeVat;
+    if (vatPayable < 0) vatPayable = 0;
+  }
+
+  const total = deliveryFee + processFeeActual + commission + vatPayable;
+
+  return {
+    total: Math.round(total),
+    breakdown: {
+      deliveryFee:      Math.round(deliveryFee),
+      processFeeActual: Math.round(processFeeActual),
+      vatType,
+      commission:       Math.round(commission),
+      vatPayable:       Math.round(vatPayable),
+      taxType,
+    },
+  };
+}
+
+function calcFakeOrderCost(order, vendor) {
+  return calcFakeOrderCostDetail(order, vendor).total;
+}
+
+function fakeCostTooltip(detail) {
+  if (!detail.breakdown) return '';
+  const b = detail.breakdown;
+  const commRate = b.taxType === '과세' ? '10.66%' : '10.66%';
+  let lines = [
+    `택배비: ${b.deliveryFee.toLocaleString('ko-KR')}원`,
+    `처리비: ${b.processFeeActual.toLocaleString('ko-KR')}원 (부가세 ${b.vatType})`,
+    `수수료: ${b.commission.toLocaleString('ko-KR')}원 (${commRate})`,
+  ];
+  if (b.taxType === '과세') {
+    lines.push(`부가세납부액: ${b.vatPayable.toLocaleString('ko-KR')}원 (과세)`);
+  }
+  lines.push(`합계: ${detail.total.toLocaleString('ko-KR')}원`);
+  return lines.join('\n');
 }
 
 function renderFakeOrders() {
@@ -6413,7 +6487,9 @@ function renderFakeOrders() {
   const vendorId = document.getElementById('frVendorSelect').value;
   const vendor = fakeVendors.find(v => v.id == vendorId);
   tbody.innerHTML = fakeOrdersForDate.map(o => {
-    const cost = vendor ? calcFakeOrderCost(o, vendor).toLocaleString('ko-KR') + '원' : '-';
+    const detail = vendor ? calcFakeOrderCostDetail(o, vendor) : null;
+    const costText = detail ? detail.total.toLocaleString('ko-KR') + '원' : '-';
+    const tooltip  = detail ? fakeCostTooltip(detail) : '';
     const netSale = (parseFloat(o.net_sale_after_coupon) || ((parseInt(o.payment_amount)||0) + (parseInt(o.shipping_fee)||0))).toLocaleString('ko-KR');
     return `<tr>
       <td><input type="checkbox" class="fakeOrderChk" value="${o.id}" onchange="updateFakeCostPreview()"></td>
@@ -6421,7 +6497,7 @@ function renderFakeOrders() {
       <td style="font-size:12px">${o.product_name || ''}${o.option_name ? ' / '+o.option_name : ''}</td>
       <td style="font-family:var(--mono)">${o.quantity}개</td>
       <td style="font-family:var(--mono)">${netSale}원</td>
-      <td style="font-family:var(--mono);color:#f97316">${cost}</td>
+      <td style="font-family:var(--mono);color:#f97316;cursor:help" title="${tooltip}">${costText}</td>
     </tr>`;
   }).join('');
   updateFakeCostPreview();
