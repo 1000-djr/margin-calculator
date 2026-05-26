@@ -1215,7 +1215,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
-            <th>기간</th><th>판매건수</th><th>매출(쿠폰전)</th><th>매출(쿠폰후)</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>마진율</th>
+            <th id="profitPeriodTh" onclick="toggleProfitPeriodSort()" style="cursor:pointer;user-select:none;white-space:nowrap">기간 <span id="profitPeriodSortIcon">▲</span></th><th>판매건수</th><th>매출(쿠폰전)</th><th>매출(쿠폰후)</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>마진율</th>
           </tr></thead>
           <tbody id="profitPeriodTbody"></tbody>
         </table>
@@ -1572,7 +1572,8 @@ let selectedOrderNums = new Set(); // 체크된 주문번호
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    || '{}');
 let profitTaxTypeMap   = JSON.parse(localStorage.getItem('profitTaxTypeMap')   || '{}');
-let profitProductSort  = null; // null | 'asc' | 'desc'
+let profitProductSort  = null;  // null | 'asc' | 'desc'
+let profitPeriodSort   = 'asc'; // 'asc' | 'desc'
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable', productName } }
 let productNameMappings = []; // [{ id, registered_name, option_name, b2b_name, b2b_unit }] — DB 동기화
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -4881,6 +4882,13 @@ async function saveCouponEnd() {
 }
 
 // ── 수익분석 탭 ──────────────────────────────────────────────────────────────
+function toggleProfitPeriodSort() {
+  profitPeriodSort = profitPeriodSort === 'asc' ? 'desc' : 'asc';
+  const icon = document.getElementById('profitPeriodSortIcon');
+  if (icon) icon.textContent = profitPeriodSort === 'asc' ? '▲' : '▼';
+  renderProfit();
+}
+
 function toggleProfitProductSort() {
   if (profitProductSort === null)       profitProductSort = 'asc';
   else if (profitProductSort === 'asc') profitProductSort = 'desc';
@@ -5368,7 +5376,11 @@ async function renderProfit() {
   // ── 기간별 집계 테이블 (백엔드 /api/analytics 결과 사용) ──────────────────────
   const periodTbody = document.getElementById('profitPeriodTbody');
   if (periodTbody) {
-    const periods = analytics?.by_period || [];
+    const periods = [...(analytics?.by_period || [])].sort((a, b) =>
+      profitPeriodSort === 'asc'
+        ? String(a.period).localeCompare(String(b.period))
+        : String(b.period).localeCompare(String(a.period))
+    );
     if (!periods.length) {
       periodTbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
