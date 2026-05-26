@@ -558,6 +558,17 @@ function couponRow(r) {
   };
 }
 
+router.get('/coupons/summary', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT TO_CHAR(MAX(created_at) AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') AS last_registered
+       FROM coupons WHERE user_id = $1`,
+      [req.user.id]
+    );
+    res.json(rows[0] || { last_registered: null });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/coupons', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
