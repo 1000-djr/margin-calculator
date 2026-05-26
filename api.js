@@ -1510,7 +1510,12 @@ router.get('/fake-orders', requireAuth, async (req, res) => {
                   ), 0),
                 0
               ) AS net_sale_after_coupon,
-              o.exclusion_type
+              o.exclusion_type,
+              EXISTS (
+                SELECT 1 FROM fake_purchase_records r
+                WHERE r.user_id = o.user_id
+                  AND r.order_ids @> jsonb_build_array(o.id)
+              ) AS already_recorded
          FROM orders o
         WHERE o.user_id = $1
           AND ($2::text IS NULL OR SUBSTRING(o.order_date,1,10) = $2)

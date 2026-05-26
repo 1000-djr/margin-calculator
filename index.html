@@ -6527,14 +6527,16 @@ function renderFakeOrders() {
   const vendor = vendorId ? fakeVendors.find(v => String(v.id) === String(vendorId)) : null;
   console.log('[renderFakeOrders] vendorId=', vendorId, 'fakeVendors.length=', fakeVendors.length, 'vendor=', vendor, 'fakeTaxType=', fakeTaxType);
   tbody.innerHTML = fakeOrdersForDate.map(o => {
+    const done = o.already_recorded === true || o.already_recorded === 'true';
     let detail = null;
     try { detail = vendor ? calcFakeOrderCostDetail(o, vendor, fakeTaxType) : null; } catch(e) { console.error('[calcCost]', e); }
     const costText = (detail && detail.total != null) ? detail.total.toLocaleString('ko-KR') + '원' : (vendor ? '계산오류' : '-');
     const tooltip  = detail ? fakeCostTooltip(detail) : '';
     const netSale = (parseFloat(o.net_sale_after_coupon) || ((parseInt(o.payment_amount)||0) + (parseInt(o.shipping_fee)||0))).toLocaleString('ko-KR');
-    return `<tr>
-      <td><input type="checkbox" class="fakeOrderChk" value="${o.id}" onchange="updateFakeCostPreview()"></td>
-      <td style="font-family:var(--mono);font-size:12px">${o.order_number}</td>
+    const rowBg   = done ? 'background:var(--surface2);opacity:0.75' : '';
+    return `<tr style="${rowBg}">
+      <td><input type="checkbox" class="fakeOrderChk" value="${o.id}" ${done ? 'disabled' : 'onchange="updateFakeCostPreview()"'}></td>
+      <td style="font-family:var(--mono);font-size:12px">${o.order_number}${done ? ' <span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px">처리완료</span>' : ''}</td>
       <td style="font-size:12px">${o.product_name || ''}${o.option_name ? ' / '+o.option_name : ''}</td>
       <td style="font-family:var(--mono)">${o.quantity}개</td>
       <td style="font-family:var(--mono)">${netSale}원</td>
