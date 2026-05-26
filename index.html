@@ -1099,6 +1099,22 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
+  <!-- ══ 쿠폰 종료 모달 ══════════════════════════════════════════════ -->
+  <div id="couponEndModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:360px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px">쿠폰 종료</div>
+      <div id="couponEndModalName" style="font-size:13px;color:var(--text-dim);margin-bottom:18px"></div>
+      <div class="field-row" style="margin-bottom:16px">
+        <div class="field"><label>종료 날짜</label><input type="date" id="couponEndDate"></div>
+        <div class="field"><label>종료 시각 (24시)</label><input type="time" id="couponEndTime"></div>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('couponEndModal').style.display='none'">취소</button>
+        <button class="btn btn-primary" onclick="saveCouponEnd()">확인</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ══ 쿠폰 탭 ════════════════════════════════════════════════════ -->
   <div class="panel" id="tab-coupons">
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -4785,6 +4801,7 @@ function renderCoupons() {
         <td style="white-space:nowrap">
           <button class="history-edit-btn" onclick="editCoupon(${c.id})">수정</button>
           <button class="history-del-btn"  onclick="deleteCoupon(${c.id})">삭제</button>
+          ${(!endAt || now < endAt) ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px;color:#f97316;border-color:#f97316" onclick="openCouponEndModal(${c.id})">종료</button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -4803,6 +4820,56 @@ async function deleteCoupon(id) {
     try { await fetch('/api/coupons/' + id, { method: 'DELETE' }); } catch(e) {}
   }
   renderCoupons();
+}
+
+let _couponEndId = null;
+
+function openCouponEndModal(id) {
+  const c = coupons.find(x => x.id == id);
+  if (!c) return;
+  _couponEndId = id;
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  document.getElementById('couponEndModalName').textContent = `'${c.name}' 쿠폰의 종료 일시를 설정하세요.`;
+  document.getElementById('couponEndDate').value = dateStr;
+  document.getElementById('couponEndTime').value = timeStr;
+  document.getElementById('couponEndModal').style.display = 'flex';
+}
+
+async function saveCouponEnd() {
+  const c = coupons.find(x => x.id == _couponEndId);
+  if (!c) return;
+  const date = document.getElementById('couponEndDate').value;
+  const time = document.getElementById('couponEndTime').value;
+  if (!date || !time) { alert('날짜와 시각을 모두 입력하세요'); return; }
+
+  const endAt = new Date(`${date}T${time}:00`).toISOString();
+  document.getElementById('couponEndModal').style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/coupons/${_couponEndId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        coupon_id:       c.coupon_id || null,
+        name:            c.name,
+        discount_amount: c.discount_amount || 0,
+        start_at:        c.start_at || null,
+        end_at:          endAt,
+        option_ids:      Array.isArray(c.option_ids) ? c.option_ids : [],
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>{}); alert('저장 실패: ' + (e?.error || res.status)); return; }
+    c.end_at = endAt;
+    localStorage.setItem('couponsData', JSON.stringify(coupons));
+    renderCoupons();
+  } catch(e) {
+    alert('저장 중 오류: ' + e.message);
+  }
 }
 
 // ── 수익분석 탭 ──────────────────────────────────────────────────────────────
