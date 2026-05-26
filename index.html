@@ -3820,7 +3820,7 @@ function handleAdsUpload(input) {
           obj[col] = col === '날짜' ? formatAdDate(raw) : raw;
         });
         return obj;
-      });
+      }).filter(r => { const v = parseFloat(r['광고비']); return isFinite(v) && v !== 0; });
 
       const adKey = r => `${r['날짜']}|${r[AD_OPTION_COL] || r['광고집행옵션ID'] || ''}|${r['키워드'] || ''}`;
       const existingKeys = new Set(adReports.map(adKey));
@@ -3898,7 +3898,7 @@ function handleAdsFilterUpload(input) {
           obj[col] = col === '날짜' ? formatAdDate(raw) : raw;
         });
         return obj;
-      });
+      }).filter(r => { const v = parseFloat(r['광고비']); return isFinite(v) && v !== 0; });
 
       if (!_adFilterParsedRows.length) { alert('유효한 데이터가 없습니다'); return; }
 
