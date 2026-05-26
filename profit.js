@@ -47,30 +47,34 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
             ), 0),
           0
         )                                                 AS net_sale,
-        COALESCE((
-          SELECT bp.cost
-          FROM product_name_mapping pnm
-          JOIN b2b_products b2bp
-            ON b2bp.user_id = pnm.user_id
-           AND b2bp.name    = pnm.b2b_name
-           AND b2bp.unit    = pnm.b2b_unit
-          JOIN b2b_prices bp
-            ON bp.user_id        = pnm.user_id
-           AND bp.b2b_product_id = b2bp.id
-           AND (bp.start_date IS NULL
-             OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                 AND bp.start_date
-                     <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-           AND (bp.end_date IS NULL
-             OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                 AND bp.end_date
-                     >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-          WHERE pnm.user_id         = o.user_id
-            AND pnm.registered_name = o.product_name
-            AND pnm.option_name     = COALESCE(o.option_name, '')
-          ORDER BY bp.start_date DESC NULLS LAST
-          LIMIT 1
-        ), 0)                                             AS unit_cost
+        COALESCE(
+          o.override_cost_price::NUMERIC,
+          (
+            SELECT bp.cost
+            FROM product_name_mapping pnm
+            JOIN b2b_products b2bp
+              ON b2bp.user_id = pnm.user_id
+             AND b2bp.name    = pnm.b2b_name
+             AND b2bp.unit    = pnm.b2b_unit
+            JOIN b2b_prices bp
+              ON bp.user_id        = pnm.user_id
+             AND bp.b2b_product_id = b2bp.id
+             AND (bp.start_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.start_date
+                       <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+             AND (bp.end_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.end_date
+                       >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+            WHERE pnm.user_id         = o.user_id
+              AND pnm.registered_name = o.product_name
+              AND pnm.option_name     = COALESCE(o.option_name, '')
+            ORDER BY bp.start_date DESC NULLS LAST
+            LIMIT 1
+          ),
+          0
+        )                                                 AS unit_cost
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -183,30 +187,34 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
             ), 0),
           0
         )                                                 AS net_sale,
-        COALESCE((
-          SELECT bp.cost
-          FROM product_name_mapping pnm
-          JOIN b2b_products b2bp
-            ON b2bp.user_id = pnm.user_id
-           AND b2bp.name    = pnm.b2b_name
-           AND b2bp.unit    = pnm.b2b_unit
-          JOIN b2b_prices bp
-            ON bp.user_id        = pnm.user_id
-           AND bp.b2b_product_id = b2bp.id
-           AND (bp.start_date IS NULL
-             OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                 AND bp.start_date
-                     <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-           AND (bp.end_date IS NULL
-             OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                 AND bp.end_date
-                     >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-          WHERE pnm.user_id         = o.user_id
-            AND pnm.registered_name = o.product_name
-            AND pnm.option_name     = COALESCE(o.option_name, '')
-          ORDER BY bp.start_date DESC NULLS LAST
-          LIMIT 1
-        ), 0)                                             AS unit_cost
+        COALESCE(
+          o.override_cost_price::NUMERIC,
+          (
+            SELECT bp.cost
+            FROM product_name_mapping pnm
+            JOIN b2b_products b2bp
+              ON b2bp.user_id = pnm.user_id
+             AND b2bp.name    = pnm.b2b_name
+             AND b2bp.unit    = pnm.b2b_unit
+            JOIN b2b_prices bp
+              ON bp.user_id        = pnm.user_id
+             AND bp.b2b_product_id = b2bp.id
+             AND (bp.start_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.start_date
+                       <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+             AND (bp.end_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.end_date
+                       >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+            WHERE pnm.user_id         = o.user_id
+              AND pnm.registered_name = o.product_name
+              AND pnm.option_name     = COALESCE(o.option_name, '')
+            ORDER BY bp.start_date DESC NULLS LAST
+            LIMIT 1
+          ),
+          0
+        )                                                 AS unit_cost
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE

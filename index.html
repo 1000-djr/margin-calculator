@@ -821,7 +821,63 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
-  <!-- ══ 판매 매체 관리 모달 ══════════════════════════════════════ -->
+  <!-- ══ 발주 조정 모달 ═══════════════════════════════════════════ -->
+<div id="orderAdjustModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:860px;max-width:97vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px">
+      <div>
+        <div style="font-size:20px;font-weight:700">🔧 발주 상세 조정</div>
+        <div id="orderAdjustMeta" style="font-size:13px;color:var(--text-dim);margin-top:4px"></div>
+      </div>
+      <button onclick="closeOrderAdjustModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-dim);line-height:1;padding:0 0 0 12px">×</button>
+    </div>
+    <!-- 오버라이드 입력 -->
+    <div style="background:var(--surface2);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:600;color:var(--text)">선택 주문에 적용할 공급가</div>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:220px">
+        <input id="orderAdjustCost" type="number" min="0" placeholder="공급가 입력 (원)"
+               style="width:150px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)">
+        <input id="orderAdjustNote" type="text" placeholder="메모 (선택)"
+               style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveOrderAdjust()">선택 항목 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearOrderAdjust()" title="선택 주문의 오버라이드 제거">오버라이드 해제</button>
+    </div>
+    <!-- 검색 + 선택 -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <input id="orderAdjustSearch" type="text" placeholder="주문번호·상품명 검색…"
+             style="flex:1;min-width:180px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text)"
+             oninput="renderOrderAdjustTable()">
+      <button class="btn btn-ghost btn-sm" onclick="setAllOrderAdjust(true)">전체선택</button>
+      <button class="btn btn-ghost btn-sm" onclick="setAllOrderAdjust(false)">전체해제</button>
+      <span id="orderAdjustCount" style="font-size:13px;color:var(--text-dim);white-space:nowrap"></span>
+    </div>
+    <!-- 테이블 -->
+    <div style="overflow-y:auto;flex:1;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
+            <th style="padding:8px 10px;text-align:center;width:36px;border-bottom:1px solid var(--border)">
+              <input type="checkbox" id="orderAdjustSelectAll" onchange="setAllOrderAdjust(this.checked)" style="accent-color:var(--primary)">
+            </th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap">주문일시</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap">주문번호</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">등록상품명</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">등록옵션명</th>
+            <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border);white-space:nowrap">수량</th>
+            <th style="padding:8px 10px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap">현재 적용 공급가</th>
+          </tr>
+        </thead>
+        <tbody id="orderAdjustTbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;font-size:12px;color:var(--text-dim)">
+      🔧 아이콘 = 오버라이드 적용됨 &nbsp;|&nbsp; 공급가 미표시 = B2B 이력 없음 (0원 적용)
+    </div>
+  </div>
+</div>
+
+<!-- ══ 판매 매체 관리 모달 ══════════════════════════════════════ -->
   <div id="platformModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
     <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:560px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -2176,6 +2232,7 @@ function renderB2B() {
         <td style="white-space:nowrap">
           <button class="history-edit-btn" onclick="editB2BPrice(${p.id})">수정</button>
           <button class="history-del-btn"  onclick="deleteB2BPrice(${p.id})">삭제</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px" onclick="openOrderAdjustModal(${p.id})">🔧 발주 조정</button>
         </td>
       </tr>`;
     }).join('');
@@ -2189,7 +2246,7 @@ function renderB2B() {
       </div>
       <div class="history-group-body" id="${groupId}">
         <table class="history-table">
-          <thead><tr><th>공급처</th><th>공급가</th><th>시작일</th><th>종료일</th><th>상태</th><th></th></tr></thead>
+          <thead><tr><th>공급처</th><th>공급가</th><th>시작일</th><th>종료일</th><th>상태</th><th style="min-width:140px"></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -2197,6 +2254,136 @@ function renderB2B() {
   }).join('');
 
   updateQuickSelect();
+}
+
+// ── 발주 조정 모달 ───────────────────────────────────────────────────────────
+let _adjB2BPrice  = null;   // 현재 열린 B2B 이력 정보
+let _adjOrders    = [];     // 조회된 주문 목록
+
+async function openOrderAdjustModal(b2bPriceId) {
+  try {
+    const data = await fetch(`/api/b2b-prices/${b2bPriceId}/orders`).then(r => r.json());
+    if (data.error) { alert('조회 실패: ' + data.error); return; }
+    _adjB2BPrice = data.price;
+    _adjOrders   = data.orders;
+
+    const meta = document.getElementById('orderAdjustMeta');
+    meta.textContent =
+      `${_adjB2BPrice.product_name}${_adjB2BPrice.unit ? ' · ' + _adjB2BPrice.unit : ''}`
+      + ` | ${_adjB2BPrice.supplier_name}`
+      + ` | 공급가 ${_adjB2BPrice.cost.toLocaleString('ko-KR')}원`
+      + ` | ${_adjB2BPrice.start_date || '?'} ~ ${_adjB2BPrice.end_date || '진행중'}`;
+
+    document.getElementById('orderAdjustCost').value    = '';
+    document.getElementById('orderAdjustNote').value    = '';
+    document.getElementById('orderAdjustSearch').value  = '';
+    document.getElementById('orderAdjustModal').style.display = 'flex';
+    renderOrderAdjustTable();
+  } catch(e) {
+    alert('조회 중 오류: ' + e.message);
+  }
+}
+
+function closeOrderAdjustModal() {
+  document.getElementById('orderAdjustModal').style.display = 'none';
+  _adjB2BPrice = null;
+  _adjOrders   = [];
+}
+
+function renderOrderAdjustTable() {
+  const q = document.getElementById('orderAdjustSearch').value.trim().toLowerCase();
+  const tbody = document.getElementById('orderAdjustTbody');
+  const filtered = q
+    ? _adjOrders.filter(o =>
+        (o.order_number || '').toLowerCase().includes(q) ||
+        (o.product_name || '').toLowerCase().includes(q))
+    : _adjOrders;
+
+  const baseCost = _adjB2BPrice ? _adjB2BPrice.cost : 0;
+
+  tbody.innerHTML = filtered.map(o => {
+    const overridden = o.override_cost_price != null;
+    const displayCost = overridden
+      ? `<span style="color:var(--primary);font-weight:600">🔧 ${Number(o.override_cost_price).toLocaleString('ko-KR')}원</span>`
+        + (o.override_cost_note ? `<br><span style="font-size:11px;color:var(--text-dim)">${escHtml(o.override_cost_note)}</span>` : '')
+      : `<span style="color:var(--text-sub)">${baseCost.toLocaleString('ko-KR')}원</span>`;
+    return `<tr style="border-bottom:1px solid var(--border)${overridden ? ';background:rgba(99,102,241,0.04)' : ''}">
+      <td style="padding:7px 10px;text-align:center">
+        <input type="checkbox" class="order-adj-chk" data-id="${o.id}" style="accent-color:var(--primary)">
+      </td>
+      <td style="padding:7px 10px;white-space:nowrap;font-size:12px;color:var(--text-sub)">${escHtml((o.order_date||'').slice(0,16))}</td>
+      <td style="padding:7px 10px;font-family:var(--mono);font-size:12px">${escHtml(o.order_number||'')}</td>
+      <td style="padding:7px 10px">${escHtml(o.product_name||'')}</td>
+      <td style="padding:7px 10px;color:var(--text-sub)">${escHtml(o.option_name||'')}</td>
+      <td style="padding:7px 10px;text-align:center">${o.quantity}</td>
+      <td style="padding:7px 10px;text-align:right">${displayCost}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" style="padding:32px;text-align:center;color:var(--text-dim)">해당 기간 내 매핑된 주문이 없습니다</td></tr>';
+
+  updateOrderAdjustCount();
+}
+
+function updateOrderAdjustCount() {
+  const total   = document.querySelectorAll('.order-adj-chk').length;
+  const checked = document.querySelectorAll('.order-adj-chk:checked').length;
+  document.getElementById('orderAdjustCount').textContent = `${total}건 중 ${checked}건 선택`;
+  document.getElementById('orderAdjustSelectAll').checked = total > 0 && checked === total;
+  document.querySelectorAll('.order-adj-chk').forEach(chk => { chk.onchange = updateOrderAdjustCount; });
+}
+
+function setAllOrderAdjust(checked) {
+  document.querySelectorAll('.order-adj-chk').forEach(chk => { chk.checked = checked; });
+  document.getElementById('orderAdjustSelectAll').checked = checked;
+  updateOrderAdjustCount();
+}
+
+async function saveOrderAdjust() {
+  const ids = [...document.querySelectorAll('.order-adj-chk:checked')].map(c => parseInt(c.dataset.id));
+  if (!ids.length) { alert('선택된 주문이 없습니다.'); return; }
+  const costVal = document.getElementById('orderAdjustCost').value.trim();
+  if (!costVal) { alert('적용할 공급가를 입력하세요.'); return; }
+  const cost = parseInt(costVal);
+  if (isNaN(cost) || cost < 0) { alert('유효한 공급가를 입력하세요.'); return; }
+  const note = document.getElementById('orderAdjustNote').value.trim();
+
+  try {
+    const res = await fetch('/api/orders/override-cost', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_ids: ids, override_cost_price: cost, override_cost_note: note || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert('저장 실패: ' + (data.error || res.status)); return; }
+    // 로컬 데이터 반영
+    ids.forEach(id => {
+      const o = _adjOrders.find(x => x.id === id);
+      if (o) { o.override_cost_price = cost; o.override_cost_note = note || null; }
+    });
+    renderOrderAdjustTable();
+    alert(`${data.updated}건에 공급가 ${cost.toLocaleString('ko-KR')}원 저장 완료`);
+  } catch(e) { alert('저장 중 오류: ' + e.message); }
+}
+
+async function clearOrderAdjust() {
+  const ids = [...document.querySelectorAll('.order-adj-chk:checked')].map(c => parseInt(c.dataset.id));
+  if (!ids.length) { alert('선택된 주문이 없습니다.'); return; }
+  if (!confirm(`선택한 ${ids.length}건의 오버라이드를 해제하시겠습니까?\nB2B 이력 공급가로 복원됩니다.`)) return;
+
+  try {
+    const res = await fetch('/api/orders/override-cost', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_ids: ids, override_cost_price: null, override_cost_note: null }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert('해제 실패: ' + (data.error || res.status)); return; }
+    ids.forEach(id => {
+      const o = _adjOrders.find(x => x.id === id);
+      if (o) { o.override_cost_price = null; o.override_cost_note = null; }
+    });
+    renderOrderAdjustTable();
+    alert(`${data.updated}건 오버라이드 해제 완료`);
+  } catch(e) { alert('해제 중 오류: ' + e.message); }
 }
 
 function toggleB2BGroup(groupId) {

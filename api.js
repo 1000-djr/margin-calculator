@@ -865,6 +865,94 @@ router.delete('/b2b-prices/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// B2B 이력 기간 내 매핑된 주문 조회 (발주 조정용)
+router.get('/b2b-prices/:id/orders', requireAuth, async (req, res) => {
+  try {
+    const { rows: priceRows } = await pool.query(`
+      SELECT bp.id, bp.cost, bp.start_date, bp.end_date,
+             p.name AS product_name, p.unit,
+             s.name AS supplier_name
+      FROM b2b_prices bp
+      JOIN b2b_products p ON p.id = bp.b2b_product_id
+      JOIN b2b_suppliers s ON s.id = bp.supplier_id
+      WHERE bp.id = $1 AND bp.user_id = $2
+    `, [req.params.id, req.user.id]);
+
+    if (!priceRows.length) return res.status(404).json({ error: '이력을 찾을 수 없습니다' });
+    const price = priceRows[0];
+
+    // 상품명 매핑 조회 (b2b_name → registered_name 역매핑)
+    const { rows: mappings } = await pool.query(`
+      SELECT pnm.registered_name, pnm.option_name
+      FROM product_name_mapping pnm
+      JOIN b2b_products b2bp
+        ON b2bp.user_id = pnm.user_id
+       AND b2bp.name    = pnm.b2b_name
+       AND b2bp.unit    = pnm.b2b_unit
+      WHERE pnm.user_id = $1
+        AND b2bp.name   = $2
+        AND b2bp.unit   = $3
+    `, [req.user.id, price.product_name, price.unit || '']);
+
+    let orders = [];
+    if (mappings.length > 0) {
+      const startStr = price.start_date ? price.start_date.toISOString().slice(0, 10) : null;
+      const endStr   = price.end_date   ? price.end_date.toISOString().slice(0, 10)   : null;
+
+      // (registered_name, option_name) 쌍을 IN 조건으로 구성
+      const pairs = mappings.map((m, i) =>
+        `(o.product_name = $${4 + i * 2} AND o.option_name = $${5 + i * 2})`
+      ).join(' OR ');
+      const pairParams = mappings.flatMap(m => [m.registered_name, m.option_name]);
+
+      const { rows: orderRows } = await pool.query(`
+        SELECT o.id, o.order_number, o.order_date, o.product_name, o.option_name,
+               o.quantity, o.override_cost_price, o.override_cost_note
+        FROM orders o
+        WHERE o.user_id = $1
+          AND ($2::text IS NULL OR SUBSTRING(o.order_date,1,10) >= $2)
+          AND ($3::text IS NULL OR SUBSTRING(o.order_date,1,10) <= $3)
+          AND (${pairs})
+        ORDER BY o.order_date DESC, o.id DESC
+      `, [req.user.id, startStr, endStr, ...pairParams]);
+
+      orders = orderRows;
+    }
+
+    res.json({
+      price: {
+        id:            price.id,
+        product_name:  price.product_name,
+        unit:          price.unit,
+        supplier_name: price.supplier_name,
+        cost:          parseFloat(price.cost),
+        start_date:    price.start_date ? price.start_date.toISOString().slice(0, 10) : null,
+        end_date:      price.end_date   ? price.end_date.toISOString().slice(0, 10)   : null,
+      },
+      orders,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 주문 발주 조정 저장 (override_cost_price)
+router.put('/orders/override-cost', requireAuth, async (req, res) => {
+  const { order_ids, override_cost_price, override_cost_note } = req.body;
+  if (!Array.isArray(order_ids) || !order_ids.length)
+    return res.status(400).json({ error: 'order_ids 배열 필수' });
+  const cost = override_cost_price != null ? parseInt(override_cost_price) : null;
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE orders
+          SET override_cost_price = $1,
+              override_cost_note  = $2
+        WHERE user_id = $3
+          AND id = ANY($4::int[])`,
+      [cost, override_cost_note || null, req.user.id, order_ids]
+    );
+    res.json({ updated: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── product-name-mappings ──────────────────────────────────────────────────────
 router.get('/product-name-mappings', requireAuth, async (req, res) => {
   try {
