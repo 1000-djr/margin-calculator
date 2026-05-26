@@ -1589,6 +1589,60 @@ router.delete('/fake-records/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 가구매 기록 상세 (주문별 내역) ─────────────────────────────────────────
+router.get('/fake-records/:id/detail', requireAuth, async (req, res) => {
+  try {
+    // 기록 + 업체 정보 조회
+    const { rows: recRows } = await pool.query(
+      `SELECT r.*, v.vendor_name, v.method, v.review_type,
+              v.delivery_fee, v.process_fee, v.process_fee_vat_type, v.product_cost
+         FROM fake_purchase_records r
+         JOIN fake_purchase_vendors v ON v.id = r.vendor_id
+        WHERE r.id = $1 AND r.user_id = $2`,
+      [req.params.id, req.user.id]
+    );
+    if (!recRows.length) return res.status(404).json({ error: '없음' });
+    const rec = recRows[0];
+
+    // order_ids로 주문 상세 조회 (쿠폰 적용 매출 포함)
+    const orderIds = rec.order_ids || [];
+    let orders = [];
+    if (orderIds.length > 0) {
+      const { rows: oRows } = await pool.query(
+        `SELECT o.id, o.order_number, o.product_name, o.option_name, o.quantity,
+                o.payment_amount, o.shipping_fee,
+                o.payment_amount + o.shipping_fee AS net_sale,
+                GREATEST(
+                  o.payment_amount + o.shipping_fee
+                  - COALESCE((
+                      SELECT c.discount_amount
+                      FROM coupons c
+                      WHERE c.user_id = o.user_id
+                        AND c.option_ids @> jsonb_build_array(o.option_id)
+                        AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                        AND (c.start_at IS NULL
+                          OR SUBSTRING(o.order_date,1,10)
+                             >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+                        AND (c.end_at IS NULL
+                          OR SUBSTRING(o.order_date,1,10)
+                             <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+                      ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
+                      LIMIT 1
+                    ), 0),
+                  0
+                ) AS net_sale_after_coupon
+           FROM orders o
+          WHERE o.id = ANY($1::int[]) AND o.user_id = $2
+          ORDER BY o.id`,
+        [orderIds, req.user.id]
+      );
+      orders = oRows;
+    }
+
+    res.json({ record: rec, orders });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 가구매 비용 합계 (수익분석용) ──────────────────────────────────────────
 router.get('/fake-records/summary', requireAuth, async (req, res) => {
   try {

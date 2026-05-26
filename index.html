@@ -1458,7 +1458,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div style="overflow-x:auto">
         <table class="profit-table" style="min-width:540px">
           <thead><tr>
-            <th>진행일자</th><th>업체명</th><th>방식</th><th>과세유형</th><th>주문 수</th><th>비용합계</th><th>삭제</th>
+            <th>진행일자</th><th>업체명</th><th>방식</th><th>리뷰유형</th><th>과세유형</th><th>주문 수</th><th>비용합계</th><th>상태</th><th>상세보기</th><th>삭제</th>
           </tr></thead>
           <tbody id="fakeRecordTbody"></tbody>
         </table>
@@ -6621,7 +6621,7 @@ function renderFakeRecords(records) {
   const totalEl = document.getElementById('fakeRecordTotal');
   if (!tbody) return;
   if (!records.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px">기록 없음</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:16px">기록 없음</td></tr>';
     if (totalEl) totalEl.textContent = '';
     return;
   }
@@ -6630,17 +6630,91 @@ function renderFakeRecords(records) {
     const cost = parseFloat(r.total_cost) || 0;
     grandTotal += cost;
     const orderCount = Array.isArray(r.order_ids) ? r.order_ids.length : 0;
-    return `<tr>
+    return `<tr id="fakeRecordRow-${r.id}" data-record='${JSON.stringify(r).replace(/'/g,"&#39;")}'>
       <td style="font-family:var(--mono)">${r.proceed_date}</td>
       <td>${r.vendor_name}</td>
       <td>${r.method}</td>
+      <td>${r.review_type || '-'}</td>
       <td>${r.tax_type || '면세'}</td>
       <td style="font-family:var(--mono)">${orderCount}건</td>
       <td style="font-family:var(--mono);color:#f97316">${cost.toLocaleString('ko-KR')}원</td>
+      <td><span style="background:#d1fae5;color:#065f46;border-radius:5px;padding:2px 8px;font-size:11px;font-weight:600">비용처리완료</span></td>
+      <td><button class="btn btn-ghost btn-sm" id="fakeDetailBtn-${r.id}" onclick="toggleFakeRecordDetail(${r.id})" style="font-size:11px;padding:3px 8px">▶ 상세</button></td>
       <td><button class="btn btn-sm" onclick="deleteFakeRecord(${r.id})" style="color:#ef4444;border-color:#ef4444;font-size:11px">삭제</button></td>
     </tr>`;
   }).join('');
   if (totalEl) totalEl.textContent = `합계: ${Math.round(grandTotal).toLocaleString('ko-KR')}원`;
+}
+
+async function toggleFakeRecordDetail(recordId) {
+  const existingDetail = document.getElementById(`fakeRecordDetail-${recordId}`);
+  const btn = document.getElementById(`fakeDetailBtn-${recordId}`);
+
+  // 이미 열려있으면 닫기
+  if (existingDetail) {
+    existingDetail.remove();
+    if (btn) btn.textContent = '▶ 상세';
+    return;
+  }
+
+  if (btn) btn.textContent = '⏳ 로딩중...';
+
+  try {
+    const res = await fetch(`/api/fake-records/${recordId}/detail`);
+    if (!res.ok) { alert('상세 조회 실패'); if (btn) btn.textContent = '▶ 상세'; return; }
+    const { record: rec, orders } = await res.json();
+
+    // 업체 데이터로 비용 계산
+    const vendor = {
+      delivery_fee: rec.delivery_fee,
+      process_fee: rec.process_fee,
+      process_fee_vat_type: rec.process_fee_vat_type,
+      product_cost: rec.product_cost,
+      method: rec.method,
+    };
+    const taxType = rec.tax_type || '면세';
+
+    const orderRows = orders.length
+      ? orders.map(o => {
+          const detail = calcFakeOrderCostDetail(o, vendor, taxType);
+          const netSale = (parseFloat(o.net_sale_after_coupon) || 0).toLocaleString('ko-KR');
+          const cost    = detail.total.toLocaleString('ko-KR');
+          return `<tr style="background:var(--surface2)">
+            <td style="font-family:var(--mono);font-size:11px;padding:6px 10px">${o.order_number}</td>
+            <td style="font-size:11px;padding:6px 10px">${o.product_name || ''}${o.option_name ? ' / ' + o.option_name : ''}</td>
+            <td style="font-family:var(--mono);font-size:11px;padding:6px 10px;text-align:right">${netSale}원</td>
+            <td style="font-family:var(--mono);font-size:11px;padding:6px 10px;text-align:right;color:#f97316">${cost}원</td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:10px;font-size:12px">주문 정보 없음</td></tr>`;
+
+    const detailHtml = `
+      <tr id="fakeRecordDetail-${recordId}">
+        <td colspan="10" style="padding:0 0 0 24px;background:var(--surface2)">
+          <div style="padding:10px 0">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="background:var(--surface)">
+                  <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-dim)">주문번호</th>
+                  <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-dim)">상품명</th>
+                  <th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text-dim)">쿠폰적용매출</th>
+                  <th style="padding:6px 10px;text-align:right;font-size:11px;color:var(--text-dim)">예상비용</th>
+                </tr>
+              </thead>
+              <tbody>${orderRows}</tbody>
+            </table>
+          </div>
+        </td>
+      </tr>`;
+
+    // 해당 행 바로 다음에 삽입
+    const row = document.getElementById(`fakeRecordRow-${recordId}`);
+    if (row) row.insertAdjacentHTML('afterend', detailHtml);
+    if (btn) btn.textContent = '▼ 상세';
+  } catch(e) {
+    console.error(e);
+    if (btn) btn.textContent = '▶ 상세';
+  }
 }
 
 async function deleteFakeRecord(id) {
