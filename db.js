@@ -424,6 +424,20 @@ async function initDB() {
     ALTER TABLE fake_purchase_records ADD COLUMN IF NOT EXISTS tax_type VARCHAR(20) DEFAULT '면세';
   `);
 
+  // 쿠팡 Open API 키 저장 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS coupang_api_keys (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+      vendor_id  VARCHAR(50)  NOT NULL,
+      access_key VARCHAR(100) NOT NULL,
+      secret_key TEXT         NOT NULL,
+      is_active  BOOLEAN      DEFAULT TRUE,
+      created_at TIMESTAMPTZ  DEFAULT NOW(),
+      updated_at TIMESTAMPTZ  DEFAULT NOW()
+    );
+  `);
+
   console.log('[db] Tables ready');
 }
 

@@ -724,7 +724,13 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>판매 매체</span>
-      <button class="btn btn-ghost btn-sm" onclick="openPlatformModal()" style="font-size:12px;padding:3px 10px">⚙️ 매체 관리</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="coupangApiBtn" onclick="openCoupangApiModal()" style="font-size:12px;padding:3px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:4px">
+          <span id="coupangApiDot" style="width:8px;height:8px;border-radius:50%;background:#6b7280;display:inline-block"></span>
+          🔗 쿠팡 API
+        </button>
+        <button class="btn btn-ghost btn-sm" onclick="openPlatformModal()" style="font-size:12px;padding:3px 10px">⚙️ 매체 관리</button>
+      </div>
     </div>
     <div class="card" style="padding:14px 16px;margin-bottom:20px">
       <div id="platformBtns" class="platform-toggle"></div>
@@ -1019,6 +1025,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div id="ordersSummaryBar" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:16px"></div>
       <div class="btn-row" style="margin-top:8px;margin-bottom:0">
         <button class="btn btn-ghost btn-sm" onclick="openBulkExcludeModal()">🚫 주문번호 일괄 미인식</button>
+        <button id="coupangSyncBtn" class="btn btn-sm" onclick="openCoupangSyncModal()" style="display:none;background:#3b82f6;color:#fff;border:none;font-size:12px;padding:3px 12px">🔄 API로 불러오기</button>
       </div>
     </div>
     <div class="section-label">필터</div>
@@ -1539,6 +1546,66 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 쿠팡 API 연결 모달 ═══════════════════════════════════════════════ -->
+<div id="coupangApiModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;align-items:center;justify-content:center">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700">🔗 쿠팡 Open API 연결</div>
+      <button onclick="closeCoupangApiModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:18px;line-height:1.6">
+      쿠팡 Wing → 상품관리 → Open API에서 키를 발급받으세요.<br>
+      Secret Key는 AES-256-GCM 방식으로 암호화 저장됩니다.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">Vendor ID</label>
+        <input id="coupangVendorId" type="text" placeholder="A00000000" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface2);color:var(--text)">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">Access Key</label>
+        <input id="coupangAccessKey" type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface2);color:var(--text)">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">Secret Key</label>
+        <input id="coupangSecretKey" type="password" placeholder="입력 후 저장됩니다 (다시 표시되지 않음)" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface2);color:var(--text)">
+      </div>
+    </div>
+    <div id="coupangApiTestResult" style="font-size:12px;margin-top:12px;min-height:18px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="testCoupangApi()">연결 테스트</button>
+      <button class="btn btn-primary btn-sm" onclick="saveCoupangApi()">저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeCoupangApiModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 쿠팡 주문 동기화 모달 ════════════════════════════════════════════ -->
+<div id="coupangSyncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;align-items:center;justify-content:center">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700">🔄 쿠팡 주문 불러오기</div>
+      <button onclick="closeCoupangSyncModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px">기간을 선택하면 쿠팡 API에서 주문을 가져옵니다.<br>주문번호 기준 중복 제거 후 DB에 저장됩니다.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+      <div class="field" style="flex:1;min-width:140px">
+        <label>시작일</label>
+        <input type="date" id="coupangSyncFrom" style="width:100%;box-sizing:border-box">
+      </div>
+      <div class="field" style="flex:1;min-width:140px">
+        <label>종료일</label>
+        <input type="date" id="coupangSyncTo" style="width:100%;box-sizing:border-box">
+      </div>
+    </div>
+    <div id="coupangSyncResult" style="font-size:12px;min-height:18px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="coupangSyncRunBtn" class="btn btn-primary btn-sm" onclick="runCoupangSync()">불러오기</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeCoupangSyncModal()">닫기</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── 인증 ─────────────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -1557,6 +1624,7 @@ async function checkAuth() {
     renderPlatformBtns();
     renderB2B();
     navigateToHash();
+    checkCoupangApiStatus();
   }
 }
 
@@ -6921,6 +6989,180 @@ async function deleteFakeRecord(id) {
     await fetch(`/api/fake-records/${id}`, { method: 'DELETE' });
     await loadFakeRecords();
   } catch(e) { alert(e.message); }
+}
+
+// ── 쿠팡 Open API 연동 ───────────────────────────────────────────────────────
+
+async function checkCoupangApiStatus() {
+  try {
+    const res  = await fetch('/api/coupang-keys/status');
+    const data = await res.json();
+    const dot  = document.getElementById('coupangApiDot');
+    const btn  = document.getElementById('coupangSyncBtn');
+    if (data.connected) {
+      if (dot) dot.style.background = '#22c55e';
+      if (btn) btn.style.display = 'inline-flex';
+    } else {
+      if (dot) dot.style.background = '#6b7280';
+      if (btn) btn.style.display = 'none';
+    }
+  } catch (e) { console.warn('[coupang] 상태 확인 실패', e); }
+}
+
+function openCoupangApiModal() {
+  const modal = document.getElementById('coupangApiModal');
+  modal.style.display = 'flex';
+  document.getElementById('coupangApiTestResult').textContent = '';
+  // 기존 연결 정보 로드
+  fetch('/api/coupang-keys/status').then(r => r.json()).then(data => {
+    if (data.connected) {
+      document.getElementById('coupangVendorId').value  = data.vendor_id  || '';
+      document.getElementById('coupangAccessKey').value = data.access_key || '';
+      document.getElementById('coupangSecretKey').value = '';
+      document.getElementById('coupangSecretKey').placeholder = '변경 시에만 입력 (빈칸이면 기존 키 유지)';
+    }
+  }).catch(() => {});
+}
+
+function closeCoupangApiModal() {
+  document.getElementById('coupangApiModal').style.display = 'none';
+}
+
+async function testCoupangApi() {
+  const vendorId  = document.getElementById('coupangVendorId').value.trim();
+  const accessKey = document.getElementById('coupangAccessKey').value.trim();
+  const secretKey = document.getElementById('coupangSecretKey').value.trim();
+  const resultEl  = document.getElementById('coupangApiTestResult');
+
+  if (!vendorId || !accessKey || !secretKey) {
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = '모든 필드를 입력해 주세요.';
+    return;
+  }
+
+  resultEl.style.color = '#6b7280';
+  resultEl.textContent = '연결 테스트 중…';
+
+  try {
+    const res  = await fetch('/api/coupang-keys/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendor_id: vendorId, access_key: accessKey, secret_key: secretKey }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      resultEl.style.color = '#22c55e';
+      resultEl.textContent = '✅ ' + data.message;
+    } else {
+      resultEl.style.color = '#ef4444';
+      resultEl.textContent = '❌ ' + data.message;
+    }
+  } catch (e) {
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = '❌ 오류: ' + e.message;
+  }
+}
+
+async function saveCoupangApi() {
+  const vendorId  = document.getElementById('coupangVendorId').value.trim();
+  const accessKey = document.getElementById('coupangAccessKey').value.trim();
+  const secretKey = document.getElementById('coupangSecretKey').value.trim();
+  const resultEl  = document.getElementById('coupangApiTestResult');
+
+  if (!vendorId || !accessKey) {
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = 'Vendor ID와 Access Key는 필수입니다.';
+    return;
+  }
+
+  // 기존 키 유지 시 secret_key 없이 저장 불가 → placeholder 처리
+  const body = { vendor_id: vendorId, access_key: accessKey };
+  if (secretKey) body.secret_key = secretKey;
+
+  if (!body.secret_key) {
+    // secret_key 미입력 시 기존 키 그대로 → vendor_id/access_key만 업데이트 불가(서버 제약)
+    // 편의상 테스트 후 저장 권장 안내
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = 'Secret Key를 입력해 주세요.';
+    return;
+  }
+
+  try {
+    const res  = await fetch('/api/coupang-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      resultEl.style.color = '#22c55e';
+      resultEl.textContent = '✅ 저장 완료';
+      await checkCoupangApiStatus();
+      setTimeout(closeCoupangApiModal, 1200);
+    } else {
+      resultEl.style.color = '#ef4444';
+      resultEl.textContent = '❌ ' + (data.error || '저장 실패');
+    }
+  } catch (e) {
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = '❌ 오류: ' + e.message;
+  }
+}
+
+function openCoupangSyncModal() {
+  const modal = document.getElementById('coupangSyncModal');
+  modal.style.display = 'flex';
+  document.getElementById('coupangSyncResult').textContent = '';
+  // 기본값: 오늘 날짜
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('coupangSyncFrom').value = today;
+  document.getElementById('coupangSyncTo').value   = today;
+  document.getElementById('coupangSyncRunBtn').disabled = false;
+}
+
+function closeCoupangSyncModal() {
+  document.getElementById('coupangSyncModal').style.display = 'none';
+}
+
+async function runCoupangSync() {
+  const startDate = document.getElementById('coupangSyncFrom').value;
+  const endDate   = document.getElementById('coupangSyncTo').value;
+  const resultEl  = document.getElementById('coupangSyncResult');
+  const runBtn    = document.getElementById('coupangSyncRunBtn');
+
+  if (!startDate || !endDate) {
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = '날짜를 선택해 주세요.';
+    return;
+  }
+
+  runBtn.disabled = true;
+  resultEl.style.color = '#6b7280';
+  resultEl.textContent = '주문 불러오는 중…';
+
+  try {
+    const res  = await fetch('/api/orders/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      resultEl.style.color = '#22c55e';
+      resultEl.textContent = `✅ 완료: ${data.total_fetched}건 조회, ${data.inserted}건 신규 저장, ${data.skipped}건 중복 스킵`;
+      // 주문 목록 갱신
+      await loadOrders();
+      renderOrders();
+    } else {
+      resultEl.style.color = '#ef4444';
+      resultEl.textContent = '❌ ' + (data.error || '동기화 실패');
+    }
+  } catch (e) {
+    resultEl.style.color = '#ef4444';
+    resultEl.textContent = '❌ 오류: ' + e.message;
+  } finally {
+    runBtn.disabled = false;
+  }
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

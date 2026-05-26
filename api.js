@@ -8,6 +8,101 @@ const express = require('express');
 const router  = express.Router();
 const { pool } = require('./db');
 const { calculateProfit } = require('./profit');
+const crypto = require('crypto');
+const https  = require('https');
+const zlib   = require('zlib');
+
+// ─── AES-256-GCM 암호화 / 복호화 ─────────────────────────────────────────────
+const AES_KEY = Buffer.from(
+  (process.env.AES_SECRET_KEY || 'default-aes-key-32-bytes-padding!!').slice(0, 32).padEnd(32, '0'),
+  'utf8'
+);
+
+function aesEncrypt(text) {
+  const iv         = crypto.randomBytes(12);
+  const cipher     = crypto.createCipheriv('aes-256-gcm', AES_KEY, iv);
+  const encrypted  = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  const authTag    = cipher.getAuthTag();
+  return iv.toString('hex') + ':' + authTag.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function aesDecrypt(stored) {
+  const [ivHex, tagHex, encHex] = stored.split(':');
+  const iv         = Buffer.from(ivHex, 'hex');
+  const authTag    = Buffer.from(tagHex, 'hex');
+  const encrypted  = Buffer.from(encHex, 'hex');
+  const decipher   = crypto.createDecipheriv('aes-256-gcm', AES_KEY, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+}
+
+// ─── 쿠팡 Open API HMAC-SHA256 인증 ──────────────────────────────────────────
+function coupangDatetime() {
+  const now = new Date();
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  return `${String(now.getUTCFullYear()).slice(-2)}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+}
+
+function coupangAuth(method, urlPath, accessKey, secretKey) {
+  const [path, qs = ''] = urlPath.split('?');
+  const datetime  = coupangDatetime();
+  const message   = datetime + method + path + qs;
+  const signature = crypto.createHmac('sha256', secretKey).update(message).digest('hex');
+  return {
+    auth: `CEA algorithm=HmacSHA256, access-key=${accessKey}, signed-date=${datetime}, signature=${signature}`,
+    path: urlPath,
+  };
+}
+
+function coupangRequest(method, urlPath, accessKey, secretKey) {
+  return new Promise((resolve, reject) => {
+    const { auth, path } = coupangAuth(method, urlPath, accessKey, secretKey);
+    const options = {
+      hostname: 'api-gateway.coupang.com',
+      port: 443,
+      path,
+      method,
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json;charset=UTF-8',
+      },
+    };
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks);
+        const decode = (buf) => { try { return JSON.parse(buf.toString('utf-8')); } catch { return buf.toString('utf-8'); } };
+        const enc = res.headers['content-encoding'];
+        if (enc === 'gzip') {
+          zlib.gunzip(raw, (err, decoded) => resolve({ status: res.statusCode, body: err ? raw.toString() : decode(decoded) }));
+        } else {
+          resolve({ status: res.statusCode, body: decode(raw) });
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// ─── 서버사이드 마스킹 ────────────────────────────────────────────────────────
+function maskName(name) {
+  if (!name) return '';
+  if (name.length <= 1) return name;
+  if (name.length === 2) return name[0] + '*';
+  return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
+}
+function maskPhone(phone) {
+  if (!phone) return '';
+  return phone.replace(/(\d{3})-?(\d{3,4})-?(\d{4})/, (_, a, b, c) => `${a}-${'*'.repeat(b.length)}-${c}`);
+}
+function maskAddr(addr) {
+  if (!addr) return '';
+  const parts = addr.split(' ');
+  if (parts.length <= 2) return addr;
+  return parts.slice(0, 2).join(' ') + ' ***';
+}
 
 let crawlStatus = { running: false, lastRun: null, lastResult: null };
 
@@ -1712,6 +1807,161 @@ router.get('/fake-records/summary', requireAuth, async (req, res) => {
       [req.user.id, start_date || null, end_date || null]
     );
     res.json({ total_fake_cost: parseFloat(rows[0].total_fake_cost) || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 쿠팡 Open API 키 관리 ────────────────────────────────────────────────────
+
+// 연결 상태 확인
+router.get('/coupang-keys/status', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, vendor_id, access_key, is_active, updated_at FROM coupang_api_keys WHERE user_id = $1',
+      [req.user.id]
+    );
+    if (!rows[0]) return res.json({ connected: false });
+    res.json({
+      connected:  rows[0].is_active,
+      vendor_id:  rows[0].vendor_id,
+      access_key: rows[0].access_key,
+      updated_at: rows[0].updated_at,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 연결 테스트
+router.post('/coupang-keys/test', requireAuth, async (req, res) => {
+  try {
+    const { vendor_id, access_key, secret_key } = req.body;
+    if (!vendor_id || !access_key || !secret_key)
+      return res.status(400).json({ error: 'vendor_id, access_key, secret_key 모두 필요합니다.' });
+
+    const today   = new Date().toISOString().slice(0, 10);
+    const urlPath = `/v2/providers/openapi/apis/api/v4/vendors/${vendor_id}/ordersheets?createdAtFrom=${today}&createdAtTo=${today}&status=ACCEPT&maxPerPage=1&pageIndex=1`;
+    const result  = await coupangRequest('GET', urlPath, access_key, secret_key);
+
+    if (result.status === 200) {
+      res.json({ ok: true, message: '연결 성공' });
+    } else {
+      res.json({ ok: false, message: `HTTP ${result.status}: ${typeof result.body === 'string' ? result.body : JSON.stringify(result.body)}` });
+    }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// 키 저장
+router.post('/coupang-keys', requireAuth, async (req, res) => {
+  try {
+    const { vendor_id, access_key, secret_key } = req.body;
+    if (!vendor_id || !access_key || !secret_key)
+      return res.status(400).json({ error: 'vendor_id, access_key, secret_key 모두 필요합니다.' });
+
+    const encryptedSecret = aesEncrypt(secret_key);
+
+    await pool.query(
+      `INSERT INTO coupang_api_keys (user_id, vendor_id, access_key, secret_key, is_active, updated_at)
+       VALUES ($1, $2, $3, $4, TRUE, NOW())
+       ON CONFLICT (user_id)
+       DO UPDATE SET vendor_id = $2, access_key = $3, secret_key = $4, is_active = TRUE, updated_at = NOW()`,
+      [req.user.id, vendor_id, access_key, encryptedSecret]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 쿠팡 주문 동기화 ─────────────────────────────────────────────────────────
+router.post('/orders/sync', requireAuth, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.body;
+    if (!start_date || !end_date)
+      return res.status(400).json({ error: 'start_date, end_date 필요합니다. (YYYY-MM-DD)' });
+
+    // API 키 조회
+    const { rows: keyRows } = await pool.query(
+      'SELECT vendor_id, access_key, secret_key FROM coupang_api_keys WHERE user_id = $1 AND is_active = TRUE',
+      [req.user.id]
+    );
+    if (!keyRows[0]) return res.status(400).json({ error: '쿠팡 API 키가 등록되지 않았습니다.' });
+
+    const { vendor_id, access_key, secret_key: encSecret } = keyRows[0];
+    const secretKey = aesDecrypt(encSecret);
+
+    // nextToken 루프로 모든 페이지 수집
+    const allItems = [];
+    let nextToken  = null;
+    let pageIndex  = 1;
+
+    do {
+      let qs = `createdAtFrom=${start_date}&createdAtTo=${end_date}&status=ACCEPT&maxPerPage=50&pageIndex=${pageIndex}`;
+      if (nextToken) qs += `&nextToken=${encodeURIComponent(nextToken)}`;
+      const urlPath = `/v2/providers/openapi/apis/api/v4/vendors/${vendor_id}/ordersheets?${qs}`;
+      const result  = await coupangRequest('GET', urlPath, access_key, secretKey);
+
+      if (result.status !== 200) {
+        return res.status(502).json({ error: `쿠팡 API 오류 HTTP ${result.status}`, detail: result.body });
+      }
+
+      const data = result.body;
+      const items = data?.data?.orderSheets || [];
+      allItems.push(...items);
+      nextToken = data?.data?.nextToken || null;
+      pageIndex++;
+    } while (nextToken && pageIndex <= 100);
+
+    // 주문 항목 매핑 + DB upsert
+    let inserted = 0;
+    let skipped  = 0;
+
+    for (const sheet of allItems) {
+      for (const item of (sheet.orderItems || [])) {
+        const orderNumber = String(sheet.orderId || '');
+        if (!orderNumber) { skipped++; continue; }
+
+        // 날짜 포맷: orderedAt은 ISO 문자열, YYYY-MM-DD 추출
+        const orderDate = (sheet.orderedAt || '').slice(0, 10);
+
+        const productName  = item.sellerProductName || '';
+        const optionName   = item.sellerProductItemName || '';
+        const optionId     = String(item.sellerProductItemId || '');
+        const paymentAmt   = Math.round(Number(item.orderPrice || 0));
+        const shippingFee  = Math.round(Number(sheet.shippingPrice || 0));
+        const qty          = Number(item.quantity || 1);
+        const unitPrice    = qty > 0 ? Math.round(paymentAmt / qty) : paymentAmt;
+        const bundleNumber = String(sheet.shipmentBoxId || '');
+        const displayName  = item.sellerProductName || '';
+
+        const buyerMasked     = maskName(sheet.orderer?.name || '');
+        const recipientMasked = maskName(sheet.receiver?.name || '');
+        const phoneMasked     = maskPhone(sheet.receiver?.safeNumber || sheet.receiver?.phone || '');
+        const addrMasked      = maskAddr(sheet.receiver?.addr1 || '');
+
+        try {
+          const upsertRes = await pool.query(
+            `INSERT INTO orders (
+              user_id, order_number, bundle_number, order_date,
+              product_name, option_name, display_name, option_id,
+              payment_amount, shipping_fee, quantity, unit_price,
+              buyer_masked, recipient_name_masked, recipient_phone_masked, recipient_address_masked,
+              is_excluded, exclusion_type
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,'normal')
+            ON CONFLICT (user_id, order_number) DO NOTHING
+            RETURNING id`,
+            [
+              req.user.id, orderNumber, bundleNumber, orderDate,
+              productName, optionName, displayName, optionId,
+              paymentAmt, shippingFee, qty, unitPrice,
+              buyerMasked, recipientMasked, phoneMasked, addrMasked,
+            ]
+          );
+          if (upsertRes.rowCount > 0) inserted++;
+          else skipped++;
+        } catch (dbErr) {
+          console.error('[sync] DB insert error:', dbErr.message);
+          skipped++;
+        }
+      }
+    }
+
+    res.json({ ok: true, total_fetched: allItems.length, inserted, skipped });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
