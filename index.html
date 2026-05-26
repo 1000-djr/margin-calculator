@@ -1225,89 +1225,75 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ 반품 관리 탭 ══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-returns">
-    <!-- 서브탭 버튼 -->
-    <div class="period-toggle" style="margin-bottom:0;align-self:flex-start">
-      <button class="period-btn active" id="returnSubTabReturn" onclick="switchReturnsSubTab('return')">반품</button>
-      <button class="period-btn"        id="returnSubTabCancel" onclick="switchReturnsSubTab('cancel')">출고중지</button>
-    </div>
 
-    <!-- ── 반품 패널 ── -->
-    <div id="returnSubPanelReturn">
-      <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div>
-          <div class="section-label" style="margin:0 0 4px">반품 내역 업로드</div>
-          <div style="font-size:12px;color:var(--text-dim)">쿠팡 Wing → 취소/반품 관리 → 반품 관리에서 엑셀 다운로드</div>
-        </div>
-        <label class="btn btn-primary" style="cursor:pointer;margin-left:auto">
-          📂 반품 업로드
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleReturnsUpload(event)">
-        </label>
-        <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim);width:100%"></div>
-      </div>
-      <div id="returnsSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
-      <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <span style="font-size:12px;color:var(--text-dim)">~</span>
-        <input type="date" id="returnsTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <select id="returnsTypeFilter" onchange="renderReturns()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-          <option value="all">전체 유형</option>
-          <option value="seller">판매자 귀책</option>
-          <option value="buyer">구매자 귀책</option>
-          <option value="other">미처리</option>
-        </select>
-        <button class="btn btn-primary btn-sm" onclick="renderReturns();loadReturnsSummary()">조회</button>
-        <span id="returnsSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
-        <button class="btn btn-sm" id="returnsDeleteBtn" onclick="bulkDeleteReturns()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
-      </div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="data-table-wrap">
-          <table class="profit-table" id="returnsTable">
-            <thead><tr>
-              <th style="width:32px"><input type="checkbox" id="returnsSelectAll" onclick="toggleAllReturnsSelect(this)"></th>
-              <th>접수일</th><th>접수번호</th><th>주문번호</th><th>노출상품명</th><th>옵션</th>
-              <th>수량</th><th>환불예정금액</th><th>반품배송비</th><th>반품유형</th><th>반품비용</th><th>메모</th><th></th>
-            </tr></thead>
-            <tbody id="returnsTbody"></tbody>
-          </table>
-        </div>
+    <!-- ── 반품 섹션 ── -->
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>반품</span>
+      <label class="btn btn-primary btn-sm" style="cursor:pointer;font-weight:600">
+        📂 반품 업로드
+        <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleReturnsUpload(event)">
+      </label>
+    </div>
+    <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim);margin-bottom:6px"></div>
+    <div id="returnsSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
+    <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <span style="font-size:12px;color:var(--text-dim)">~</span>
+      <input type="date" id="returnsTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <select id="returnsTypeFilter" onchange="renderReturns()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <option value="all">전체 유형</option>
+        <option value="seller">판매자 귀책</option>
+        <option value="buyer">구매자 귀책</option>
+        <option value="other">미처리</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="renderReturns();loadReturnsSummary()">조회</button>
+      <span id="returnsSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
+      <button class="btn btn-sm" id="returnsDeleteBtn" onclick="bulkDeleteReturns()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="profit-table" id="returnsTable">
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="returnsSelectAll" onclick="toggleAllReturnsSelect(this)"></th>
+            <th>접수일</th><th>접수번호</th><th>주문번호</th><th>노출상품명</th><th>옵션</th>
+            <th>수량</th><th>환불예정금액</th><th>반품배송비</th><th>반품유형</th><th>반품비용</th><th>메모</th><th></th>
+          </tr></thead>
+          <tbody id="returnsTbody"></tbody>
+        </table>
       </div>
     </div>
 
-    <!-- ── 출고중지 패널 ── -->
-    <div id="returnSubPanelCancel" style="display:none">
-      <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div>
-          <div class="section-label" style="margin:0 0 4px">출고중지 업로드</div>
-          <div style="font-size:12px;color:var(--text-dim)">쿠팡 Wing → 취소/반품 관리 → 출고중지 관리에서 엑셀 다운로드</div>
-        </div>
-        <label class="btn btn-sm" style="cursor:pointer;background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600;margin-left:auto">
-          🚫 출고중지 업로드
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleCancelShipmentUpload(event)">
-        </label>
-        <div id="cancelUploadStatus" style="font-size:12px;color:var(--text-dim);width:100%"></div>
-      </div>
-      <div id="cancelSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
-      <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="date" id="cancelFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <span style="font-size:12px;color:var(--text-dim)">~</span>
-        <input type="date" id="cancelTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <button class="btn btn-primary btn-sm" onclick="renderCancelShipments();loadCancelSummary()">조회</button>
-        <span id="cancelSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
-        <button class="btn btn-sm" id="cancelDeleteBtn" onclick="bulkDeleteCancel()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
-      </div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="data-table-wrap">
-          <table class="profit-table" id="cancelTable">
-            <thead><tr>
-              <th style="width:32px"><input type="checkbox" id="cancelSelectAll" onclick="toggleAllCancelSelect(this)"></th>
-              <th>접수일</th><th>접수번호</th><th>배송상태</th><th>노출상품명</th><th>옵션</th>
-              <th>수량</th><th>취소사유</th><th>주문번호</th><th>출고예정일</th><th>출고중지완료일</th><th>옵션ID</th><th></th>
-            </tr></thead>
-            <tbody id="cancelTbody"></tbody>
-          </table>
-        </div>
+    <!-- ── 출고중지 섹션 ── -->
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>출고중지</span>
+      <label class="btn btn-sm" style="cursor:pointer;background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600">
+        🚫 출고중지 업로드
+        <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleCancelShipmentUpload(event)">
+      </label>
+    </div>
+    <div id="cancelUploadStatus" style="font-size:12px;color:var(--text-dim);margin-bottom:6px"></div>
+    <div id="cancelSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
+    <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="cancelFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <span style="font-size:12px;color:var(--text-dim)">~</span>
+      <input type="date" id="cancelTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <button class="btn btn-primary btn-sm" onclick="renderCancelShipments();loadCancelSummary()">조회</button>
+      <span id="cancelSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
+      <button class="btn btn-sm" id="cancelDeleteBtn" onclick="bulkDeleteCancel()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="profit-table" id="cancelTable">
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="cancelSelectAll" onclick="toggleAllCancelSelect(this)"></th>
+            <th>접수일</th><th>접수번호</th><th>배송상태</th><th>노출상품명</th><th>옵션</th>
+            <th>수량</th><th>취소사유</th><th>주문번호</th><th>출고예정일</th><th>출고중지완료일</th><th>옵션ID</th><th></th>
+          </tr></thead>
+          <tbody id="cancelTbody"></tbody>
+        </table>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -1625,7 +1611,7 @@ function _activateTabUI(name) {
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
   if (name === 'coupons')  { renderCoupons(); loadCouponsSummary(); }
   if (name === 'profit')   { renderProfit(); }
-  if (name === 'returns')  { switchReturnsSubTab(_returnsSubTab); }
+  if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -5635,21 +5621,6 @@ const RETURN_TYPE_LABELS = {
   other:  { label: '미처리',      color: '#9ca3af' },
 };
 
-let _returnsSubTab = 'return'; // 'return' | 'cancel'
-
-function switchReturnsSubTab(tab) {
-  _returnsSubTab = tab;
-  const panelReturn = document.getElementById('returnSubPanelReturn');
-  const panelCancel = document.getElementById('returnSubPanelCancel');
-  const btnReturn   = document.getElementById('returnSubTabReturn');
-  const btnCancel   = document.getElementById('returnSubTabCancel');
-  if (panelReturn) panelReturn.style.display = tab === 'return' ? 'block' : 'none';
-  if (panelCancel) panelCancel.style.display = tab === 'cancel' ? 'block' : 'none';
-  if (btnReturn)   btnReturn.classList.toggle('active', tab === 'return');
-  if (btnCancel)   btnCancel.classList.toggle('active', tab === 'cancel');
-  if (tab === 'return') { renderReturns(); loadReturnsSummary(); }
-  else                  { renderCancelShipments(); loadCancelSummary(); }
-}
 
 async function loadReturnsSummary() {
   const from = document.getElementById('returnsFrom')?.value || '';
@@ -5914,8 +5885,8 @@ async function confirmReturnDelete() {
     if (!r.ok) throw new Error(await r.text());
     document.getElementById('returnDeleteBackdrop').style.display = 'none';
     _returnDeleteId = null;
-    if (_returnsSubTab === 'cancel') { renderCancelShipments(); loadCancelSummary(); }
-    else                             { renderReturns(); loadReturnsSummary(); }
+    renderReturns(); loadReturnsSummary();
+    renderCancelShipments(); loadCancelSummary();
   } catch(e) { alert(e.message); }
 }
 
