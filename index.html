@@ -5734,6 +5734,17 @@ async function renderCancelShipments() {
     }
     tbody.innerHTML = rows.map(row => {
       const sc = row.delivery_status === '이미출고' ? '#ef4444' : '#f97316';
+      let actionCell;
+      if (row.return_status === 'completed') {
+        actionCell = `<span style="font-size:11px;font-weight:600;color:#22c55e;padding:2px 8px;background:#22c55e18;border-radius:4px">출고중지완료</span>`;
+      } else if (row.return_status === 'transferred') {
+        actionCell = `<span style="font-size:11px;font-weight:600;color:#f97316;padding:2px 8px;background:#f9731618;border-radius:4px">반품이관완료</span>`;
+      } else {
+        actionCell = `
+          <button class="btn btn-sm" onclick="processCancelComplete(${row.id})" style="font-size:11px;padding:3px 8px;background:#22c55418;color:#16a34a;border:1px solid #22c55440">출고중지완료</button>
+          <button class="btn btn-sm" onclick="processCancelTransfer(${row.id})" style="font-size:11px;padding:3px 8px;background:#f9731618;color:#ea580c;border:1px solid #f9731640;margin-left:3px">이미출고</button>
+          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:3px">삭제</button>`;
+      }
       return `<tr>
         <td><input type="checkbox" data-id="${row.id}" onclick="toggleCancelSelect(this)"></td>
         <td>${row.received_at ? row.received_at.slice(0,10) : '-'}</td>
@@ -5747,9 +5758,7 @@ async function renderCancelShipments() {
         <td>${row.expected_ship_date ? row.expected_ship_date.slice(0,10) : '-'}</td>
         <td>${row.warehousing_complete_date ? row.warehousing_complete_date.slice(0,10) : '-'}</td>
         <td style="font-family:var(--mono);font-size:11px">${row.option_id||'-'}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440">삭제</button>
-        </td>
+        <td style="white-space:nowrap">${actionCell}</td>
       </tr>`;
     }).join('');
   } catch(e) {
@@ -5794,6 +5803,28 @@ async function bulkDeleteCancel() {
     renderCancelShipments();
     loadCancelSummary();
   } catch(e) { alert(e.message); }
+}
+
+async function processCancelComplete(id) {
+  if (!confirm('출고중지 완료 처리하시겠습니까?\n주문서에서 미인식 처리됩니다.')) return;
+  try {
+    const r = await fetch(`/api/cancel-shipments/${id}/complete`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    renderCancelShipments();
+    loadCancelSummary();
+  } catch(e) { alert(`오류: ${e.message}`); }
+}
+
+async function processCancelTransfer(id) {
+  if (!confirm('이미 출고된 건입니다. 반품 접수로 이관하시겠습니까?')) return;
+  try {
+    const r = await fetch(`/api/cancel-shipments/${id}/transfer`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    renderCancelShipments();
+    loadCancelSummary();
+    renderReturns();
+    loadReturnsSummary();
+  } catch(e) { alert(`오류: ${e.message}`); }
 }
 
 function toggleAllReturnsSelect(cb) {

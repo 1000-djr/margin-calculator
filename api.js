@@ -1221,6 +1221,87 @@ router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// 출고중지완료 처리
+router.post('/cancel-shipments/:id/complete', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM returns WHERE id=$1 AND user_id=$2 AND record_type=$3',
+      [id, req.user.id, 'cancel']
+    );
+    if (!rows.length) return res.status(404).json({ error: '출고중지 건 없음' });
+    const r = rows[0];
+
+    await pool.query(
+      `UPDATE returns SET return_status='completed' WHERE id=$1 AND user_id=$2`,
+      [id, req.user.id]
+    );
+
+    let ordersUpdated = 0;
+    if (r.order_number) {
+      const { rowCount } = await pool.query(
+        `UPDATE orders SET is_excluded=TRUE, exclusion_type='cancel'
+          WHERE user_id=$1 AND order_number=$2`,
+        [req.user.id, r.order_number]
+      );
+      ordersUpdated = rowCount;
+    }
+
+    res.json({ ok: true, ordersUpdated });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 이미출고 → 반품 이관
+router.post('/cancel-shipments/:id/transfer', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM returns WHERE id=$1 AND user_id=$2 AND record_type=$3',
+      [id, req.user.id, 'cancel']
+    );
+    if (!rows.length) return res.status(404).json({ error: '출고중지 건 없음' });
+    const r = rows[0];
+
+    // 새 반품 행 삽입 (receipt_number 충돌 방지: 'TRF-{id}' 접두사)
+    const newReceiptNumber = `TRF-${id}`;
+    await pool.query(`
+      INSERT INTO returns (
+        user_id, received_at, receipt_number, product_name, option_name,
+        quantity, option_id, order_number, record_type
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'return')
+      ON CONFLICT (user_id, receipt_number) DO NOTHING
+    `, [
+      req.user.id,
+      r.received_at   || null,
+      newReceiptNumber,
+      r.product_name  || null,
+      r.option_name   || null,
+      r.quantity      || 1,
+      r.option_id     || null,
+      r.order_number  || null,
+    ]);
+
+    // 원본 출고중지 건 상태 업데이트
+    await pool.query(
+      `UPDATE returns SET return_status='transferred' WHERE id=$1 AND user_id=$2`,
+      [id, req.user.id]
+    );
+
+    // 주문 반품 처리
+    let ordersUpdated = 0;
+    if (r.order_number) {
+      const { rowCount } = await pool.query(
+        `UPDATE orders SET is_excluded=TRUE, exclusion_type='return'
+          WHERE user_id=$1 AND order_number=$2`,
+        [req.user.id, r.order_number]
+      );
+      ordersUpdated = rowCount;
+    }
+
+    res.json({ ok: true, ordersUpdated });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/returns', requireAuth, async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids 배열 필수' });
