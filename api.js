@@ -1453,6 +1453,7 @@ router.get('/fake-orders', requireAuth, async (req, res) => {
          FROM orders
         WHERE user_id = $1
           AND ($2::text IS NULL OR SUBSTRING(order_date,1,10) = $2)
+          AND exclusion_type = 'fake_order'
         ORDER BY id DESC`,
       [req.user.id, order_date || null]
     );
