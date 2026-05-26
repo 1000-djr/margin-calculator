@@ -1225,87 +1225,60 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ 반품 관리 탭 ══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-returns">
-    <!-- 서브 탭 버튼 -->
-    <div class="period-toggle" style="margin-bottom:0;align-self:flex-start">
-      <button class="period-btn active" id="returnSubTabReturn" onclick="switchReturnsSubTab('return')">반품</button>
-      <button class="period-btn"        id="returnSubTabCancel" onclick="switchReturnsSubTab('cancel')">출고중지</button>
-    </div>
-
-    <!-- ─── 반품 서브패널 ─── -->
-    <div id="returnSubPanelReturn">
-      <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div>
-          <div class="section-label" style="margin:0 0 4px">반품 내역 업로드</div>
-          <div style="font-size:12px;color:var(--text-dim)">쿠팡 Wing → 취소/반품 관리 → 반품 관리에서 엑셀 다운로드</div>
-        </div>
-        <label class="btn btn-primary" style="cursor:pointer;margin-left:auto">
+    <!-- 업로드 카드 -->
+    <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div>
+        <div class="section-label" style="margin:0 0 4px">반품/출고중지 업로드</div>
+        <div style="font-size:12px;color:var(--text-dim)">쿠팡 Wing → 취소/반품 관리에서 엑셀 다운로드</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
+        <label class="btn btn-primary" style="cursor:pointer">
           📂 반품 업로드
           <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleReturnsUpload(event)">
         </label>
-        <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim);width:100%"></div>
-      </div>
-      <div id="returnsSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
-      <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <span style="font-size:12px;color:var(--text-dim)">~</span>
-        <input type="date" id="returnsTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <select id="returnsTypeFilter" onchange="renderReturns()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-          <option value="all">전체 유형</option>
-          <option value="seller">판매자 귀책</option>
-          <option value="buyer">구매자 귀책</option>
-          <option value="other">미처리</option>
-        </select>
-        <button class="btn btn-primary btn-sm" onclick="renderReturns();loadReturnsSummary()">조회</button>
-        <span id="returnsSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
-        <button class="btn btn-sm" id="returnsDeleteBtn" onclick="bulkDeleteReturns()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
-      </div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="data-table-wrap">
-          <table class="profit-table" id="returnsTable">
-            <thead><tr>
-              <th style="width:32px"><input type="checkbox" id="returnsSelectAll" onclick="toggleAllReturnsSelect(this)"></th>
-              <th>접수일</th><th>접수번호</th><th>주문번호</th><th>노출상품명</th><th>옵션</th>
-              <th>수량</th><th>환불예정금액</th><th>반품배송비</th><th>반품유형</th><th>반품비용</th><th>메모</th><th></th>
-            </tr></thead>
-            <tbody id="returnsTbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ─── 출고중지 서브패널 ─── -->
-    <div id="returnSubPanelCancel" style="display:none">
-      <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-        <div>
-          <div class="section-label" style="margin:0 0 4px">출고중지 업로드</div>
-          <div style="font-size:12px;color:var(--text-dim)">쿠팡 Wing → 취소/반품 관리 → 출고중지 관리에서 엑셀 다운로드</div>
-        </div>
-        <label class="btn btn-sm" style="cursor:pointer;background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600;margin-left:auto">
+        <label class="btn btn-sm" style="cursor:pointer;background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600">
           🚫 출고중지 업로드
           <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleCancelShipmentUpload(event)">
         </label>
-        <div id="cancelUploadStatus" style="font-size:12px;color:var(--text-dim);width:100%"></div>
       </div>
-      <div id="cancelSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
-      <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <input type="date" id="cancelFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <span style="font-size:12px;color:var(--text-dim)">~</span>
-        <input type="date" id="cancelTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
-        <button class="btn btn-primary btn-sm" onclick="renderCancelShipments();loadCancelSummary()">조회</button>
-        <span id="cancelSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
-        <button class="btn btn-sm" id="cancelDeleteBtn" onclick="bulkDeleteCancel()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
+      <div style="width:100%;display:flex;gap:20px;flex-wrap:wrap">
+        <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim)"></div>
+        <div id="cancelUploadStatus"  style="font-size:12px;color:var(--text-dim)"></div>
       </div>
-      <div class="card" style="padding:0;overflow:hidden">
-        <div class="data-table-wrap">
-          <table class="profit-table" id="cancelTable">
-            <thead><tr>
-              <th style="width:32px"><input type="checkbox" id="cancelSelectAll" onclick="toggleAllCancelSelect(this)"></th>
-              <th>접수일</th><th>접수번호</th><th>배송상태</th><th>노출상품명</th><th>옵션</th>
-              <th>수량</th><th>취소사유</th><th>주문번호</th><th>출고예정일</th><th>출고중지완료일</th><th>옵션ID</th><th></th>
-            </tr></thead>
-            <tbody id="cancelTbody"></tbody>
-          </table>
-        </div>
+    </div>
+
+    <div id="returnsSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
+
+    <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <span style="font-size:12px;color:var(--text-dim)">~</span>
+      <input type="date" id="returnsTo" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+      <div class="period-toggle" style="margin:0">
+        <button class="period-btn active" id="returnsFilterAll"    onclick="switchReturnsFilter('all')">전체</button>
+        <button class="period-btn"        id="returnsFilterReturn" onclick="switchReturnsFilter('return')">반품</button>
+        <button class="period-btn"        id="returnsFilterCancel" onclick="switchReturnsFilter('cancel')">출고중지</button>
+      </div>
+      <select id="returnsTypeFilter" onchange="renderReturns()" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <option value="all">전체 유형</option>
+        <option value="seller">판매자 귀책</option>
+        <option value="buyer">구매자 귀책</option>
+        <option value="other">미처리</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="renderReturns();loadReturnsSummary()">조회</button>
+      <span id="returnsSelectedInfo" style="margin-left:auto;font-size:12px;color:var(--text-dim)"></span>
+      <button class="btn btn-sm" id="returnsDeleteBtn" onclick="bulkDeleteReturns()" style="display:none;background:#ef4444;color:#fff;border:none">선택 삭제</button>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="profit-table" id="returnsTable">
+          <thead><tr>
+            <th style="width:32px"><input type="checkbox" id="returnsSelectAll" onclick="toggleAllReturnsSelect(this)"></th>
+            <th>구분</th><th>접수일</th><th>접수번호</th><th>주문번호</th><th>노출상품명</th><th>옵션</th>
+            <th>수량</th><th>상태/유형</th><th>환불금액</th><th>메모/사유</th><th></th>
+          </tr></thead>
+          <tbody id="returnsTbody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -1625,7 +1598,7 @@ function _activateTabUI(name) {
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
   if (name === 'coupons')  { renderCoupons(); loadCouponsSummary(); }
   if (name === 'profit')   { renderProfit(); }
-  if (name === 'returns')  { switchReturnsSubTab(_returnsSubTab); }
+  if (name === 'returns')  { renderReturns(); loadReturnsSummary(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -5635,43 +5608,67 @@ const RETURN_TYPE_LABELS = {
   other:  { label: '미처리',      color: '#9ca3af' },
 };
 
+let _returnsRecordFilter = 'all'; // 'all' | 'return' | 'cancel'
+
+function switchReturnsFilter(f) {
+  _returnsRecordFilter = f;
+  ['All','Return','Cancel'].forEach(k => {
+    const btn = document.getElementById('returnsFilter' + k);
+    if (btn) btn.classList.toggle('active', f === k.toLowerCase());
+  });
+  // 반품유형 필터는 출고중지 전용 필터에서는 숨김
+  const tf = document.getElementById('returnsTypeFilter');
+  if (tf) tf.style.display = f === 'cancel' ? 'none' : '';
+  renderReturns();
+  loadReturnsSummary();
+}
+
 async function loadReturnsSummary() {
   const from = document.getElementById('returnsFrom')?.value || '';
   const to   = document.getElementById('returnsTo')?.value   || '';
-  const params = new URLSearchParams();
-  if (from) params.set('start_date', from);
-  if (to)   params.set('end_date', to);
-  params.set('record_type', 'return');
+  const el   = document.getElementById('returnsSummaryCards');
+  if (!el) return;
+
+  const base = new URLSearchParams();
+  if (from) base.set('start_date', from);
+  if (to)   base.set('end_date', to);
+
   try {
-    const r = await fetch('/api/returns/summary?' + params.toString());
-    const d = await r.json();
-    const el = document.getElementById('returnsSummaryCards');
-    if (!el) return;
-    el.innerHTML = `
-      <div class="summary-card"><div class="summary-card-label">전체 반품</div><div class="summary-card-value">${(d.total_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">반품비용 합계</div><div class="summary-card-value" style="color:#ef4444">${Math.round(d.total_cost||0).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">환불금액 합계</div><div class="summary-card-value">${Math.round(d.total_refund||0).toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">판매자 귀책</div><div class="summary-card-value" style="color:#ef4444">${(d.seller_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">구매자 귀책</div><div class="summary-card-value" style="color:#f97316">${(d.buyer_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">미처리</div><div class="summary-card-value" style="color:#9ca3af">${(d.other_count||0).toLocaleString('ko-KR')}건</div></div>
-    `;
+    if (_returnsRecordFilter === 'cancel') {
+      const p = new URLSearchParams(base); p.set('record_type', 'cancel');
+      const d = await (await fetch('/api/returns/summary?' + p)).json();
+      el.innerHTML = `
+        <div class="summary-card"><div class="summary-card-label">전체 출고중지</div><div class="summary-card-value">${(d.total_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">출고중지완료</div><div class="summary-card-value" style="color:#f97316">${(d.stop_complete_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">이미출고</div><div class="summary-card-value" style="color:#ef4444">${(d.already_shipped_count||0).toLocaleString('ko-KR')}건</div></div>
+      `;
+    } else if (_returnsRecordFilter === 'return') {
+      const p = new URLSearchParams(base); p.set('record_type', 'return');
+      const d = await (await fetch('/api/returns/summary?' + p)).json();
+      el.innerHTML = `
+        <div class="summary-card"><div class="summary-card-label">전체 반품</div><div class="summary-card-value">${(d.total_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">반품비용 합계</div><div class="summary-card-value" style="color:#ef4444">${Math.round(d.total_cost||0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">환불금액 합계</div><div class="summary-card-value">${Math.round(d.total_refund||0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">판매자 귀책</div><div class="summary-card-value" style="color:#ef4444">${(d.seller_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">구매자 귀책</div><div class="summary-card-value" style="color:#f97316">${(d.buyer_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">미처리</div><div class="summary-card-value" style="color:#9ca3af">${(d.other_count||0).toLocaleString('ko-KR')}건</div></div>
+      `;
+    } else {
+      // 전체: 반품 + 출고중지 동시 조회
+      const [dr, dc] = await Promise.all([
+        fetch('/api/returns/summary?' + new URLSearchParams({...Object.fromEntries(base), record_type:'return'})).then(r=>r.json()),
+        fetch('/api/returns/summary?' + new URLSearchParams({...Object.fromEntries(base), record_type:'cancel'})).then(r=>r.json()),
+      ]);
+      el.innerHTML = `
+        <div class="summary-card"><div class="summary-card-label">반품</div><div class="summary-card-value">${(dr.total_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">출고중지</div><div class="summary-card-value" style="color:#f97316">${(dc.total_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">반품비용 합계</div><div class="summary-card-value" style="color:#ef4444">${Math.round(dr.total_cost||0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">환불금액 합계</div><div class="summary-card-value">${Math.round(dr.total_refund||0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">판매자 귀책</div><div class="summary-card-value" style="color:#ef4444">${(dr.seller_count||0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">구매자 귀책</div><div class="summary-card-value" style="color:#f97316">${(dr.buyer_count||0).toLocaleString('ko-KR')}건</div></div>
+      `;
+    }
   } catch(e) { console.error(e); }
-}
-
-let _returnsSubTab = 'return'; // 'return' | 'cancel'
-
-function switchReturnsSubTab(tab) {
-  _returnsSubTab = tab;
-  const panelReturn = document.getElementById('returnSubPanelReturn');
-  const panelCancel = document.getElementById('returnSubPanelCancel');
-  const btnReturn   = document.getElementById('returnSubTabReturn');
-  const btnCancel   = document.getElementById('returnSubTabCancel');
-  if (panelReturn) panelReturn.style.display = tab === 'return' ? 'block' : 'none';
-  if (panelCancel) panelCancel.style.display = tab === 'cancel' ? 'block' : 'none';
-  if (btnReturn)   btnReturn.classList.toggle('active', tab === 'return');
-  if (btnCancel)   btnCancel.classList.toggle('active', tab === 'cancel');
-  if (tab === 'return') { renderReturns(); loadReturnsSummary(); }
-  else                  { renderCancelShipments(); loadCancelSummary(); }
 }
 
 async function renderReturns() {
@@ -5681,150 +5678,58 @@ async function renderReturns() {
   const params = new URLSearchParams();
   if (from) params.set('start_date', from);
   if (to)   params.set('end_date', to);
-  params.set('record_type', 'return');
-  if (type && type !== 'all') params.set('return_type', type);
+  if (_returnsRecordFilter !== 'all') params.set('record_type', _returnsRecordFilter);
+  if (type && type !== 'all' && _returnsRecordFilter !== 'cancel') params.set('return_type', type);
   const tbody = document.getElementById('returnsTbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
   try {
     const r = await fetch('/api/returns?' + params.toString());
     const rows = await r.json();
     selectedReturnIds = new Set();
     updateReturnsSelectionUI();
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">반품 내역이 없습니다</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:24px">내역이 없습니다</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(row => {
-      const tinfo = RETURN_TYPE_LABELS[row.return_type] || RETURN_TYPE_LABELS.other;
-      const memo  = (row.process_memo || '').replace(/"/g, '&quot;');
+      const isCancel = (row.record_type === 'cancel');
+      const kindColor = isCancel ? '#f97316' : '#3b82f6';
+      const kindLabel = isCancel ? '출고중지' : '반품';
+      let statusCell, amountCell, memoCell, actionCell;
+      if (isCancel) {
+        const sc = row.delivery_status === '이미출고' ? '#ef4444' : '#f97316';
+        statusCell = `<span style="font-size:11px;font-weight:600;color:${sc};padding:2px 6px;background:${sc}18;border-radius:4px">${row.delivery_status||'-'}</span>`;
+        amountCell = '-';
+        memoCell   = `<span style="font-size:11px" title="${(row.return_reason||'').replace(/"/g,'&quot;')}">${row.return_reason||'-'}</span>`;
+        actionCell = `<button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440">삭제</button>`;
+      } else {
+        const tinfo = RETURN_TYPE_LABELS[row.return_type] || RETURN_TYPE_LABELS.other;
+        statusCell = `<span style="font-size:11px;font-weight:600;color:${tinfo.color};padding:2px 8px;background:${tinfo.color}18;border-radius:4px">${tinfo.label}</span>`;
+        amountCell = (row.refund_amount||0).toLocaleString('ko-KR');
+        const memo = (row.process_memo||'').replace(/"/g,'&quot;');
+        memoCell   = `<span style="font-size:11px;color:var(--text-dim)" title="${memo}">${row.process_memo||''}</span>`;
+        actionCell = `<button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'')})" style="font-size:11px;padding:3px 8px">처리</button>
+          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:4px">삭제</button>`;
+      }
       return `<tr>
         <td><input type="checkbox" data-id="${row.id}" onclick="toggleReturnSelect(this)"></td>
+        <td><span style="font-size:11px;font-weight:600;color:${kindColor};padding:2px 6px;background:${kindColor}18;border-radius:4px">${kindLabel}</span></td>
         <td>${row.received_at ? row.received_at.slice(0,10) : '-'}</td>
         <td style="font-family:var(--mono);font-size:11px">${row.receipt_number||'-'}</td>
         <td style="font-family:var(--mono);font-size:11px">${row.order_number||'-'}</td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.product_name||''}">${row.product_name||'-'}</td>
-        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.option_name||''}">${row.option_name||'-'}</td>
+        <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.product_name||''}">${row.product_name||'-'}</td>
+        <td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.option_name||''}">${row.option_name||'-'}</td>
         <td style="text-align:right">${row.quantity||1}</td>
-        <td style="text-align:right;font-family:var(--mono)">${(row.refund_amount||0).toLocaleString('ko-KR')}</td>
-        <td style="text-align:right;font-family:var(--mono)">${(row.return_shipping_fee||0).toLocaleString('ko-KR')}</td>
-        <td><span style="font-size:11px;font-weight:600;color:${tinfo.color};padding:2px 8px;background:${tinfo.color}18;border-radius:4px">${tinfo.label}</span></td>
-        <td style="text-align:right;font-family:var(--mono)">${row.return_cost ? Math.round(row.return_cost).toLocaleString('ko-KR') : '-'}</td>
-        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)" title="${memo}">${row.process_memo||''}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'')})" style="font-size:11px;padding:3px 8px">처리</button>
-          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:4px">삭제</button>
-        </td>
+        <td>${statusCell}</td>
+        <td style="text-align:right;font-family:var(--mono)">${amountCell}</td>
+        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${memoCell}</td>
+        <td style="white-space:nowrap">${actionCell}</td>
       </tr>`;
     }).join('');
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
   }
-}
-
-let selectedCancelIds = new Set();
-
-async function renderCancelShipments() {
-  const from = document.getElementById('cancelFrom')?.value || '';
-  const to   = document.getElementById('cancelTo')?.value   || '';
-  const params = new URLSearchParams();
-  if (from) params.set('start_date', from);
-  if (to)   params.set('end_date', to);
-  params.set('record_type', 'cancel');
-  const tbody = document.getElementById('cancelTbody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">로딩 중…</td></tr>';
-  try {
-    const r = await fetch('/api/returns?' + params.toString());
-    const rows = await r.json();
-    selectedCancelIds = new Set();
-    updateCancelSelectionUI();
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:24px">출고중지 내역이 없습니다</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(row => {
-      const statusColor = row.delivery_status === '이미출고' ? '#ef4444' : '#f97316';
-      return `<tr>
-        <td><input type="checkbox" data-id="${row.id}" onclick="toggleCancelSelect(this)"></td>
-        <td>${row.received_at ? row.received_at.slice(0,10) : '-'}</td>
-        <td style="font-family:var(--mono);font-size:11px">${row.receipt_number||'-'}</td>
-        <td><span style="font-size:11px;font-weight:600;color:${statusColor};padding:2px 6px;background:${statusColor}18;border-radius:4px">${row.delivery_status||'-'}</span></td>
-        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.product_name||''}">${row.product_name||'-'}</td>
-        <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${row.option_name||''}">${row.option_name||'-'}</td>
-        <td style="text-align:right">${row.quantity||1}</td>
-        <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${row.return_reason||''}">${row.return_reason||'-'}</td>
-        <td style="font-family:var(--mono);font-size:11px">${row.order_number||'-'}</td>
-        <td>${row.expected_ship_date ? row.expected_ship_date.slice(0,10) : '-'}</td>
-        <td>${row.warehousing_complete_date ? row.warehousing_complete_date.slice(0,10) : '-'}</td>
-        <td style="font-family:var(--mono);font-size:11px">${row.option_id||'-'}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440">삭제</button>
-        </td>
-      </tr>`;
-    }).join('');
-  } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#ef4444;padding:24px">${e.message}</td></tr>`;
-  }
-}
-
-function toggleAllCancelSelect(cb) {
-  document.querySelectorAll('#cancelTbody input[type=checkbox]').forEach(c => {
-    c.checked = cb.checked;
-    const id = parseInt(c.dataset.id);
-    if (cb.checked) selectedCancelIds.add(id); else selectedCancelIds.delete(id);
-  });
-  updateCancelSelectionUI();
-}
-
-function toggleCancelSelect(cb) {
-  const id = parseInt(cb.dataset.id);
-  if (cb.checked) selectedCancelIds.add(id); else selectedCancelIds.delete(id);
-  updateCancelSelectionUI();
-}
-
-function updateCancelSelectionUI() {
-  const n = selectedCancelIds.size;
-  const infoEl = document.getElementById('cancelSelectedInfo');
-  const delBtn = document.getElementById('cancelDeleteBtn');
-  if (infoEl) infoEl.textContent = n ? `${n}건 선택됨` : '';
-  if (delBtn) delBtn.style.display = n ? 'inline-flex' : 'none';
-}
-
-async function bulkDeleteCancel() {
-  if (!selectedCancelIds.size) return;
-  if (!confirm(`선택한 ${selectedCancelIds.size}건을 삭제하시겠습니까?`)) return;
-  try {
-    const r = await fetch('/api/returns', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [...selectedCancelIds] }),
-    });
-    const d = await r.json();
-    alert(`${d.deleted}건 삭제되었습니다.`);
-    renderCancelShipments();
-    loadCancelSummary();
-  } catch(e) { alert(e.message); }
-}
-
-async function loadCancelSummary() {
-  const from = document.getElementById('cancelFrom')?.value || '';
-  const to   = document.getElementById('cancelTo')?.value   || '';
-  const params = new URLSearchParams();
-  if (from) params.set('start_date', from);
-  if (to)   params.set('end_date', to);
-  params.set('record_type', 'cancel');
-  try {
-    const r = await fetch('/api/returns/summary?' + params.toString());
-    const d = await r.json();
-    const el = document.getElementById('cancelSummaryCards');
-    if (!el) return;
-    el.innerHTML = `
-      <div class="summary-card"><div class="summary-card-label">전체 출고중지</div><div class="summary-card-value">${(d.total_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">출고중지완료</div><div class="summary-card-value" style="color:#f97316">${(d.stop_complete_count||0).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">이미출고</div><div class="summary-card-value" style="color:#ef4444">${(d.already_shipped_count||0).toLocaleString('ko-KR')}건</div></div>
-    `;
-  } catch(e) { console.error(e); }
 }
 
 function toggleAllReturnsSelect(cb) {
@@ -5916,8 +5821,7 @@ async function confirmReturnDelete() {
     if (!r.ok) throw new Error(await r.text());
     document.getElementById('returnDeleteBackdrop').style.display = 'none';
     _returnDeleteId = null;
-    if (_returnsSubTab === 'cancel') { renderCancelShipments(); loadCancelSummary(); }
-    else                             { renderReturns(); loadReturnsSummary(); }
+    renderReturns(); loadReturnsSummary();
   } catch(e) { alert(e.message); }
 }
 
@@ -6143,8 +6047,8 @@ async function handleCancelShipmentUpload(event) {
       if (d.ordersUpdated) parts.push(`주문 제외 ${d.ordersUpdated}건`);
       statusEl.textContent = parts.join(' | ');
     }
-    renderCancelShipments();
-    loadCancelSummary();
+    renderReturns();
+    loadReturnsSummary();
   } catch(e) {
     if (statusEl) statusEl.textContent = `오류: ${e.message}`;
     console.error(e);
