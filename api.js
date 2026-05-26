@@ -1040,11 +1040,11 @@ router.get('/returns', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT * FROM returns
       WHERE user_id = $1
-        AND ($2::text IS NULL OR received_at >= $2)
-        AND ($3::text IS NULL OR received_at <= $3)
+        AND ($2::text IS NULL OR received_at IS NULL OR received_at >= $2)
+        AND ($3::text IS NULL OR received_at IS NULL OR received_at <= $3)
         ${typeClause}
         ${recordClause}
-      ORDER BY received_at DESC, id DESC
+      ORDER BY COALESCE(received_at, '') DESC, id DESC
     `, params);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1147,13 +1147,19 @@ router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
   let inserted = 0, skipped = 0, ordersUpdated = 0;
   const cancelOrderNumbers = [];
 
+  console.log('[cancel-shipments/bulk] 수신 건수:', items.length);
+  if (items[0]) {
+    console.log('[cancel-shipments/bulk] 첫 번째 행 delivery_status:', items[0].delivery_status);
+    console.log('[cancel-shipments/bulk] 첫 번째 행 receipt_number:', items[0].receipt_number);
+    console.log('[cancel-shipments/bulk] 첫 번째 행 raw_data keys:', Object.keys(items[0].raw_data || {}));
+  }
+
   try {
     for (const r of items) {
-      const deliveryStatus = (r.delivery_status || '').trim();
-      const orderNumber    = r.order_number || null;
+      const orderNumber = r.order_number || null;
 
-      if (deliveryStatus === '이미출고') {
-        // returns 테이블에 삽입
+      // 접수번호가 있는 건은 모두 returns 테이블에 저장 (배송상태 무관)
+      if (r.receipt_number) {
         const result = await pool.query(`
           INSERT INTO returns (
             user_id, received_at, receipt_number, delivery_status,
@@ -1185,7 +1191,7 @@ router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
         ]);
         if (result.rowCount > 0) inserted++; else skipped++;
       }
-      // 두 분기 모두 orders 처리
+      // orders 제외 처리
       if (orderNumber) cancelOrderNumbers.push(orderNumber);
     }
 
