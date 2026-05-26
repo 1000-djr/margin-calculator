@@ -5947,10 +5947,25 @@ async function handleReturnsUpload(event) {
   if (statusEl) statusEl.textContent = '파싱 중…';
   try {
     const data = await file.arrayBuffer();
-    const wb   = XLSX.read(data, { type: 'array' });
+    const wb   = XLSX.read(data, { type: 'array', cellDates: true });
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' });
     if (!raw.length) { if (statusEl) statusEl.textContent = '데이터 없음'; return; }
+
+    function pickDate(row, keys) {
+      for (const k of keys) {
+        const v = row[k];
+        if (v === undefined || v === '') continue;
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        if (typeof v === 'number') {
+          // Excel 날짜 직렬번호 → YYYY-MM-DD
+          const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+          return d.toISOString().slice(0, 10);
+        }
+        return String(v).trim().slice(0, 10);
+      }
+      return '';
+    }
 
     const COL = {
       received_at:              ['접수일', '접수일시', '수령일'],
@@ -5985,7 +6000,7 @@ async function handleReturnsUpload(event) {
     }
 
     const items = raw.map(row => ({
-      received_at:              pick(row, COL.received_at),
+      received_at:              pickDate(row, COL.received_at),
       receipt_number:           pick(row, COL.receipt_number),
       delivery_status:          pick(row, COL.delivery_status),
       return_status:            pick(row, COL.return_status),
@@ -6004,9 +6019,9 @@ async function handleReturnsUpload(event) {
       return_address_masked:    pick(row, COL.return_address_masked),
       collection_address_masked:pick(row, COL.collection_address_masked),
       order_number:             pick(row, COL.order_number),
-      expected_ship_date:       pick(row, COL.expected_ship_date),
-      warehousing_complete_date:pick(row, COL.warehousing_complete_date),
-      return_complete_date:     pick(row, COL.return_complete_date),
+      expected_ship_date:       pickDate(row, COL.expected_ship_date),
+      warehousing_complete_date:pickDate(row, COL.warehousing_complete_date),
+      return_complete_date:     pickDate(row, COL.return_complete_date),
       receipt_channel:          pick(row, COL.receipt_channel),
       option_id:                pick(row, COL.option_id),
       raw_data:                 row,
@@ -6042,10 +6057,24 @@ async function handleCancelShipmentUpload(event) {
   if (statusEl) statusEl.textContent = '파싱 중…';
   try {
     const data = await file.arrayBuffer();
-    const wb   = XLSX.read(data, { type: 'array' });
+    const wb   = XLSX.read(data, { type: 'array', cellDates: true });
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' });
     if (!raw.length) { if (statusEl) statusEl.textContent = '데이터 없음'; return; }
+
+    function pickDate(row, keys) {
+      for (const k of keys) {
+        const v = row[k];
+        if (v === undefined || v === '') continue;
+        if (v instanceof Date) return v.toISOString().slice(0, 10);
+        if (typeof v === 'number') {
+          const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+          return d.toISOString().slice(0, 10);
+        }
+        return String(v).trim().slice(0, 10);
+      }
+      return '';
+    }
 
     const COL = {
       received_at:         ['접수일', '접수일시'],
@@ -6070,7 +6099,7 @@ async function handleCancelShipmentUpload(event) {
     }
 
     const items = raw.map(row => ({
-      received_at:        pick(row, COL.received_at),
+      received_at:        pickDate(row, COL.received_at),
       receipt_number:     pick(row, COL.receipt_number),
       delivery_status:    pick(row, COL.delivery_status),
       product_name:       pick(row, COL.product_name),
@@ -6080,8 +6109,8 @@ async function handleCancelShipmentUpload(event) {
       recipient_masked:   pick(row, COL.recipient_masked),
       phone_masked:       pick(row, COL.phone_masked),
       order_number:       pick(row, COL.order_number),
-      expected_ship_date: pick(row, COL.expected_ship_date),
-      stop_complete_date: pick(row, COL.stop_complete_date),
+      expected_ship_date: pickDate(row, COL.expected_ship_date),
+      stop_complete_date: pickDate(row, COL.stop_complete_date),
       receipt_channel:    pick(row, COL.receipt_channel),
       option_id:          pick(row, COL.option_id),
       raw_data:           row,
