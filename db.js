@@ -386,6 +386,32 @@ async function initDB() {
     ALTER TABLE returns ADD COLUMN IF NOT EXISTS record_type VARCHAR(20) DEFAULT 'return';
   `);
 
+  // 가구매 비용 관리
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fake_purchase_vendors (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      vendor_name  VARCHAR(200) NOT NULL,
+      method       VARCHAR(20)  NOT NULL DEFAULT '빈박스',
+      review_type  VARCHAR(20)  NOT NULL DEFAULT '별점',
+      delivery_fee NUMERIC(12,2) DEFAULT 0,
+      process_fee  NUMERIC(12,2) DEFAULT 0,
+      tax_rate     NUMERIC(5,2)  DEFAULT 0,
+      product_cost NUMERIC(12,2) DEFAULT 0,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS fake_purchase_records (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      vendor_id    INTEGER REFERENCES fake_purchase_vendors(id) ON DELETE CASCADE,
+      proceed_date VARCHAR(20) NOT NULL,
+      order_ids    JSONB DEFAULT '[]',
+      total_cost   NUMERIC(14,2) DEFAULT 0,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
   console.log('[db] Tables ready');
 }
 

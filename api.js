@@ -1390,4 +1390,156 @@ router.get('/analytics', requireAuth, async (req, res) => {
   }
 });
 
+// ─── 가구매 업체 마스터 ──────────────────────────────────────────────────────
+router.get('/fake-vendors', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM fake_purchase_vendors WHERE user_id = $1 ORDER BY vendor_name',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/fake-vendors', requireAuth, async (req, res) => {
+  try {
+    const { vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO fake_purchase_vendors
+         (user_id, vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.user.id, vendor_name, method || '빈박스', review_type || '별점',
+       delivery_fee || 0, process_fee || 0, tax_rate || 0, product_cost || 0]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/fake-vendors/:id', requireAuth, async (req, res) => {
+  try {
+    const { vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost } = req.body;
+    const { rows } = await pool.query(
+      `UPDATE fake_purchase_vendors
+         SET vendor_name=$1, method=$2, review_type=$3,
+             delivery_fee=$4, process_fee=$5, tax_rate=$6, product_cost=$7
+       WHERE id=$8 AND user_id=$9 RETURNING *`,
+      [vendor_name, method, review_type, delivery_fee, process_fee, tax_rate, product_cost,
+       req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: '없음' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/fake-vendors/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM fake_purchase_vendors WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 가구매용 주문 조회 ──────────────────────────────────────────────────────
+router.get('/fake-orders', requireAuth, async (req, res) => {
+  try {
+    const { order_date } = req.query;
+    const { rows } = await pool.query(
+      `SELECT id, order_number, product_name, option_name, quantity,
+              payment_amount, shipping_fee,
+              payment_amount + shipping_fee AS net_sale,
+              exclusion_type
+         FROM orders
+        WHERE user_id = $1
+          AND ($2::text IS NULL OR SUBSTRING(order_date,1,10) = $2)
+        ORDER BY id DESC`,
+      [req.user.id, order_date || null]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 가구매 진행 기록 ────────────────────────────────────────────────────────
+router.get('/fake-records', requireAuth, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const { rows } = await pool.query(
+      `SELECT r.*, v.vendor_name, v.method, v.review_type,
+              v.delivery_fee, v.process_fee, v.tax_rate, v.product_cost
+         FROM fake_purchase_records r
+         JOIN fake_purchase_vendors v ON v.id = r.vendor_id
+        WHERE r.user_id = $1
+          AND ($2::text IS NULL OR r.proceed_date >= $2)
+          AND ($3::text IS NULL OR r.proceed_date <= $3)
+        ORDER BY r.proceed_date DESC, r.id DESC`,
+      [req.user.id, start_date || null, end_date || null]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/fake-records', requireAuth, async (req, res) => {
+  try {
+    const { vendor_id, proceed_date, order_ids, total_cost } = req.body;
+    const { rows } = await pool.query(
+      `INSERT INTO fake_purchase_records (user_id, vendor_id, proceed_date, order_ids, total_cost)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.id, vendor_id, proceed_date, JSON.stringify(order_ids || []), total_cost || 0]
+    );
+
+    // 해당 주문들의 exclusion_type을 fake_order로 설정
+    if (order_ids && order_ids.length > 0) {
+      await pool.query(
+        `UPDATE orders SET is_excluded=TRUE, exclusion_type='fake_order'
+          WHERE user_id=$1 AND id = ANY($2::int[])`,
+        [req.user.id, order_ids]
+      );
+    }
+
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/fake-records/:id', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT order_ids FROM fake_purchase_records WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: '없음' });
+
+    const orderIds = rows[0].order_ids || [];
+    if (orderIds.length > 0) {
+      await pool.query(
+        `UPDATE orders SET is_excluded=FALSE, exclusion_type='normal'
+          WHERE user_id=$1 AND id = ANY($2::int[]) AND exclusion_type='fake_order'`,
+        [req.user.id, orderIds]
+      );
+    }
+
+    await pool.query(
+      'DELETE FROM fake_purchase_records WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 가구매 비용 합계 (수익분석용) ──────────────────────────────────────────
+router.get('/fake-records/summary', requireAuth, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const { rows } = await pool.query(
+      `SELECT COALESCE(SUM(total_cost),0)::NUMERIC(14,2) AS total_fake_cost
+         FROM fake_purchase_records
+        WHERE user_id=$1
+          AND ($2::text IS NULL OR proceed_date >= $2)
+          AND ($3::text IS NULL OR proceed_date <= $3)`,
+      [req.user.id, start_date || null, end_date || null]
+    );
+    res.json({ total_fake_cost: parseFloat(rows[0].total_fake_cost) || 0 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
