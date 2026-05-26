@@ -1830,7 +1830,7 @@ router.get('/coupang-keys/status', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 연결 테스트
+// 연결 테스트 (입력값으로 직접 테스트)
 router.post('/coupang-keys/test', requireAuth, async (req, res) => {
   try {
     const { vendor_id, access_key, secret_key } = req.body;
@@ -1844,13 +1844,75 @@ router.post('/coupang-keys/test', requireAuth, async (req, res) => {
     console.log(`[test] vendor=${vendor_id} status=${result.status} body_preview=${JSON.stringify(result.body).slice(0, 200)}`);
 
     if (result.status === 200) {
-      // 응답 구조 로그: data 타입과 nextToken 위치 확인용
       const body = result.body;
       console.log(`[test] data_type=${Array.isArray(body?.data) ? 'array' : typeof body?.data} nextToken_location=${body?.nextToken ? 'root' : body?.data?.nextToken ? 'data' : 'none'}`);
       res.json({ ok: true, message: '연결 성공' });
     } else {
       res.json({ ok: false, message: `HTTP ${result.status}: ${typeof result.body === 'string' ? result.body : JSON.stringify(result.body)}` });
     }
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DB에 저장된 키로 직접 진단 (HMAC 메시지 + API 호출 결과 전체 반환)
+router.get('/coupang-keys/debug', requireAuth, async (req, res) => {
+  try {
+    // 1. DB 키 조회
+    const { rows } = await pool.query(
+      'SELECT vendor_id, access_key, secret_key, LENGTH(secret_key) AS secret_key_len, updated_at FROM coupang_api_keys WHERE user_id = $1',
+      [req.user.id]
+    );
+    if (!rows[0]) return res.json({ step: 'db_query', error: '저장된 API 키 없음' });
+
+    const dbRow = rows[0];
+
+    // 2. 복호화
+    let secretKey, decryptError;
+    try {
+      secretKey = aesDecrypt(dbRow.secret_key);
+    } catch (e) {
+      decryptError = e.message;
+    }
+
+    const dbInfo = {
+      vendor_id:          dbRow.vendor_id,
+      access_key:         dbRow.access_key,
+      access_key_len:     dbRow.access_key.length,
+      secret_key_stored_len: parseInt(dbRow.secret_key_len),
+      secret_key_decrypted_len: secretKey ? secretKey.length : null,
+      secret_key_prefix:  secretKey ? secretKey.slice(0, 6) + '...' : null,
+      secret_key_suffix:  secretKey ? '...' + secretKey.slice(-4) : null,
+      decrypt_error:      decryptError || null,
+      updated_at:         dbRow.updated_at,
+    };
+
+    if (decryptError) return res.json({ step: 'aes_decrypt', db: dbInfo, error: decryptError });
+
+    // 3. HMAC 메시지 직접 생성 (서명 값 제외 — 메시지 구조만 확인)
+    const today      = new Date().toISOString().slice(0, 10);
+    const urlPath    = `/v2/providers/openapi/apis/api/v4/vendors/${dbRow.vendor_id}/ordersheets?createdAtFrom=${today}&createdAtTo=${today}&status=ACCEPT&maxPerPage=1&pageIndex=1`;
+    const [pathPart, qsPart = ''] = urlPath.split('?');
+    const datetime   = coupangDatetime();
+    const hmacMsg    = datetime + 'GET' + pathPart + qsPart;
+
+    // 4. 실제 API 호출
+    const result = await coupangRequest('GET', urlPath, dbRow.access_key, secretKey);
+
+    res.json({
+      step:     'full_debug',
+      db:       dbInfo,
+      hmac: {
+        datetime,
+        method:   'GET',
+        path:     pathPart,
+        qs:       qsPart,
+        message:  hmacMsg,
+      },
+      coupang: {
+        url:    urlPath,
+        status: result.status,
+        body:   result.body,
+      },
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
