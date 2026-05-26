@@ -1037,8 +1037,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn btn-ghost btn-sm" onclick="openColSettingsModal()" style="margin-bottom:0">⚙️ 컬럼 설정</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="margin-bottom:0">전체 삭제</button>
         <select id="ordersPageSizeSelect" onchange="setOrdersPageSize(+this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);height:30px;margin-bottom:0">
-          <option value="10">10개씩</option>
-          <option value="50" selected>50개씩</option>
+          <option value="10" selected>10개씩</option>
+          <option value="50">50개씩</option>
         </select>
       </div>
     </div>
@@ -1722,7 +1722,7 @@ let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersSortCol = '주문일'; // 기본 정렬 컬럼
 let ordersSortDir = 'desc';  // 기본 내림차순
 let ordersPage = 1;
-let ordersPageSize = 50;
+let ordersPageSize = 10;
 let selectedOrderNums = new Set(); // 체크된 주문번호
 let ordersVisibleCols = JSON.parse(localStorage.getItem('ordersVisibleCols') || 'null'); // null = 전체 표시
 let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    || '{}');
