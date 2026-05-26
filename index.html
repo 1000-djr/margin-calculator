@@ -989,8 +989,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <div class="panel" id="tab-orders">
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>주문서 업로드</span>
-      <button class="btn btn-sm" onclick="openFakePurchaseOverlay()" style="font-size:12px;padding:3px 10px;background:#f97316;color:#fff;border:none;font-weight:600">💰 가구매 비용 관리</button>
-      <button class="btn btn-ghost btn-sm" onclick="openOrderGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" onclick="openFakePurchaseOverlay()" style="font-size:12px;padding:3px 10px;background:#f97316;color:#fff;border:none;font-weight:600">💰 가구매 비용 관리</button>
+        <button class="btn btn-ghost btn-sm" onclick="openOrderGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
+      </div>
     </div>
     <div class="card">
       <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
