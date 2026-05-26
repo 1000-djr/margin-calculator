@@ -6307,15 +6307,19 @@ async function handleCancelShipmentUpload(event) {
 // ── 가구매 비용 관리 ──────────────────────────────────────────────────────────
 let fakeVendors = [];
 
-function openFakePurchaseOverlay() {
+async function openFakePurchaseOverlay() {
   document.getElementById('fakePurchaseOverlay').style.display = 'block';
   document.body.style.overflow = 'hidden';
-  loadFakeVendors();
-  loadFakeRecords();
-  // set today as default proceed date
+
+  // 날짜 기본값 세팅
   const today = new Date().toISOString().slice(0, 10);
   const dateEl = document.getElementById('frProceedDate');
   if (dateEl && !dateEl.value) dateEl.value = today;
+
+  // vendors 먼저 로드 (await) → 완료 후 orders 로드
+  await loadFakeVendors();
+  await loadFakeOrdersForDate();
+  loadFakeRecords();
 }
 
 function closeFakePurchaseOverlay() {
@@ -6327,9 +6331,12 @@ async function loadFakeVendors() {
   try {
     const res = await fetch('/api/fake-vendors');
     fakeVendors = res.ok ? await res.json() : [];
+    console.log('[loadFakeVendors] loaded', fakeVendors.length, 'vendors');
     renderFakeVendors();
     populateFakeVendorSelect();
-  } catch(e) { console.error(e); }
+    // vendors가 늦게 로드됐을 경우, orders가 이미 있으면 재렌더
+    if (fakeOrdersForDate.length > 0) renderFakeOrders();
+  } catch(e) { console.error('[loadFakeVendors]', e); }
 }
 
 function renderFakeVendors() {
@@ -6516,11 +6523,13 @@ function renderFakeOrders() {
     updateFakeCostPreview();
     return;
   }
-  const vendorId = document.getElementById('frVendorSelect').value;
-  const vendor = fakeVendors.find(v => v.id == vendorId);
+  const vendorId = document.getElementById('frVendorSelect')?.value || '';
+  const vendor = vendorId ? fakeVendors.find(v => String(v.id) === String(vendorId)) : null;
+  console.log('[renderFakeOrders] vendorId=', vendorId, 'fakeVendors.length=', fakeVendors.length, 'vendor=', vendor, 'fakeTaxType=', fakeTaxType);
   tbody.innerHTML = fakeOrdersForDate.map(o => {
-    const detail = vendor ? calcFakeOrderCostDetail(o, vendor, fakeTaxType) : null;
-    const costText = detail ? detail.total.toLocaleString('ko-KR') + '원' : '-';
+    let detail = null;
+    try { detail = vendor ? calcFakeOrderCostDetail(o, vendor, fakeTaxType) : null; } catch(e) { console.error('[calcCost]', e); }
+    const costText = (detail && detail.total != null) ? detail.total.toLocaleString('ko-KR') + '원' : (vendor ? '계산오류' : '-');
     const tooltip  = detail ? fakeCostTooltip(detail) : '';
     const netSale = (parseFloat(o.net_sale_after_coupon) || ((parseInt(o.payment_amount)||0) + (parseInt(o.shipping_fee)||0))).toLocaleString('ko-KR');
     return `<tr>
@@ -6541,8 +6550,8 @@ function toggleSelectAllFakeOrders(checkbox) {
 }
 
 function updateFakeCostPreview() {
-  const vendorId = document.getElementById('frVendorSelect').value;
-  const vendor = fakeVendors.find(v => v.id == vendorId);
+  const vendorId = document.getElementById('frVendorSelect')?.value || '';
+  const vendor = vendorId ? fakeVendors.find(v => String(v.id) === String(vendorId)) : null;
   const checked = [...document.querySelectorAll('.fakeOrderChk:checked')];
   let totalCost = 0;
   if (vendor) {
