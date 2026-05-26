@@ -1004,19 +1004,28 @@ router.delete('/product-name-mappings/:id', requireAuth, async (req, res) => {
 // ─── 반품 관리 ────────────────────────────────────────────────────────────────
 router.get('/returns/summary', requireAuth, async (req, res) => {
   try {
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, record_type } = req.query;
+    let recordClause = '';
+    if (record_type === 'return') {
+      recordClause = `AND COALESCE(record_type, 'return') = 'return'`;
+    } else if (record_type === 'cancel') {
+      recordClause = `AND record_type = 'cancel'`;
+    }
     const { rows } = await pool.query(`
       SELECT
-        COUNT(*)::INTEGER                              AS total_count,
-        COALESCE(SUM(return_cost),0)::NUMERIC(14,2)   AS total_cost,
-        COALESCE(SUM(refund_amount),0)::BIGINT         AS total_refund,
-        COUNT(*) FILTER (WHERE return_type='seller')::INTEGER  AS seller_count,
-        COUNT(*) FILTER (WHERE return_type='buyer')::INTEGER   AS buyer_count,
-        COUNT(*) FILTER (WHERE return_type='other')::INTEGER   AS other_count
+        COUNT(*)::INTEGER                                                        AS total_count,
+        COALESCE(SUM(return_cost),0)::NUMERIC(14,2)                             AS total_cost,
+        COALESCE(SUM(refund_amount),0)::BIGINT                                  AS total_refund,
+        COUNT(*) FILTER (WHERE return_type='seller')::INTEGER                   AS seller_count,
+        COUNT(*) FILTER (WHERE return_type='buyer')::INTEGER                    AS buyer_count,
+        COUNT(*) FILTER (WHERE return_type='other')::INTEGER                    AS other_count,
+        COUNT(*) FILTER (WHERE delivery_status='출고중지완료')::INTEGER          AS stop_complete_count,
+        COUNT(*) FILTER (WHERE delivery_status='이미출고')::INTEGER             AS already_shipped_count
       FROM returns
       WHERE user_id = $1
-        AND ($2::text IS NULL OR received_at >= $2)
-        AND ($3::text IS NULL OR received_at <= $3)
+        AND ($2::text IS NULL OR received_at IS NULL OR received_at >= $2)
+        AND ($3::text IS NULL OR received_at IS NULL OR received_at <= $3)
+        ${recordClause}
     `, [req.user.id, start_date || null, end_date || null]);
     res.json(rows[0] || {});
   } catch(e) { res.status(500).json({ error: e.message }); }
