@@ -530,6 +530,45 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 주문서 필터링 업로드 모달 ═══════════════════════════════════════ -->
+<div id="orderFilterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:820px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="font-size:20px;font-weight:700;margin-bottom:4px">🔍 업로드 전 필터링</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:14px">업로드할 주문건을 선택하세요. 선택된 항목만 DB에 저장됩니다.</div>
+    <!-- 검색 + 전체선택/해제 -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <input id="orderFilterSearch" type="text" placeholder="등록상품명 검색…"
+             style="flex:1;min-width:180px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text)"
+             oninput="renderOrderFilterTable()">
+      <button class="btn btn-ghost btn-sm" onclick="setAllOrderFilter(true)">전체선택</button>
+      <button class="btn btn-ghost btn-sm" onclick="setAllOrderFilter(false)">전체해제</button>
+      <span id="orderFilterCount" style="font-size:13px;color:var(--text-dim);white-space:nowrap"></span>
+    </div>
+    <!-- 테이블 -->
+    <div style="overflow-y:auto;flex:1;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
+            <th style="padding:8px 10px;text-align:center;width:36px;border-bottom:1px solid var(--border)">
+              <input type="checkbox" id="orderFilterSelectAll" onchange="setAllOrderFilter(this.checked)" style="accent-color:var(--primary)">
+            </th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">등록상품명</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">등록옵션명</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap">노출상품ID</th>
+            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap">옵션ID</th>
+          </tr>
+        </thead>
+        <tbody id="orderFilterTbody"></tbody>
+      </table>
+    </div>
+    <!-- 하단 버튼 -->
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;align-items:center">
+      <button class="btn btn-ghost" onclick="closeOrderFilterModal()">취소</button>
+      <button class="btn btn-primary" onclick="uploadFilteredOrders()">선택한 항목만 업로드</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 로그인 화면 ══════════════════════════════════════════════════════ -->
 <div id="loginScreen" style="display:none">
   <div class="login-card">
@@ -826,6 +865,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <button class="btn btn-ghost btn-sm" onclick="openOrderGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
     </div>
     <div class="card">
+      <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:5px">
+          🔍 필터링 후 업로드
+          <input type="file" id="ordersFilterFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleOrdersFilterUpload(this)">
+        </label>
+      </div>
       <div class="upload-area" onclick="document.getElementById('ordersFileInput').click()">
         <div class="upload-area-icon">📂</div>
         <div class="upload-area-text">클릭하여 주문서 엑셀 파일 선택 (.xlsx, .xls)<br>기존 주문과 합산되며 주문번호 기준 중복 제거됩니다</div>
@@ -2723,40 +2768,8 @@ function handleOrdersUpload(input) {
       const dupOrders = newOrders.filter(o => existingNums.has(o['주문번호']));
       const freshOrders = newOrders.filter(o => !existingNums.has(o['주문번호']));
 
-      const doUpload = async (toAdd) => {
-        orders = [...orders, ...toAdd];
-        localStorage.setItem('ordersData', JSON.stringify(orders));
-        if (currentUser) {
-          try {
-            const res = await fetch('/api/orders/bulk', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(toAdd)
-            });
-            if (!res.ok) {
-              const err = await res.json().catch(() => ({}));
-              console.error('[orders] DB 저장 실패:', res.status, err);
-              alert(`⚠️ DB 저장 실패 (${res.status}: ${err.error || '알 수 없는 오류'})\n로컬에는 저장됐습니다. 로그인 상태를 확인해주세요.`);
-            } else {
-              const result = await res.json().catch(() => ({}));
-              console.log('[orders] DB 저장 완료:', result.inserted, '건 삽입');
-            }
-          } catch(e) {
-            console.error('[orders] 네트워크 오류:', e);
-            alert(`⚠️ DB 저장 중 네트워크 오류: ${e.message}\n로컬에는 저장됐습니다.`);
-          }
-        }
-        // 매칭 리뷰: 이미 optionMatchings에 있는 옵션ID 확인
-        const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
-        const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
-        if (matchedIds.length > 0) showMatchingReviewModal(matchedIds, toAdd);
-        renderOrders();
-        loadOrdersSummary();
-        alert(`${toAdd.length}건 추가됨 (총 ${orders.length}건)`);
-      };
-
       if (dupOrders.length === 0) {
-        doUpload(freshOrders);
+        doOrdersUpload(freshOrders);
       } else if (freshOrders.length === 0) {
         showConfirmModal({
           icon: '⚠️',
@@ -2772,7 +2785,7 @@ function handleOrdersUpload(input) {
           message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 있습니다.<br>신규 <strong>${freshOrders.length}건</strong>만 업로드할까요?`,
           confirmText: `신규 ${freshOrders.length}건만 업로드`,
           cancelText: '취소',
-        }).then(ok => { if (ok) doUpload(freshOrders); });
+        }).then(ok => { if (ok) doOrdersUpload(freshOrders); });
       }
     } catch(err) {
       alert('파일 파싱 오류: ' + err.message);
@@ -2780,6 +2793,193 @@ function handleOrdersUpload(input) {
     input.value = '';
   };
   reader.readAsArrayBuffer(file);
+}
+
+// 공통 업로드 실행 함수 (handleOrdersUpload · uploadFilteredOrders 공용)
+async function doOrdersUpload(toAdd) {
+  orders = [...orders, ...toAdd];
+  localStorage.setItem('ordersData', JSON.stringify(orders));
+  if (currentUser) {
+    try {
+      const res = await fetch('/api/orders/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toAdd)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('[orders] DB 저장 실패:', res.status, err);
+        alert(`⚠️ DB 저장 실패 (${res.status}: ${err.error || '알 수 없는 오류'})\n로컬에는 저장됐습니다. 로그인 상태를 확인해주세요.`);
+      } else {
+        const result = await res.json().catch(() => ({}));
+        console.log('[orders] DB 저장 완료:', result.inserted, '건 삽입');
+      }
+    } catch(e) {
+      console.error('[orders] 네트워크 오류:', e);
+      alert(`⚠️ DB 저장 중 네트워크 오류: ${e.message}\n로컬에는 저장됐습니다.`);
+    }
+  }
+  const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
+  const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
+  if (matchedIds.length > 0) showMatchingReviewModal(matchedIds, toAdd);
+  renderOrders();
+  loadOrdersSummary();
+  alert(`${toAdd.length}건 추가됨 (총 ${orders.length}건)`);
+}
+
+// ── 필터링 업로드 ──────────────────────────────────────────────────────────────
+let _orderFilterParsedRows = [];  // 파싱된 전체 행 (필터 모달용)
+
+function handleOrdersFilterUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
+      const headers = rows[0].map(h => String(h).trim());
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+
+      const DATE_COLS = new Set(['주문일', '출고일', '배송완료일', '구매확정일자']);
+      function formatOrderDate(val) {
+        if (val == null || val === '') return '';
+        if (val instanceof Date) {
+          if (isNaN(val.getTime())) return '';
+          const Y = val.getFullYear(), M = String(val.getMonth()+1).padStart(2,'0'), D = String(val.getDate()).padStart(2,'0');
+          const h = String(val.getHours()).padStart(2,'0'), m = String(val.getMinutes()).padStart(2,'0');
+          return `${Y}-${M}-${D} ${h}:${m}`;
+        }
+        if (typeof val === 'number') {
+          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          if (isNaN(d.getTime())) return String(val);
+          return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+        }
+        const str = String(val).trim();
+        if (/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2} \d{4}/.test(str)) {
+          const d = new Date(str);
+          if (!isNaN(d.getTime())) {
+            const Y = d.getFullYear(), M = String(d.getMonth()+1).padStart(2,'0'), D = String(d.getDate()).padStart(2,'0');
+            const h = String(d.getHours()).padStart(2,'0'), m = String(d.getMinutes()).padStart(2,'0');
+            return `${Y}-${M}-${D} ${h}:${m}`;
+          }
+        }
+        return str;
+      }
+
+      const colIdx = {};
+      ORDER_COLUMNS.forEach(col => { colIdx[col] = headers.indexOf(col); });
+
+      _orderFilterParsedRows = dataRows.map(row => {
+        const obj = {};
+        ORDER_COLUMNS.forEach(col => {
+          const i = colIdx[col];
+          const raw = i >= 0 ? row[i] : '';
+          let val = DATE_COLS.has(col) ? formatOrderDate(raw) : String(raw ?? '').trim();
+          if (ORDER_MASK_COLS.has(col) && val) val = maskValue(col, val);
+          obj[col] = val;
+        });
+        return obj;
+      }).filter(o => o['주문번호']);
+
+      if (!_orderFilterParsedRows.length) { alert('유효한 주문 데이터가 없습니다'); return; }
+
+      openOrderFilterModal();
+    } catch(err) {
+      alert('파일 파싱 오류: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function openOrderFilterModal() {
+  document.getElementById('orderFilterSearch').value = '';
+  document.getElementById('orderFilterModal').style.display = 'flex';
+  renderOrderFilterTable();
+}
+
+function closeOrderFilterModal() {
+  document.getElementById('orderFilterModal').style.display = 'none';
+  _orderFilterParsedRows = [];
+}
+
+function renderOrderFilterTable() {
+  const q = document.getElementById('orderFilterSearch').value.trim().toLowerCase();
+  const tbody = document.getElementById('orderFilterTbody');
+  const filtered = q
+    ? _orderFilterParsedRows.filter(r => (r['등록상품명'] || '').toLowerCase().includes(q))
+    : _orderFilterParsedRows;
+
+  tbody.innerHTML = filtered.map((r, idx) => {
+    const origIdx = _orderFilterParsedRows.indexOf(r);
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px 10px;text-align:center">
+        <input type="checkbox" class="order-filter-chk" data-idx="${origIdx}" checked style="accent-color:var(--primary)">
+      </td>
+      <td style="padding:7px 10px">${escHtml(r['등록상품명'] || '')}</td>
+      <td style="padding:7px 10px;color:var(--text-sub)">${escHtml(r['등록옵션명'] || '')}</td>
+      <td style="padding:7px 10px;color:var(--text-dim);font-size:12px">${escHtml(r['노출상품ID'] || '')}</td>
+      <td style="padding:7px 10px;color:var(--text-dim);font-size:12px">${escHtml(r['옵션ID'] || '')}</td>
+    </tr>`;
+  }).join('');
+
+  updateOrderFilterCount();
+}
+
+function updateOrderFilterCount() {
+  const total = _orderFilterParsedRows.length;
+  const checked = document.querySelectorAll('.order-filter-chk:checked').length;
+  document.getElementById('orderFilterCount').textContent = `${total}건 중 ${checked}건 선택`;
+  document.getElementById('orderFilterSelectAll').checked = checked === total && total > 0;
+  // 체크박스 변경 이벤트 등록 (동적 생성 요소)
+  document.querySelectorAll('.order-filter-chk').forEach(chk => {
+    chk.onchange = updateOrderFilterCount;
+  });
+}
+
+function setAllOrderFilter(checked) {
+  document.querySelectorAll('.order-filter-chk').forEach(chk => { chk.checked = checked; });
+  document.getElementById('orderFilterSelectAll').checked = checked;
+  updateOrderFilterCount();
+}
+
+async function uploadFilteredOrders() {
+  const checkedIdxs = new Set(
+    [...document.querySelectorAll('.order-filter-chk:checked')].map(chk => parseInt(chk.dataset.idx))
+  );
+  if (!checkedIdxs.size) { alert('선택된 항목이 없습니다.'); return; }
+
+  const selected = _orderFilterParsedRows.filter((_, i) => checkedIdxs.has(i));
+
+  // 중복 체크 (기존 업로드 로직과 동일)
+  const existingNums = new Set(orders.map(o => o['주문번호']));
+  const dupOrders   = selected.filter(o => existingNums.has(o['주문번호']));
+  const freshOrders = selected.filter(o => !existingNums.has(o['주문번호']));
+
+  closeOrderFilterModal();
+
+  if (dupOrders.length === 0) {
+    await doOrdersUpload(freshOrders);
+  } else if (freshOrders.length === 0) {
+    showConfirmModal({
+      icon: '⚠️', title: '중복 데이터',
+      message: `이미 업로드된 데이터입니다.<br>중복 주문번호 <strong>${dupOrders.length}건</strong> — 업로드가 차단됩니다.`,
+      confirmText: '확인', cancelText: '확인',
+    });
+  } else {
+    showConfirmModal({
+      icon: '⚠️', title: '일부 중복 데이터',
+      message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 있습니다.<br>신규 <strong>${freshOrders.length}건</strong>만 업로드할까요?`,
+      confirmText: `신규 ${freshOrders.length}건만 업로드`, cancelText: '취소',
+    }).then(ok => { if (ok) doOrdersUpload(freshOrders); });
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function parseOrderDate(str) {
