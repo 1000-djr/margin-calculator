@@ -4964,7 +4964,7 @@ async function handleCouponBulkUpload(input) {
       const errorRows = [];
       const validItems = [];
 
-      // 날짜 파싱: Date 객체 / Excel 시리얼 숫자(XLSX.SSF) / 텍스트 모두 처리 → "yyyy-MM-dd HH:mm"
+      // 날짜 파싱: Date 객체 / Excel 시리얼 숫자 / 텍스트 모두 처리 → "yyyy-MM-dd HH:mm"
       function parseCouponDate(val) {
         const pad = n => String(n).padStart(2, '0');
         if (val instanceof Date) {
@@ -4972,9 +4972,17 @@ async function handleCouponBulkUpload(input) {
           return `${val.getFullYear()}-${pad(val.getMonth()+1)}-${pad(val.getDate())} ${pad(val.getHours())}:${pad(val.getMinutes())}`;
         }
         if (typeof val === 'number') {
-          const dc = XLSX.SSF.parse_date_code(val);
-          if (!dc) return null;
-          return `${dc.y}-${pad(dc.m)}-${pad(dc.d)} ${pad(dc.H)}:${pad(dc.M)}`;
+          // XLSX.SSF.parse_date_code 사용 (없으면 수동 계산 폴백)
+          try {
+            if (XLSX.SSF && typeof XLSX.SSF.parse_date_code === 'function') {
+              const dc = XLSX.SSF.parse_date_code(val);
+              if (dc) return `${dc.y}-${pad(dc.m)}-${pad(dc.d)} ${pad(dc.H)}:${pad(dc.M)}`;
+            }
+          } catch(e) {}
+          // 폴백: Excel 시리얼 → UTC 변환
+          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+          if (isNaN(d.getTime())) return null;
+          return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
         }
         const s = String(val).trim();
         const d = new Date(s.replace(' ', 'T'));
@@ -4987,15 +4995,24 @@ async function handleCouponBulkUpload(input) {
 
         const name      = String(colName  >= 0 ? row[colName]  : '').trim();
         const coupon_id = String(colCid   >= 0 ? row[colCid]   : '').trim();
-        const amt       = parseFloat(colAmt >= 0 ? row[colAmt] : '') || 0;
+        const amtRaw    = colAmt >= 0 ? row[colAmt] : '';
+        const amt       = parseFloat(String(amtRaw).replace(/,/g, '')) || 0;
         const startRaw  = colStart >= 0 ? row[colStart] : '';
         const endRaw    = colEnd   >= 0 ? row[colEnd]   : '';
         const optsRaw   = String(colOpts  >= 0 ? row[colOpts]  : '').trim();
 
+        // 첫 데이터 행 디버그 로그
+        if (i === 1) {
+          console.log('[쿠폰업로드] 헤더 인식:', { colName, colCid, colAmt, colStart, colEnd, colOpts });
+          console.log('[쿠폰업로드] 1행 raw 값:', { name: row[colName], coupon_id: row[colCid], amtRaw: row[colAmt], startRaw: row[colStart], endRaw: row[colEnd] });
+          console.log('[쿠폰업로드] 1행 타입:', { amtType: typeof row[colAmt], startType: typeof row[colStart], endType: typeof row[colEnd] });
+        }
+
         // 필수값 검사
         if (!name)              { errorRows.push(`${i + 1}행: 쿠폰명 없음`); continue; }
-        if (!amt || amt <= 0)   { errorRows.push(`${i + 1}행 (${name}): 할인금액 오류`); continue; }
-        if (!startRaw || !endRaw) { errorRows.push(`${i + 1}행 (${name}): 기간 없음`); continue; }
+        if (!amt || amt <= 0)   { errorRows.push(`${i + 1}행 (${name}): 할인금액 오류 (원본값: ${amtRaw})`); continue; }
+        if (!startRaw && startRaw !== 0) { errorRows.push(`${i + 1}행 (${name}): 시작일시 없음`); continue; }
+        if (!endRaw   && endRaw   !== 0) { errorRows.push(`${i + 1}행 (${name}): 종료일시 없음`); continue; }
         const start_at = parseCouponDate(startRaw);
         const end_at   = parseCouponDate(endRaw);
         if (!start_at || !end_at) {
