@@ -4981,26 +4981,29 @@ async function handleCouponBulkUpload(input) {
       const errorRows = [];
       const validItems = [];
 
-      // 날짜 파싱: Date 객체 / Excel 시리얼 숫자 / 텍스트 모두 처리 → "yyyy-MM-dd HH:mm"
+      // 날짜 파싱: Date 객체 / Excel 시리얼 숫자 / 텍스트 모두 처리 → "yyyy-MM-dd HH:mm" (KST)
       function parseCouponDate(val) {
         const pad = n => String(n).padStart(2, '0');
+        function fmt(date) {
+          const yyyy = date.getFullYear();
+          const MM   = pad(date.getMonth() + 1);
+          const dd   = pad(date.getDate());
+          const HH   = pad(date.getHours());
+          const mm   = pad(date.getMinutes());
+          return `${yyyy}-${MM}-${dd} ${HH}:${mm}`;
+        }
+        // cellDates:true 로 Date 객체가 오면 로컬 시간(KST) 그대로 사용
         if (val instanceof Date) {
-          if (isNaN(val.getTime())) return null;
-          return `${val.getFullYear()}-${pad(val.getMonth()+1)}-${pad(val.getDate())} ${pad(val.getHours())}:${pad(val.getMinutes())}`;
+          return isNaN(val.getTime()) ? null : fmt(val);
         }
+        // 직렬번호: UTC → KST (+9h) 후 로컬 메서드로 포맷
         if (typeof val === 'number') {
-          // XLSX.SSF.parse_date_code 사용 (없으면 수동 계산 폴백)
-          try {
-            if (XLSX.SSF && typeof XLSX.SSF.parse_date_code === 'function') {
-              const dc = XLSX.SSF.parse_date_code(val);
-              if (dc) return `${dc.y}-${pad(dc.m)}-${pad(dc.d)} ${pad(dc.H)}:${pad(dc.M)}`;
-            }
-          } catch(e) {}
-          // 폴백: Excel 시리얼 → UTC 변환
-          const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-          if (isNaN(d.getTime())) return null;
-          return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+          const utcMs  = (val - 25569) * 86400 * 1000;
+          const kstMs  = utcMs + 9 * 60 * 60 * 1000;
+          const date   = new Date(kstMs);
+          return isNaN(date.getTime()) ? null : fmt(date);
         }
+        // 텍스트: 앞 16자 그대로 반환
         const s = String(val).trim();
         const d = new Date(s.replace(' ', 'T'));
         return isNaN(d.getTime()) ? null : s.slice(0, 16);
