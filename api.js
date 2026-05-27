@@ -154,6 +154,64 @@ router.post('/admin/impersonate/:userId', requireRealAdmin, async (req, res) => 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 어드민 유저 진단 엔드포인트 ──────────────────────────────────────────────
+// GET /api/admin/user-debug?email=xxx  또는  /api/admin/user-debug?user_id=N
+router.get('/admin/user-debug', requireRealAdmin, async (req, res) => {
+  try {
+    const { email, user_id } = req.query;
+    if (!email && !user_id) return res.status(400).json({ error: 'email 또는 user_id 파라미터 필요' });
+
+    // 1. 유저 조회
+    let userRow;
+    if (email) {
+      const { rows } = await pool.query('SELECT id, email, name, status, is_admin, expires_at, created_at FROM users WHERE email = $1', [email]);
+      userRow = rows[0];
+    } else {
+      const { rows } = await pool.query('SELECT id, email, name, status, is_admin, expires_at, created_at FROM users WHERE id = $1', [parseInt(user_id)]);
+      userRow = rows[0];
+    }
+
+    if (!userRow) return res.json({ found: false, message: '해당 유저 없음' });
+
+    const uid = userRow.id;
+
+    // 2. 주문 데이터 집계
+    const { rows: orderStats } = await pool.query(`
+      SELECT
+        COUNT(*)::INTEGER                                           AS total_orders,
+        COUNT(*) FILTER (WHERE is_excluded = false OR is_excluded IS NULL)::INTEGER AS active_orders,
+        MIN(order_date)                                            AS oldest_order,
+        MAX(order_date)                                            AS newest_order,
+        MAX(created_at) AT TIME ZONE 'Asia/Seoul'                 AS last_uploaded_at
+      FROM orders WHERE user_id = $1
+    `, [uid]);
+
+    // 3. 광고 데이터 집계
+    const { rows: adStats } = await pool.query(`
+      SELECT COUNT(*)::INTEGER AS total_ad_rows
+      FROM ad_reports WHERE user_id = $1
+    `, [uid]);
+
+    // 4. 최근 주문 5건
+    const { rows: recentOrders } = await pool.query(`
+      SELECT id, order_number, order_date, product_name, payment_amount, is_excluded, exclusion_type, created_at
+      FROM orders WHERE user_id = $1
+      ORDER BY created_at DESC LIMIT 5
+    `, [uid]);
+
+    res.json({
+      found: true,
+      user: userRow,
+      orders: {
+        ...orderStats[0],
+        recent: recentOrders,
+      },
+      ad_reports: adStats[0],
+      note: 'raw_data는 별도 테이블이 아닌 ad_reports/returns 테이블의 JSONB 컬럼입니다.',
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 유저 데이터 키-값 저장소 ─────────────────────────────────────────────────
 // key: platforms | suppliers | b2bProducts | history | shortcuts
 router.get('/user/data/:key', requireAuth, async (req, res) => {

@@ -3765,11 +3765,16 @@ async function renderOrders() {
       if (ordersExcludeFilter !== 'all') qs.set('exclusion_filter', ordersExcludeFilter);
 
       const res  = await fetch(`/api/orders?${qs.toString()}`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.error(`[renderOrders] API 오류 ${res.status}:`, errData.error || '알 수 없는 오류');
+        throw new Error(`API ${res.status}: ${errData.error || '주문 조회 실패'}`);
+      }
       const data = await res.json();
       pageOrders   = data.orders || [];
       totalFiltered = data.total  || 0;
     } catch (e) {
-      console.error('[renderOrders] API fetch 실패, 로컬 폴백', e);
+      console.error('[renderOrders] API fetch 실패, 로컬 폴백', e.message);
       // 폴백: 로컬 orders 배열 직접 사용
       let loc = dateFiltered;
       if (ordersExcludeFilter === 'included')   loc = dateFiltered.filter(o => !o.is_excluded);

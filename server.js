@@ -56,7 +56,8 @@ app.use('/api', apiRouter);
 app.use('/', adminRouter);
 
 app.get('/', (req, res) => {
-  if (req.user) {
+  // 어드민 대리접속 중이면 status 체크 건너뜀 (impersonated user의 status로 어드민이 차단되는 버그 방지)
+  if (req.user && !req.originalAdmin) {
     const { status, expires_at } = req.user;
     if (status === 'pending') return res.redirect('/pending?reason=pending');
     if (status === 'blocked') return res.redirect('/pending?reason=blocked');
