@@ -1097,6 +1097,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
       <input type="file" id="adsFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleAdsUpload(this)">
       <div id="adsSummaryBar" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:16px"></div>
+      <div id="adsUploadProgress" style="display:none;margin-top:6px;font-size:13px;color:var(--text-dim);align-items:center;gap:8px">
+        <span id="adsUploadProgressText"></span>
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div id="adsUploadProgressBar" style="height:100%;background:#3b82f6;border-radius:2px;transition:width 0.2s;width:0%"></div>
+        </div>
+      </div>
     </div>
     <div class="section-label">필터</div>
     <div class="card">
@@ -4143,21 +4149,59 @@ function formatAdDate(val) {
   return s;
 }
 
-// 공통 광고 업로드 실행 함수
+// 공통 광고 업로드 실행 함수 (300건씩 청크 분할 API 호출)
 async function doAdUpload(toAdd) {
   adReports = [...adReports, ...toAdd];
   localStorage.setItem('adReportsData', JSON.stringify(adReports));
+
   if (currentUser) {
+    const CHUNK  = 300;
+    const total  = toAdd.length;
+    let inserted = 0, skipped = 0, failed = 0;
+
+    const progressWrap = document.getElementById('adsUploadProgress');
+    const progressText = document.getElementById('adsUploadProgressText');
+    const progressBar  = document.getElementById('adsUploadProgressBar');
+
+    function showProgress(done) {
+      if (!progressWrap) return;
+      progressWrap.style.display = 'flex';
+      progressText.textContent   = `업로드 중... (${done.toLocaleString()} / ${total.toLocaleString()}건)`;
+      progressBar.style.width    = `${Math.round(done / total * 100)}%`;
+    }
+    function hideProgress() { if (progressWrap) progressWrap.style.display = 'none'; }
+
+    showProgress(0);
     try {
-      const dbRes = await fetch('/api/ad-reports/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toAdd) });
-      const dbResult = dbRes.ok ? await dbRes.json() : {};
-      console.log('[ads] DB 저장:', dbResult);
-      renderAds();
-      loadAdsSummary();
-      alert(`${toAdd.length}건 처리됨\nDB 저장: ${dbResult.inserted ?? '?'}건 / 중복스킵: ${dbResult.skipped ?? '?'}건 / 실패: ${dbResult.failed ?? 0}건\n(총 ${adReports.length}건)`);
-      return;
-    } catch(e) { console.error('[ads] DB 저장 오류:', e); }
+      for (let start = 0; start < total; start += CHUNK) {
+        showProgress(start);
+        const chunk = toAdd.slice(start, start + CHUNK);
+        try {
+          const res = await fetch('/api/ad-reports/bulk', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(chunk),
+          });
+          const d = res.ok ? await res.json().catch(() => ({})) : {};
+          inserted += d.inserted ?? 0;
+          skipped  += d.skipped  ?? 0;
+          failed   += d.failed   ?? 0;
+        } catch(e) {
+          console.error(`[ads] 청크 ${start}~${start + chunk.length} 오류:`, e.message);
+          failed += chunk.length;
+        }
+      }
+      showProgress(total);
+    } finally {
+      setTimeout(hideProgress, 800);
+    }
+
+    console.log(`[ads] DB 저장 완료: 삽입=${inserted} 중복=${skipped} 실패=${failed}`);
+    renderAds();
+    loadAdsSummary();
+    alert(`${total}건 처리됨\nDB 저장: ${inserted}건 / 중복스킵: ${skipped}건 / 실패: ${failed}건\n(총 ${adReports.length}건)`);
+    return;
   }
+
   renderAds();
   alert(`${toAdd.length}건 추가됨 (총 ${adReports.length}건)`);
 }
@@ -4897,6 +4941,7 @@ async function handleCouponBulkUpload(input) {
 
       let successCount = 0, dupCount = 0;
       const errorRows = [];
+      const validItems = [];
 
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -4936,20 +4981,29 @@ async function handleCouponBulkUpload(input) {
         const payload = { coupon_id: coupon_id || null, name, discount_amount: amt, start_at, end_at, option_ids };
 
         if (currentUser) {
-          try {
-            const data = await fetch('/api/coupons', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            }).then(r => r.json());
-            if (data.error) throw new Error(data.error);
-            coupons.push(data);
-            successCount++;
-          } catch(err) {
-            errorRows.push(`${i + 1}행 (${name}): 저장 실패 — ${err.message}`);
-          }
+          validItems.push(payload);
         } else {
           coupons.push({ id: Date.now() + i, ...payload });
           successCount++;
+        }
+      }
+
+      if (currentUser && validItems.length) {
+        const CHUNK = 100;
+        for (let start = 0; start < validItems.length; start += CHUNK) {
+          const chunk = validItems.slice(start, start + CHUNK);
+          try {
+            const res = await fetch('/api/coupons/bulk', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(chunk),
+            });
+            const d = res.ok ? await res.json().catch(()=>({})) : { error: res.statusText };
+            if (d.error) throw new Error(d.error);
+            if (d.rows) d.rows.forEach(row => coupons.push(row));
+            successCount += d.inserted || 0;
+          } catch(err) {
+            errorRows.push(`서버 저장 실패 (${start+1}~${Math.min(start+CHUNK, validItems.length)}행): ${err.message}`);
+          }
         }
       }
 
@@ -6406,18 +6460,27 @@ async function handleReturnsUpload(event) {
     })).filter(r => r.receipt_number);
 
     if (!items.length) { if (statusEl) statusEl.textContent = '접수번호 컬럼을 찾을 수 없습니다'; return; }
-    if (statusEl) statusEl.textContent = `업로드 중… (${items.length}건)`;
 
-    const r = await fetch('/api/returns/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(items),
-    });
-    const d = await r.json();
+    const CHUNK = 100;
+    const total = items.length;
+    let inserted = 0, skipped = 0, ordersUpdated = 0;
+    for (let start = 0; start < total; start += CHUNK) {
+      if (statusEl) statusEl.textContent = `처리 중… ${Math.min(start + CHUNK, total).toLocaleString()}건 완료 / ${total.toLocaleString()}건`;
+      const chunk = items.slice(start, start + CHUNK);
+      const r = await fetch('/api/returns/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk),
+      });
+      const d = await r.json();
+      inserted      += d.inserted      || 0;
+      skipped       += d.skipped       || 0;
+      ordersUpdated += d.ordersUpdated || 0;
+    }
     if (statusEl) {
       const now = new Date();
       const kst = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      statusEl.textContent = `최근 업로드: ${kst} | 신규 ${d.inserted}건 / 중복 ${d.skipped}건 제외` + (d.ordersUpdated ? ` | 주문 ${d.ordersUpdated}건 반품 처리` : '');
+      statusEl.textContent = `최근 업로드: ${kst} | 신규 ${inserted}건 / 중복 ${skipped}건 제외` + (ordersUpdated ? ` | 주문 ${ordersUpdated}건 반품 처리` : '');
     }
     renderReturns();
     loadReturnsSummary();
@@ -6503,22 +6566,30 @@ async function handleCancelShipmentUpload(event) {
       if (!confirm(`'이미출고' 행 ${missingReceipt.length}건에 접수번호가 없어 반품 목록에 추가되지 않습니다.\n주문 제외만 처리할까요?`)) return;
     }
 
-    if (statusEl) statusEl.textContent = `업로드 중… (${items.length}건)`;
-
-    const r = await fetch('/api/cancel-shipments/bulk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(items),
-    });
-    if (!r.ok) throw new Error(await r.text());
-    const d = await r.json();
+    const CHUNK = 100;
+    const total = items.length;
+    let inserted = 0, skipped = 0, ordersUpdated = 0;
+    for (let start = 0; start < total; start += CHUNK) {
+      if (statusEl) statusEl.textContent = `처리 중… ${Math.min(start + CHUNK, total).toLocaleString()}건 완료 / ${total.toLocaleString()}건`;
+      const chunk = items.slice(start, start + CHUNK);
+      const r = await fetch('/api/cancel-shipments/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const d = await r.json();
+      inserted      += d.inserted      || 0;
+      skipped       += d.skipped       || 0;
+      ordersUpdated += d.ordersUpdated || 0;
+    }
     if (statusEl) {
       const now = new Date();
       const kst = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
       const parts = [`최근 출고중지 업로드: ${kst}`];
-      if (d.inserted)     parts.push(`반품목록 추가 ${d.inserted}건`);
-      if (d.skipped)      parts.push(`중복 ${d.skipped}건`);
-      if (d.ordersUpdated) parts.push(`주문 제외 ${d.ordersUpdated}건`);
+      if (inserted)      parts.push(`반품목록 추가 ${inserted}건`);
+      if (skipped)       parts.push(`중복 ${skipped}건`);
+      if (ordersUpdated) parts.push(`주문 제외 ${ordersUpdated}건`);
       statusEl.textContent = parts.join(' | ');
     }
     renderCancelShipments();

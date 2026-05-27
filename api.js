@@ -515,8 +515,8 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
   if (!items.length) return res.json({ inserted: 0 });
   console.log(`[orders/bulk] user=${req.user.id} items=${items.length}`);
 
-  // 200건씩 멀티행 배치 INSERT (건별 쿼리 대비 ~100배 빠름)
-  const BATCH = 200;
+  // 100건씩 멀티행 배치 INSERT (건별 쿼리 대비 ~100배 빠름)
+  const BATCH = 100;
   const COLS  = 24; // INSERT 컬럼 수
   let inserted = 0;
 
@@ -681,7 +681,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
     console.log(`[ad-reports/bulk] user=${userId} items=${items.length} 컬럼:`, Object.keys(items[0]).join(' | '));
   }
 
-  const CHUNK = 500;
+  const CHUNK = 100;
   let inserted = 0, skipped = 0, failed = 0;
 
   try {
@@ -851,6 +851,55 @@ router.post('/coupons', requireAuth, async (req, res) => {
     );
     res.status(201).json(couponRow(rows[0]));
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 쿠폰 대량 등록 (100건씩 배치 INSERT)
+router.post('/coupons/bulk', requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.json({ inserted: 0, skipped: 0, rows: [] });
+  console.log(`[coupons/bulk] user=${req.user.id} items=${items.length}`);
+
+  const BATCH = 100;
+  let inserted = 0, skipped = 0;
+  const insertedRows = [];
+
+  try {
+    for (let start = 0; start < items.length; start += BATCH) {
+      const batch = items.slice(start, start + BATCH);
+      const placeholders = [];
+      const params       = [];
+      let p = 1;
+
+      for (const c of batch) {
+        if (!c.name) { skipped++; continue; }
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6})`);
+        params.push(
+          req.user.id,
+          c.coupon_id       || null,
+          c.name,
+          c.discount_amount || 0,
+          c.start_at        || null,
+          c.end_at          || null,
+          JSON.stringify(Array.isArray(c.option_ids) ? c.option_ids : []),
+        );
+        p += 7;
+      }
+
+      if (placeholders.length > 0) {
+        const result = await pool.query(
+          `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids)
+           VALUES ${placeholders.join(',')} RETURNING *`,
+          params
+        );
+        inserted += result.rowCount;
+        result.rows.forEach(row => insertedRows.push(couponRow(row)));
+      }
+    }
+    res.json({ inserted, skipped, rows: insertedRows });
+  } catch(e) {
+    console.error('[coupons/bulk] DB 오류:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.put('/coupons/:id', requireAuth, async (req, res) => {
@@ -1320,21 +1369,55 @@ router.post('/returns/bulk', requireAuth, async (req, res) => {
   const items = req.body;
   if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'items 배열 필수' });
 
-  // 첫 번째 raw_data 키 출력 (실제 쿠팡 컬럼명 확인용)
-  const firstRaw = items[0]?.raw_data || {};
-  console.log('[returns/bulk] raw_data 첫 번째 행 키:', Object.keys(firstRaw));
+  console.log('[returns/bulk] 수신:', items.length, '건');
 
+  const BATCH = 100;
   let inserted = 0, skipped = 0;
 
   try {
-    for (const r of items) {
-      const raw = r.raw_data || {};
+    for (let start = 0; start < items.length; start += BATCH) {
+      const batch = items.slice(start, start + BATCH);
+      const placeholders = [];
+      const params       = [];
+      let p = 1;
 
-      const productName = raw['노출상품명'] || raw['상품명']  || r.product_name  || null;
-      const optionName  = raw['옵션']       || raw['옵션명']  || r.option_name   || null;
-      const orderNumber = raw['주문번호']   || r.order_number || null;
+      for (const r of batch) {
+        const raw  = r.raw_data || {};
+        const productName = raw['노출상품명'] || raw['상품명'] || r.product_name || null;
+        const optionName  = raw['옵션']       || raw['옵션명'] || r.option_name  || null;
+        const orderNumber = raw['주문번호']   || r.order_number || null;
 
-      console.log('[returns/bulk] productName:', productName, '| optionName:', optionName, '| orderNumber:', orderNumber);
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},$${p+15},$${p+16},$${p+17},$${p+18},$${p+19},$${p+20},$${p+21},$${p+22},$${p+23},$${p+24},$${p+25})`);
+        params.push(
+          req.user.id,
+          r.received_at                   || null,
+          r.receipt_number,
+          r.delivery_status               || null,
+          r.return_status                 || null,
+          r.warehousing_status            || null,
+          r.warehousing_method            || null,
+          r.warehousing_tracking          || null,
+          productName,
+          optionName,
+          parseInt(r.quantity)            || 1,
+          r.return_reason                 || null,
+          parseInt(r.return_shipping_fee) || 0,
+          r.shipping_fee_burden           || null,
+          parseInt(r.refund_amount)       || 0,
+          r.recipient_masked              || null,
+          r.phone_masked                  || null,
+          r.return_address_masked         || null,
+          r.collection_address_masked     || null,
+          orderNumber,
+          r.expected_ship_date            || null,
+          r.warehousing_complete_date     || null,
+          r.return_complete_date          || null,
+          r.receipt_channel               || null,
+          r.option_id                     || null,
+          r.raw_data ? JSON.stringify(r.raw_data) : null,
+        );
+        p += 26;
+      }
 
       const result = await pool.query(`
         INSERT INTO returns (
@@ -1345,39 +1428,12 @@ router.post('/returns/bulk', requireAuth, async (req, res) => {
           recipient_masked, phone_masked, return_address_masked, collection_address_masked,
           order_number, expected_ship_date, warehousing_complete_date,
           return_complete_date, receipt_channel, option_id, raw_data
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
-        )
+        ) VALUES ${placeholders.join(',')}
         ON CONFLICT (user_id, receipt_number) DO NOTHING
-      `, [
-        req.user.id,
-        r.received_at                   || null,
-        r.receipt_number,
-        r.delivery_status               || null,
-        r.return_status                 || null,
-        r.warehousing_status            || null,
-        r.warehousing_method            || null,
-        r.warehousing_tracking          || null,
-        productName,
-        optionName,
-        parseInt(r.quantity)            || 1,
-        r.return_reason                 || null,
-        parseInt(r.return_shipping_fee) || 0,
-        r.shipping_fee_burden           || null,
-        parseInt(r.refund_amount)       || 0,
-        r.recipient_masked              || null,
-        r.phone_masked                  || null,
-        r.return_address_masked         || null,
-        r.collection_address_masked     || null,
-        orderNumber,
-        r.expected_ship_date            || null,
-        r.warehousing_complete_date     || null,
-        r.return_complete_date          || null,
-        r.receipt_channel               || null,
-        r.option_id                     || null,
-        r.raw_data ? JSON.stringify(r.raw_data) : null,
-      ]);
-      if (result.rowCount > 0) inserted++; else skipped++;
+      `, params);
+      inserted += result.rowCount;
+      skipped  += batch.length - result.rowCount;
+      console.log(`[returns/bulk] 배치 ${start + 1}~${start + batch.length}: 삽입 ${result.rowCount}건`);
     }
 
     // INSERT 완료 후 주문번호 추출 → orders 반품 자동 미인식 처리
@@ -1414,18 +1470,44 @@ router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
   const cancelOrderNumbers = [];
 
   console.log('[cancel-shipments/bulk] 수신 건수:', items.length);
-  if (items[0]) {
-    console.log('[cancel-shipments/bulk] 첫 번째 행 delivery_status:', items[0].delivery_status);
-    console.log('[cancel-shipments/bulk] 첫 번째 행 receipt_number:', items[0].receipt_number);
-    console.log('[cancel-shipments/bulk] 첫 번째 행 raw_data keys:', Object.keys(items[0].raw_data || {}));
-  }
+
+  const BATCH = 100;
 
   try {
-    for (const r of items) {
-      const orderNumber = r.order_number || null;
+    for (let start = 0; start < items.length; start += BATCH) {
+      const batch = items.slice(start, start + BATCH);
+      const placeholders = [];
+      const params       = [];
+      let p = 1;
 
-      // 접수번호가 있는 건은 모두 returns 테이블에 저장 (배송상태 무관)
-      if (r.receipt_number) {
+      for (const r of items.slice(start, start + BATCH)) {
+        const orderNumber = r.order_number || null;
+        if (orderNumber) cancelOrderNumbers.push(orderNumber);
+        if (!r.receipt_number) continue; // 접수번호 없는 건은 returns INSERT 제외
+
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},'cancel',$${p+15})`);
+        params.push(
+          req.user.id,
+          r.received_at         || null,
+          r.receipt_number,
+          r.delivery_status     || null,
+          r.product_name        || null,
+          r.option_name         || null,
+          parseInt(r.quantity)  || 1,
+          r.return_reason       || null,
+          r.recipient_masked    || null,
+          r.phone_masked        || null,
+          orderNumber,
+          r.expected_ship_date  || null,
+          r.stop_complete_date  || null,
+          r.receipt_channel     || null,
+          r.option_id           || null,
+          r.raw_data ? JSON.stringify(r.raw_data) : null,
+        );
+        p += 16;
+      }
+
+      if (placeholders.length > 0) {
         const result = await pool.query(`
           INSERT INTO returns (
             user_id, received_at, receipt_number, delivery_status,
@@ -1433,32 +1515,13 @@ router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
             recipient_masked, phone_masked,
             order_number, expected_ship_date, warehousing_complete_date,
             receipt_channel, option_id, record_type, raw_data
-          ) VALUES (
-            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'cancel',$16
-          )
+          ) VALUES ${placeholders.join(',')}
           ON CONFLICT (user_id, receipt_number) DO NOTHING
-        `, [
-          req.user.id,
-          r.received_at              || null,
-          r.receipt_number,
-          r.delivery_status          || null,
-          r.product_name             || null,
-          r.option_name              || null,
-          parseInt(r.quantity)       || 1,
-          r.return_reason            || null,
-          r.recipient_masked         || null,
-          r.phone_masked             || null,
-          orderNumber,
-          r.expected_ship_date       || null,
-          r.stop_complete_date       || null,
-          r.receipt_channel          || null,
-          r.option_id                || null,
-          r.raw_data ? JSON.stringify(r.raw_data) : null,
-        ]);
-        if (result.rowCount > 0) inserted++; else skipped++;
+        `, params);
+        inserted += result.rowCount;
+        skipped  += placeholders.length - result.rowCount;
+        console.log(`[cancel-shipments/bulk] 배치 ${start + 1}~${start + batch.length}: 삽입 ${result.rowCount}건`);
       }
-      // orders 제외 처리
-      if (orderNumber) cancelOrderNumbers.push(orderNumber);
     }
 
     if (cancelOrderNumbers.length > 0) {
