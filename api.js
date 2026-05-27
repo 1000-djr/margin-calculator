@@ -515,51 +515,64 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
   if (!items.length) return res.json({ inserted: 0 });
   console.log(`[orders/bulk] user=${req.user.id} items=${items.length}`);
 
-  const CHUNK = 500;
+  // 200건씩 멀티행 배치 INSERT (건별 쿼리 대비 ~100배 빠름)
+  const BATCH = 200;
+  const COLS  = 24; // INSERT 컬럼 수
   let inserted = 0;
+
   try {
-    for (let start = 0; start < items.length; start += CHUNK) {
-      const chunk = items.slice(start, start + CHUNK);
-      for (const o of chunk) {
-        const r = await pool.query(
-          `INSERT INTO orders
-           (user_id,order_number,bundle_number,order_date,product_name,option_name,
-            display_name,display_product_id,option_id,payment_amount,shipping_fee,
-            quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
-            confirmed_date,payment_location,delivery_type,buyer_masked,
-            recipient_name_masked,recipient_phone_masked,recipient_address_masked)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
-           ON CONFLICT (user_id, order_number) DO NOTHING`,
-          [
-            req.user.id,
-            o['주문번호'] || '',
-            o['묶음배송번호'] || '',
-            o['주문일'] || '',
-            o['등록상품명'] || '',
-            o['등록옵션명'] || '',
-            o['노출상품명(옵션명)'] || o['노출상품명'] || '',
-            o['노출상품ID'] || '',
-            o['옵션ID'] || '',
-            parseInt(o['결제액']) || 0,
-            parseInt(o['배송비']) || 0,
-            parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,
-            parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0,
-            o['택배사'] || '',
-            o['운송장번호'] || '',
-            o['출고일'] || '',
-            o['배송완료일'] || '',
-            o['구매확정일자'] || '',
-            o['결제위치'] || '',
-            o['배송유형'] || '',
-            o['구매자'] || '',
-            o['수취인이름'] || '',
-            o['수취인전화번호'] || '',
-            o['수취인 주소'] || o['수취인주소'] || '',
-          ]
+    for (let start = 0; start < items.length; start += BATCH) {
+      const batch = items.slice(start, start + BATCH);
+      const placeholders = [];
+      const params       = [];
+      let p = 1;
+
+      for (const o of batch) {
+        placeholders.push(
+          `($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},$${p+15},$${p+16},$${p+17},$${p+18},$${p+19},$${p+20},$${p+21},$${p+22},$${p+23})`
         );
-        if (r.rowCount > 0) inserted++;
+        params.push(
+          req.user.id,
+          o['주문번호'] || '',
+          o['묶음배송번호'] || '',
+          o['주문일'] || '',
+          o['등록상품명'] || '',
+          o['등록옵션명'] || '',
+          o['노출상품명(옵션명)'] || o['노출상품명'] || '',
+          o['노출상품ID'] || '',
+          o['옵션ID'] || '',
+          parseInt(o['결제액']) || 0,
+          parseInt(o['배송비']) || 0,
+          parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,
+          parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0,
+          o['택배사'] || '',
+          o['운송장번호'] || '',
+          o['출고일'] || '',
+          o['배송완료일'] || '',
+          o['구매확정일자'] || '',
+          o['결제위치'] || '',
+          o['배송유형'] || '',
+          o['구매자'] || '',
+          o['수취인이름'] || '',
+          o['수취인전화번호'] || '',
+          o['수취인 주소'] || o['수취인주소'] || '',
+        );
+        p += COLS;
       }
-      console.log(`[orders/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 처리 완료`);
+
+      const r = await pool.query(
+        `INSERT INTO orders
+         (user_id,order_number,bundle_number,order_date,product_name,option_name,
+          display_name,display_product_id,option_id,payment_amount,shipping_fee,
+          quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
+          confirmed_date,payment_location,delivery_type,buyer_masked,
+          recipient_name_masked,recipient_phone_masked,recipient_address_masked)
+         VALUES ${placeholders.join(',')}
+         ON CONFLICT (user_id, order_number) DO NOTHING`,
+        params
+      );
+      inserted += r.rowCount;
+      console.log(`[orders/bulk] 배치 ${start + 1}~${start + batch.length}: 삽입 ${r.rowCount}건`);
     }
     console.log(`[orders/bulk] 완료: 삽입=${inserted} / 전체=${items.length}`);
     res.json({ inserted });

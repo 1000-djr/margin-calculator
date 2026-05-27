@@ -1023,6 +1023,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
       <input type="file" id="ordersFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleOrdersUpload(this)">
       <div id="ordersSummaryBar" style="font-size:12px;color:var(--text-dim);margin-top:8px;min-height:16px"></div>
+      <div id="ordersUploadProgress" style="display:none;margin-top:6px;font-size:13px;color:var(--text-dim);display:flex;align-items:center;gap:8px">
+        <span id="ordersUploadProgressText"></span>
+        <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+          <div id="ordersUploadProgressBar" style="height:100%;background:#3b82f6;border-radius:2px;transition:width 0.2s;width:0%"></div>
+        </div>
+      </div>
       <div class="btn-row" style="margin-top:8px;margin-bottom:0">
         <button class="btn btn-ghost btn-sm" onclick="openBulkExcludeModal()">🚫 주문번호 일괄 미인식</button>
         <button id="coupangSyncBtn" class="btn btn-sm" onclick="openCoupangSyncModal()" style="display:none;background:#3b82f6;color:#fff;border:none;font-size:12px;padding:3px 12px">🔄 API로 불러오기</button>
@@ -3372,28 +3378,65 @@ function handleOrdersUpload(input) {
 async function doOrdersUpload(toAdd) {
   orders = [...orders, ...toAdd];
   localStorage.setItem('ordersData', JSON.stringify(orders));
+
   if (currentUser) {
+    const CHUNK    = 300;          // 요청당 건수 (Railway 타임아웃 방지)
+    const total    = toAdd.length;
+    let   inserted = 0;
+    let   failed   = 0;
+
+    const progressWrap = document.getElementById('ordersUploadProgress');
+    const progressText = document.getElementById('ordersUploadProgressText');
+    const progressBar  = document.getElementById('ordersUploadProgressBar');
+
+    function showProgress(done) {
+      if (!progressWrap) return;
+      progressWrap.style.display = 'flex';
+      progressText.textContent   = `업로드 중... (${done.toLocaleString()} / ${total.toLocaleString()}건)`;
+      progressBar.style.width    = `${Math.round(done / total * 100)}%`;
+    }
+    function hideProgress() {
+      if (progressWrap) progressWrap.style.display = 'none';
+    }
+
+    showProgress(0);
     try {
-      const res = await fetch('/api/orders/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(toAdd)
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        console.error('[orders] DB 저장 실패:', res.status, err);
-        alert(`⚠️ DB 저장 실패 (${res.status}: ${err.error || '알 수 없는 오류'})\n로컬에는 저장됐습니다. 로그인 상태를 확인해주세요.`);
-      } else {
-        const result = await res.json().catch(() => ({}));
-        console.log('[orders] DB 저장 완료:', result.inserted, '건 삽입');
+      for (let start = 0; start < total; start += CHUNK) {
+        showProgress(start);
+        const chunk = toAdd.slice(start, start + CHUNK);
+        try {
+          const res = await fetch('/api/orders/bulk', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(chunk),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            console.error(`[orders] 청크 ${start}~${start + chunk.length} 실패 ${res.status}:`, err.error);
+            failed += chunk.length;
+          } else {
+            const result = await res.json().catch(() => ({}));
+            inserted += result.inserted || 0;
+          }
+        } catch(e) {
+          console.error(`[orders] 청크 ${start}~${start + chunk.length} 네트워크 오류:`, e.message);
+          failed += chunk.length;
+        }
       }
-    } catch(e) {
-      console.error('[orders] 네트워크 오류:', e);
-      alert(`⚠️ DB 저장 중 네트워크 오류: ${e.message}\n로컬에는 저장됐습니다.`);
+      showProgress(total);
+    } finally {
+      setTimeout(hideProgress, 800);
+    }
+
+    if (failed > 0) {
+      alert(`⚠️ 일부 저장 실패: ${failed}건\n${inserted}건은 정상 저장됐습니다.\n로컬에는 전체 저장됐습니다.`);
+    } else {
+      console.log(`[orders] DB 저장 완료: ${inserted}건 삽입 / 전체 ${total}건`);
     }
   }
+
   const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
-  const matchedIds = newOptionIds.filter(id => optionMatchings[id]);
+  const matchedIds   = newOptionIds.filter(id => optionMatchings[id]);
   if (matchedIds.length > 0) showMatchingReviewModal(matchedIds, toAdd);
   ordersPage = 1;
   renderOrders();
