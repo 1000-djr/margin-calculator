@@ -4964,6 +4964,23 @@ async function handleCouponBulkUpload(input) {
       const errorRows = [];
       const validItems = [];
 
+      // 날짜 파싱: Date 객체 / Excel 시리얼 숫자(XLSX.SSF) / 텍스트 모두 처리 → "yyyy-MM-dd HH:mm"
+      function parseCouponDate(val) {
+        const pad = n => String(n).padStart(2, '0');
+        if (val instanceof Date) {
+          if (isNaN(val.getTime())) return null;
+          return `${val.getFullYear()}-${pad(val.getMonth()+1)}-${pad(val.getDate())} ${pad(val.getHours())}:${pad(val.getMinutes())}`;
+        }
+        if (typeof val === 'number') {
+          const dc = XLSX.SSF.parse_date_code(val);
+          if (!dc) return null;
+          return `${dc.y}-${pad(dc.m)}-${pad(dc.d)} ${pad(dc.H)}:${pad(dc.M)}`;
+        }
+        const s = String(val).trim();
+        const d = new Date(s.replace(' ', 'T'));
+        return isNaN(d.getTime()) ? null : s.slice(0, 16);
+      }
+
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (row.every(c => String(c).trim() === '')) continue; // 빈 행 skip
@@ -4979,18 +4996,6 @@ async function handleCouponBulkUpload(input) {
         if (!name)              { errorRows.push(`${i + 1}행: 쿠폰명 없음`); continue; }
         if (!amt || amt <= 0)   { errorRows.push(`${i + 1}행 (${name}): 할인금액 오류`); continue; }
         if (!startRaw || !endRaw) { errorRows.push(`${i + 1}행 (${name}): 기간 없음`); continue; }
-
-        // 날짜 파싱: Date 객체 / Excel 시리얼 숫자 / 텍스트("2026-05-01 00:00") 모두 처리
-        function parseCouponDate(val) {
-          if (val instanceof Date) return isNaN(val.getTime()) ? null : val.toISOString().slice(0, 16);
-          if (typeof val === 'number') {
-            const d = new Date(Math.round((val - 25569) * 86400 * 1000));
-            return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 16);
-          }
-          const s = String(val).trim().replace(' ', 'T');
-          const d = new Date(s);
-          return isNaN(d.getTime()) ? null : s;
-        }
         const start_at = parseCouponDate(startRaw);
         const end_at   = parseCouponDate(endRaw);
         if (!start_at || !end_at) {
