@@ -940,6 +940,78 @@ router.delete('/coupons/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 상시할인가 ────────────────────────────────────────────────────────────────
+function fdRow(r) {
+  return {
+    id:              r.id,
+    option_id:       r.option_id,
+    discount_amount: parseFloat(r.discount_amount) || 0,
+    start_date:      r.start_date ? r.start_date.toISOString().slice(0, 10) : '',
+    end_date:        r.end_date   ? r.end_date.toISOString().slice(0, 10)   : null,
+  };
+}
+
+router.get('/fixed-discounts', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM fixed_discounts WHERE user_id=$1 ORDER BY start_date DESC, created_at DESC',
+      [req.user.id]
+    );
+    res.json(rows.map(fdRow));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/fixed-discounts', requireAuth, async (req, res) => {
+  const { option_id, discount_amount, start_date, end_date } = req.body;
+  if (!option_id)                          return res.status(400).json({ error: 'option_id 필수' });
+  if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
+  if (!start_date)                         return res.status(400).json({ error: '시작일 필수' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [req.user.id, option_id, discount_amount, start_date, end_date || null]
+    );
+    res.status(201).json(fdRow(rows[0]));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/fixed-discounts/:id', requireAuth, async (req, res) => {
+  const { option_id, discount_amount, start_date, end_date } = req.body;
+  if (!option_id)                          return res.status(400).json({ error: 'option_id 필수' });
+  if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
+  if (!start_date)                         return res.status(400).json({ error: '시작일 필수' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE fixed_discounts SET option_id=$3,discount_amount=$4,start_date=$5,end_date=$6
+       WHERE id=$1 AND user_id=$2 RETURNING *`,
+      [req.params.id, req.user.id, option_id, discount_amount, start_date, end_date || null]
+    );
+    if (!rows.length) return res.status(404).json({ error: '항목을 찾을 수 없습니다' });
+    res.json(fdRow(rows[0]));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/fixed-discounts/:id/end', requireAuth, async (req, res) => {
+  const { end_date } = req.body;
+  if (!end_date) return res.status(400).json({ error: 'end_date 필수' });
+  try {
+    const { rows } = await pool.query(
+      `UPDATE fixed_discounts SET end_date=$3 WHERE id=$1 AND user_id=$2 RETURNING *`,
+      [req.params.id, req.user.id, end_date]
+    );
+    if (!rows.length) return res.status(404).json({ error: '항목을 찾을 수 없습니다' });
+    res.json(fdRow(rows[0]));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/fixed-discounts/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM fixed_discounts WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 바로가기 ─────────────────────────────────────────────────────────────────
 router.get('/shortcuts', requireAuth, async (req, res) => {
   try {

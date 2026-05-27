@@ -169,6 +169,16 @@ async function initDB() {
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
+    CREATE TABLE IF NOT EXISTS fixed_discounts (
+      id              SERIAL PRIMARY KEY,
+      user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      option_id       VARCHAR(100) NOT NULL,
+      discount_amount NUMERIC(12,2) NOT NULL,
+      start_date      DATE NOT NULL,
+      end_date        DATE,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS shortcuts (
       id         SERIAL PRIMARY KEY,
       user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
