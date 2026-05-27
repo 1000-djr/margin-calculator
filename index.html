@@ -4980,9 +4980,13 @@ async function handleCouponBulkUpload(input) {
         if (!amt || amt <= 0)   { errorRows.push(`${i + 1}행 (${name}): 할인금액 오류`); continue; }
         if (!startRaw || !endRaw) { errorRows.push(`${i + 1}행 (${name}): 기간 없음`); continue; }
 
-        // 날짜 파싱: Date 객체(cellDates:true) 또는 텍스트("2026-05-01 00:00") 모두 처리
+        // 날짜 파싱: Date 객체 / Excel 시리얼 숫자 / 텍스트("2026-05-01 00:00") 모두 처리
         function parseCouponDate(val) {
           if (val instanceof Date) return isNaN(val.getTime()) ? null : val.toISOString().slice(0, 16);
+          if (typeof val === 'number') {
+            const d = new Date(Math.round((val - 25569) * 86400 * 1000));
+            return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 16);
+          }
           const s = String(val).trim().replace(' ', 'T');
           const d = new Date(s);
           return isNaN(d.getTime()) ? null : s;
