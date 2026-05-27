@@ -1194,7 +1194,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn" id="couponCancelBtn" onclick="resetCouponForm()" style="display:none">취소</button>
       </div>
     </div>
-    <div class="section-label">쿠폰 목록</div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>쿠폰 목록</span>
+      <button class="btn btn-danger btn-sm" onclick="deleteAllCoupons()" style="margin-bottom:0">전체 삭제</button>
+    </div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table" style="white-space:normal">
         <thead><tr>
@@ -4771,6 +4774,24 @@ function openAdGuideModal() {
 function closeAdGuideModal() {
   const el = document.getElementById('adGuideBackdrop');
   if (el) el.style.display = 'none';
+}
+
+async function deleteAllCoupons() {
+  const ok = await showConfirmModal({
+    icon: '🗑️',
+    title: '전체 쿠폰 삭제',
+    message: '전체 쿠폰을 삭제하시겠습니까? 되돌릴 수 없습니다.',
+    confirmText: '전체 삭제',
+    cancelText: '취소',
+  });
+  if (!ok) return;
+  coupons = [];
+  localStorage.setItem('couponsData', JSON.stringify(coupons));
+  if (currentUser) {
+    try { await fetch('/api/coupons/all', { method: 'DELETE' }); } catch(e) {}
+  }
+  renderCoupons();
+  loadCouponsSummary();
 }
 
 async function deleteAllAds() {

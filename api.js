@@ -926,6 +926,13 @@ router.put('/coupons/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.delete('/coupons/all', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM coupons WHERE user_id=$1', [req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/coupons/:id', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM coupons WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
