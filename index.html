@@ -4953,12 +4953,29 @@ async function handleCouponBulkUpload(input) {
       if (rows.length < 2) { alert('데이터가 없습니다'); return; }
 
       const headers  = rows[0].map(h => String(h).trim());
-      const colName  = headers.indexOf('쿠폰명');
-      const colCid   = headers.indexOf('쿠폰ID');
-      const colAmt   = headers.indexOf('할인금액(원)');
-      const colStart = headers.indexOf('시작일시(YYYY-MM-DD HH:mm)');
-      const colEnd   = headers.indexOf('종료일시(YYYY-MM-DD HH:mm)');
-      const colOpts  = headers.indexOf('적용옵션ID(쉼표구분)');
+
+      // 컬럼명 유연 탐색: 후보 중 첫 일치 반환, 없으면 부분 일치 시도
+      function findCol(hdrs, candidates) {
+        for (const c of candidates) {
+          const idx = hdrs.indexOf(c);
+          if (idx >= 0) return idx;
+        }
+        for (const c of candidates) {
+          const idx = hdrs.findIndex(h => h.includes(c) || c.includes(h));
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      }
+
+      const colName  = findCol(headers, ['쿠폰명']);
+      const colCid   = findCol(headers, ['쿠폰ID', '쿠폰 ID', 'coupon_id']);
+      const colAmt   = findCol(headers, ['할인금액(원)', '할인금액()', '할인금액', '할인 금액']);
+      const colStart = findCol(headers, ['시작일시(YYYY-MM-DD HH:mm)', '시작일시', '사용시작일시', '시작 일시', '유효시작일']);
+      const colEnd   = findCol(headers, ['종료일시(YYYY-MM-DD HH:mm)', '종료일시', '사용종료일시', '종료 일시', '유효종료일']);
+      const colOpts  = findCol(headers, ['적용옵션ID(쉼표구분)', '적용옵션ID', '옵션ID', '옵션 ID']);
+
+      console.log('[쿠폰업로드] 실제 헤더:', headers);
+      console.log('[쿠폰업로드] 컬럼 인덱스:', { colName, colCid, colAmt, colStart, colEnd, colOpts });
 
       let successCount = 0, dupCount = 0;
       const errorRows = [];
@@ -5003,7 +5020,6 @@ async function handleCouponBulkUpload(input) {
 
         // 첫 데이터 행 디버그 로그
         if (i === 1) {
-          console.log('[쿠폰업로드] 헤더 인식:', { colName, colCid, colAmt, colStart, colEnd, colOpts });
           console.log('[쿠폰업로드] 1행 raw 값:', { name: row[colName], coupon_id: row[colCid], amtRaw: row[colAmt], startRaw: row[colStart], endRaw: row[colEnd] });
           console.log('[쿠폰업로드] 1행 타입:', { amtType: typeof row[colAmt], startType: typeof row[colStart], endType: typeof row[colEnd] });
         }
