@@ -7857,8 +7857,11 @@ async function runCoupangSync() {
       resultEl.style.color = '#22c55e';
       resultEl.textContent = `✅ 완료: ${data.total_fetched}건 조회, ${data.inserted}건 신규 저장, ${data.skipped}건 중복 스킵`;
       // 주문 목록 갱신
-      await loadOrders();
-      renderOrders();
+      try {
+        const r = await fetch('/api/orders');
+        if (r.ok) { orders = await r.json(); localStorage.setItem('ordersData', JSON.stringify(orders)); }
+      } catch(e) {}
+      await renderOrders();
     } else {
       resultEl.style.color = '#ef4444';
       resultEl.textContent = '❌ ' + (data.error || '동기화 실패');
