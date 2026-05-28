@@ -178,6 +178,8 @@ async function initDB() {
       end_date        DATE,
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS fixed_discounts_unique
+      ON fixed_discounts(user_id, option_id, start_date);
 
     CREATE TABLE IF NOT EXISTS shortcuts (
       id         SERIAL PRIMARY KEY,

@@ -976,6 +976,40 @@ router.post('/fixed-discounts', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/fixed-discounts/bulk', requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.json({ inserted: 0, skipped: 0, errors: 0, rows: [] });
+  const BATCH = 100;
+  let inserted = 0, skipped = 0, errors = 0;
+  const insertedRows = [];
+  try {
+    for (let start = 0; start < items.length; start += BATCH) {
+      const batch = items.slice(start, start + BATCH);
+      const placeholders = [];
+      const params = [];
+      let p = 1;
+      for (const item of batch) {
+        if (!item.option_id || !(item.discount_amount > 0) || !item.start_date) { errors++; continue; }
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4})`);
+        params.push(req.user.id, String(item.option_id), item.discount_amount, item.start_date, item.end_date || null);
+        p += 5;
+      }
+      if (!placeholders.length) continue;
+      const result = await pool.query(
+        `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
+         VALUES ${placeholders.join(',')}
+         ON CONFLICT (user_id,option_id,start_date) DO NOTHING
+         RETURNING *`,
+        params
+      );
+      inserted += result.rowCount;
+      skipped  += placeholders.length - result.rowCount;
+      result.rows.forEach(r => insertedRows.push(fdRow(r)));
+    }
+    res.json({ inserted, skipped, errors, rows: insertedRows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.put('/fixed-discounts/:id', requireAuth, async (req, res) => {
   const { option_id, discount_amount, start_date, end_date } = req.body;
   if (!option_id)                          return res.status(400).json({ error: 'option_id 필수' });

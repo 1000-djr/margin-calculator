@@ -1157,6 +1157,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
     <!-- ── 상시할인가 관리 ──────────────────────────────────────── -->
     <div class="section-label">상시할인가 관리</div>
+    <div class="btn-row" style="margin-bottom:6px">
+      <button class="btn" onclick="downloadFdTemplate()">📥 엑셀 양식 다운로드</button>
+      <button class="btn btn-primary" onclick="document.getElementById('fdBulkFileInput').click()">📤 엑셀 대량 등록</button>
+      <input type="file" id="fdBulkFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleFdBulkUpload(this)">
+    </div>
     <div class="card">
       <div class="card-title"><span class="dot"></span><span id="fdFormTitle">새 상시할인가 추가</span></div>
       <div class="field-row">
@@ -4962,6 +4967,118 @@ function openAdMappingForOid(oid) {
 }
 
 // ── 상시할인가 관리 ───────────────────────────────────────────────────────────
+function downloadFdTemplate() {
+  const headers = ['옵션ID', '할인금액', '적용시작일(YYYY-MM-DD)', '적용종료일(YYYY-MM-DD, 미입력시 진행중)'];
+  const example = ['123456789', '4900', '2026-05-01', '2026-12-31'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 24 }, { wch: 32 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '상시할인가등록양식');
+  XLSX.writeFile(wb, '상시할인가_대량등록_양식.xlsx');
+}
+
+async function handleFdBulkUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  try {
+    const data = await file.arrayBuffer();
+    const wb   = XLSX.read(data, { type: 'array', cellDates: true });
+    const ws   = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (rows.length < 2) { alert('데이터가 없습니다'); return; }
+
+    const headers = rows[0].map(h => String(h).trim());
+    function findCol(candidates) {
+      for (const c of candidates) { const i = headers.indexOf(c); if (i >= 0) return i; }
+      for (const c of candidates) { const i = headers.findIndex(h => h.includes(c) || c.includes(h)); if (i >= 0) return i; }
+      return -1;
+    }
+    const colOpt   = findCol(['옵션ID', '옵션 ID']);
+    const colAmt   = findCol(['할인금액', '할인 금액']);
+    const colStart = findCol(['적용시작일(YYYY-MM-DD)', '적용시작일', '시작일']);
+    const colEnd   = findCol(['적용종료일(YYYY-MM-DD, 미입력시 진행중)', '적용종료일', '종료일']);
+
+    console.log('[상시할인가업로드] 헤더:', headers);
+    console.log('[상시할인가업로드] 컬럼:', { colOpt, colAmt, colStart, colEnd });
+
+    // 날짜-only 파싱: Date객체 / 직렬번호 / 텍스트 → "yyyy-MM-dd" (KST)
+    function parseFdDate(val) {
+      const pad = n => String(n).padStart(2, '0');
+      if (val instanceof Date) {
+        if (isNaN(val.getTime())) return null;
+        return `${val.getFullYear()}-${pad(val.getMonth()+1)}-${pad(val.getDate())}`;
+      }
+      if (typeof val === 'number') {
+        // 날짜-only 직렬번호: UTC 날짜부 추출 (KST +9h로 이전날 방지)
+        const d = new Date(Math.round((val - 25569) * 86400 * 1000) + 9 * 3600 * 1000);
+        if (isNaN(d.getTime())) return null;
+        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
+      }
+      const s = String(val).trim().slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+    }
+
+    const validItems = [];
+    const errorRows  = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.every(c => String(c).trim() === '')) continue;
+      const option_id       = String(colOpt >= 0 ? row[colOpt] : '').trim();
+      const amtRaw          = colAmt >= 0 ? row[colAmt] : '';
+      const discount_amount = parseFloat(String(amtRaw).replace(/,/g, '')) || 0;
+      const startRaw        = colStart >= 0 ? row[colStart] : '';
+      const endRaw          = colEnd   >= 0 ? row[colEnd]   : '';
+
+      if (!option_id)           { errorRows.push(`${i+1}행: 옵션ID 없음`); continue; }
+      if (discount_amount <= 0) { errorRows.push(`${i+1}행 (${option_id}): 할인금액 오류 (원본값: ${amtRaw})`); continue; }
+      if (!startRaw && startRaw !== 0) { errorRows.push(`${i+1}행 (${option_id}): 시작일 없음`); continue; }
+      const start_date = parseFdDate(startRaw);
+      if (!start_date) { errorRows.push(`${i+1}행 (${option_id}): 시작일 형식 오류`); continue; }
+      const end_date = (endRaw || endRaw === 0) && String(endRaw).trim() ? parseFdDate(endRaw) : null;
+      validItems.push({ option_id, discount_amount, start_date, end_date });
+    }
+
+    let inserted = 0, skipped = 0;
+    if (currentUser && validItems.length) {
+      const CHUNK = 100;
+      for (let start = 0; start < validItems.length; start += CHUNK) {
+        const chunk = validItems.slice(start, start + CHUNK);
+        try {
+          const res = await fetch('/api/fixed-discounts/bulk', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(chunk),
+          });
+          const d = res.ok ? await res.json().catch(()=>({})) : { error: res.statusText };
+          if (d.error) throw new Error(d.error);
+          inserted += d.inserted || 0;
+          skipped  += d.skipped  || 0;
+          if (d.rows) d.rows.forEach(r => fixedDiscounts.push(r));
+        } catch(e) {
+          errorRows.push(`서버 오류 (${start+1}~${Math.min(start+CHUNK, validItems.length)}행): ${e.message}`);
+        }
+      }
+    } else if (!currentUser) {
+      validItems.forEach((item, idx) => {
+        fixedDiscounts.push({ id: Date.now() + idx, ...item });
+        inserted++;
+      });
+    }
+
+    renderFixedDiscounts();
+
+    const errDetail = errorRows.length
+      ? `<div style="text-align:left;font-size:12px;color:var(--red);max-height:120px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:8px 10px;margin-top:10px;font-family:var(--mono)">${errorRows.map(r => r.replace(/</g,'&lt;')).join('<br>')}</div>`
+      : '';
+    await showConfirmModal({
+      icon: '📊',
+      title: '상시할인가 대량 등록 완료',
+      message: `<strong>성공 ${inserted}건</strong> &nbsp;·&nbsp; 중복스킵 ${skipped}건 &nbsp;·&nbsp; 오류 ${errorRows.length}건${errDetail}`,
+      confirmText: '확인',
+      cancelText: '',
+    });
+  } catch(e) { alert('파일 읽기 오류: ' + e.message); }
+}
+
 function renderFixedDiscounts() {
   const tbody = document.getElementById('fdTbody');
   if (!tbody) return;
