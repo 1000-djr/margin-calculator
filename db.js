@@ -297,9 +297,10 @@ async function initDB() {
 
   // users 테이블 마이그레이션: status, is_admin, expires_at 컬럼 추가
   await pool.query(`
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS status     VARCHAR(20) DEFAULT 'pending';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin   BOOLEAN     DEFAULT FALSE;
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS status        VARCHAR(20) DEFAULT 'pending';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin      BOOLEAN     DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS expires_at    TIMESTAMPTZ DEFAULT NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS discount_mode VARCHAR(20) DEFAULT 'coupon';
   `);
 
   // ADMIN_EMAIL 환경변수로 지정된 유저를 자동으로 active + admin 처리

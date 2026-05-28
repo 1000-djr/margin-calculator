@@ -212,6 +212,30 @@ router.get('/admin/user-debug', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 유저 설정 ────────────────────────────────────────────────────────────────
+router.get('/user-settings', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT discount_mode FROM users WHERE id=$1',
+      [req.user.id]
+    );
+    res.json({ discount_mode: rows[0]?.discount_mode || 'coupon' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/user-settings', requireAuth, async (req, res) => {
+  const { discount_mode } = req.body;
+  if (!['coupon', 'fixed'].includes(discount_mode))
+    return res.status(400).json({ error: 'discount_mode는 coupon 또는 fixed' });
+  try {
+    await pool.query(
+      'UPDATE users SET discount_mode=$1 WHERE id=$2',
+      [discount_mode, req.user.id]
+    );
+    res.json({ ok: true, discount_mode });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 유저 데이터 키-값 저장소 ─────────────────────────────────────────────────
 // key: platforms | suppliers | b2bProducts | history | shortcuts
 router.get('/user/data/:key', requireAuth, async (req, res) => {

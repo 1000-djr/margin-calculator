@@ -1155,6 +1155,22 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <!-- ══ 쿠폰 탭 ════════════════════════════════════════════════════ -->
   <div class="panel" id="tab-coupons">
 
+    <!-- ── 할인 계산 방식 토글 ────────────────────────────────────── -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
+      <span style="font-size:13px;font-weight:600;color:var(--text)">할인 계산 방식</span>
+      <div style="display:flex;gap:6px;flex:1">
+        <button id="discountModeCoupon" onclick="setDiscountMode('coupon')"
+          class="btn btn-sm" style="font-size:12px;padding:4px 14px;border-radius:20px;transition:all .15s">
+          실제쿠폰 기준
+        </button>
+        <button id="discountModeFixed" onclick="setDiscountMode('fixed')"
+          class="btn btn-sm" style="font-size:12px;padding:4px 14px;border-radius:20px;transition:all .15s">
+          상시할인가 우선
+        </button>
+      </div>
+      <span id="discountModeDesc" style="font-size:11px;color:var(--text-dim)"></span>
+    </div>
+
     <!-- ── 상시할인가 관리 ──────────────────────────────────────── -->
     <div class="section-label">상시할인가 관리</div>
     <div class="btn-row" style="margin-bottom:6px">
@@ -1759,6 +1775,14 @@ async function loadUserData() {
     if (arData) { adReports = arData; localStorage.setItem('adReportsData', JSON.stringify(adReports)); }
     if (cData)  { coupons = cData;    localStorage.setItem('couponsData',   JSON.stringify(coupons));   }
     if (Array.isArray(fdData)) { fixedDiscounts = fdData; }
+    // 할인 계산 방식 설정 로드
+    try {
+      const settingsData = await fetch('/api/user-settings').then(r => r.json());
+      if (settingsData?.discount_mode) {
+        discountMode = settingsData.discount_mode;
+        applyDiscountModeUI();
+      }
+    } catch(e) {}
     if (cmData) {
       optionMatchings = {};
       cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt', productName: m.product_name || '' }; });
@@ -1845,6 +1869,7 @@ let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let fixedDiscounts = [];
+let discountMode = 'coupon'; // 'coupon' | 'fixed'
 let editingCouponId = null;
 let editingFdId = null;
 let couponSortDir = null; // null | 'asc' | 'desc'
@@ -1889,7 +1914,7 @@ function _activateTabUI(name) {
   if (name === 'calc')   { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
   if (name === 'orders') { renderOrders(); loadOrdersSummary(); }
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
-  if (name === 'coupons')  { renderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
+  if (name === 'coupons')  { applyDiscountModeUI(); renderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); }
 }
@@ -5197,6 +5222,37 @@ function resetFdForm() {
   document.getElementById('fdCancelBtn').style.display = 'none';
 }
 
+function applyDiscountModeUI() {
+  const isCoupon = discountMode === 'coupon';
+  const btnCoupon = document.getElementById('discountModeCoupon');
+  const btnFixed  = document.getElementById('discountModeFixed');
+  const desc      = document.getElementById('discountModeDesc');
+  if (!btnCoupon) return;
+  if (isCoupon) {
+    btnCoupon.style.cssText += ';background:var(--primary);color:#fff;border-color:var(--primary)';
+    btnFixed.style.cssText  += ';background:var(--surface);color:var(--text-dim);border-color:var(--border)';
+    if (desc) desc.textContent = '등록된 쿠폰 데이터 기준으로 계산';
+  } else {
+    btnFixed.style.cssText  += ';background:var(--primary);color:#fff;border-color:var(--primary)';
+    btnCoupon.style.cssText += ';background:var(--surface);color:var(--text-dim);border-color:var(--border)';
+    if (desc) desc.textContent = '상시할인가 우선 → 없으면 쿠폰 적용';
+  }
+}
+
+async function setDiscountMode(mode) {
+  discountMode = mode;
+  applyDiscountModeUI();
+  if (currentUser) {
+    try {
+      await fetch('/api/user-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discount_mode: mode }),
+      });
+    } catch(e) {}
+  }
+}
+
 // ── 쿠폰 탭 ──────────────────────────────────────────────────────────────────
 function downloadCouponTemplate() {
   const headers = ['쿠폰명', '쿠폰ID', '할인금액(원)', '시작일시(YYYY-MM-DD HH:mm)', '종료일시(YYYY-MM-DD HH:mm)', '적용옵션ID(쉼표구분)'];
@@ -5746,16 +5802,18 @@ function getCouponDiscountForOrder(order) {
   const orderOptionId = String(order['옵션ID'] || '');
   const orderDate = d.toISOString().slice(0, 10);
 
-  // 상시할인가 먼저 확인 (옵션ID + 날짜 기준)
-  const fd = fixedDiscounts.find(f => {
-    if (String(f.option_id) !== orderOptionId) return false;
-    if (f.start_date && orderDate < f.start_date) return false;
-    if (f.end_date   && orderDate > f.end_date)   return false;
-    return true;
-  });
-  if (fd) return fd.discount_amount || 0;
+  // 상시할인가 우선 모드일 때만 fixed_discounts 확인
+  if (discountMode === 'fixed') {
+    const fd = fixedDiscounts.find(f => {
+      if (String(f.option_id) !== orderOptionId) return false;
+      if (f.start_date && orderDate < f.start_date) return false;
+      if (f.end_date   && orderDate > f.end_date)   return false;
+      return true;
+    });
+    if (fd) return fd.discount_amount || 0;
+  }
 
-  // 없으면 실제쿠폰 기존 로직
+  // 실제쿠폰 기존 로직
   const applicable = coupons.filter(c => {
     const startAt = c.start_at ? new Date(c.start_at) : null;
     const endAt   = c.end_at   ? new Date(c.end_at)   : null;
@@ -5802,7 +5860,7 @@ async function renderProfit() {
   if (profitSummaryEl) profitSummaryEl.innerHTML = '<div style="color:var(--text-dim);padding:8px 0">데이터 불러오는 중...</div>';
 
   // ── API에서 기간 기반 fresh 데이터 fetch (매칭 섹션용 로컬 데이터 + 백엔드 수익 계산) ──
-  let pOrders = orders, pAdReports = adReports, pCoupons = coupons, pB2b = b2bPriceHistory, pFixedDiscounts = fixedDiscounts;
+  let pOrders = orders, pAdReports = adReports, pCoupons = coupons, pB2b = b2bPriceHistory, pFixedDiscounts = fixedDiscounts, pDiscountMode = discountMode;
   let analytics = null;
   if (currentUser) {
     const qs = new URLSearchParams();
@@ -5857,16 +5915,18 @@ async function renderProfit() {
     const oid = String(order['옵션ID'] || '');
     const orderDate = d.toISOString().slice(0, 10);
 
-    // 상시할인가 우선
-    const fd = pFixedDiscounts.find(f => {
-      if (String(f.option_id) !== oid) return false;
-      if (f.start_date && orderDate < f.start_date) return false;
-      if (f.end_date   && orderDate > f.end_date)   return false;
-      return true;
-    });
-    if (fd) return fd.discount_amount || 0;
+    // 상시할인가 우선 모드일 때만 확인
+    if (pDiscountMode === 'fixed') {
+      const fd = pFixedDiscounts.find(f => {
+        if (String(f.option_id) !== oid) return false;
+        if (f.start_date && orderDate < f.start_date) return false;
+        if (f.end_date   && orderDate > f.end_date)   return false;
+        return true;
+      });
+      if (fd) return fd.discount_amount || 0;
+    }
 
-    // 없으면 실제쿠폰
+    // 실제쿠폰
     const applicable = pCoupons.filter(c => {
       const s = c.start_at ? new Date(c.start_at) : null;
       const e = c.end_at   ? new Date(c.end_at)   : null;
