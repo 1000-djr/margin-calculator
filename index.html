@@ -5244,8 +5244,9 @@ function renderFixedDiscounts() {
       ? '<span style="color:var(--green);font-weight:600">진행중</span>'
       : '<span style="color:var(--text-dim)">종료</span>';
     const endStr = fd.end_date || '<span style="color:var(--text-dim)">-</span>';
+    const idStr  = String(fd.id);  // 항상 문자열로 전달 (타입 불일치 방지)
     const endBtn = active
-      ? `<button class="btn btn-sm" onclick="endFixedDiscount(${fd.id})" style="padding:2px 8px;background:#f97316;color:#fff;border:none;border-radius:6px;cursor:pointer">종료</button>`
+      ? `<button class="btn btn-sm" onclick="endFixedDiscount('${idStr}')" style="padding:2px 8px;background:#f97316;color:#fff;border:none;border-radius:6px;cursor:pointer">종료</button>`
       : '';
     return `<tr>
       <td style="font-family:var(--mono)">${fd.option_id}</td>
@@ -5254,15 +5255,16 @@ function renderFixedDiscounts() {
       <td>${endStr}</td>
       <td>${status}</td>
       <td style="white-space:nowrap;display:flex;gap:4px;padding:8px 12px">
-        <button class="btn btn-ghost btn-sm" onclick="editFixedDiscount(${fd.id})" style="padding:2px 8px">수정</button>
+        <button class="btn btn-ghost btn-sm" onclick="editFixedDiscount('${idStr}')" style="padding:2px 8px">수정</button>
         ${endBtn}
-        <button class="btn btn-danger btn-sm" onclick="deleteFixedDiscount(${fd.id})" style="padding:2px 8px">삭제</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteFixedDiscount('${idStr}')" style="padding:2px 8px">삭제</button>
       </td>
     </tr>`;
   }).join('');
 }
 
 async function saveFixedDiscount() {
+  const currentEditingId = editingFdId; // capture before any await
   const option_id       = (document.getElementById('fdOptionId').value || '').trim();
   const discount_amount = parseFloat(document.getElementById('fdAmount').value) || 0;
   const start_date      = document.getElementById('fdStartDate').value;
@@ -5273,20 +5275,20 @@ async function saveFixedDiscount() {
   const payload = { option_id, discount_amount, start_date, end_date };
   if (currentUser) {
     try {
-      const method = editingFdId ? 'PUT' : 'POST';
-      const url    = editingFdId ? `/api/fixed-discounts/${editingFdId}` : '/api/fixed-discounts';
+      const method = currentEditingId ? 'PUT' : 'POST';
+      const url    = currentEditingId ? `/api/fixed-discounts/${currentEditingId}` : '/api/fixed-discounts';
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const d = await res.json();
       if (d.error) throw new Error(d.error);
-      if (editingFdId) {
-        fixedDiscounts = fixedDiscounts.map(f => f.id === editingFdId ? d : f);
+      if (currentEditingId) {
+        fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(currentEditingId) ? d : f);
       } else {
         fixedDiscounts.push(d);
       }
     } catch(e) { return alert('저장 실패: ' + e.message); }
   } else {
-    if (editingFdId) {
-      fixedDiscounts = fixedDiscounts.map(f => f.id === editingFdId ? { ...f, ...payload } : f);
+    if (currentEditingId) {
+      fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(currentEditingId) ? { ...f, ...payload } : f);
     } else {
       fixedDiscounts.push({ id: Date.now(), ...payload });
     }
@@ -5296,9 +5298,9 @@ async function saveFixedDiscount() {
 }
 
 function editFixedDiscount(id) {
-  const fd = fixedDiscounts.find(f => f.id === id);
+  const fd = fixedDiscounts.find(f => String(f.id) === String(id));
   if (!fd) return;
-  editingFdId = id;
+  editingFdId = fd.id;
   document.getElementById('fdOptionId').value  = fd.option_id;
   document.getElementById('fdAmount').value    = fd.discount_amount;
   document.getElementById('fdStartDate').value = fd.start_date;
@@ -5320,10 +5322,10 @@ async function endFixedDiscount(id) {
       });
       const d = await res.json();
       if (d.error) throw new Error(d.error);
-      fixedDiscounts = fixedDiscounts.map(f => f.id === id ? d : f);
+      fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(id) ? d : f);
     } catch(e) { return alert('종료 처리 실패: ' + e.message); }
   } else {
-    fixedDiscounts = fixedDiscounts.map(f => f.id === id ? { ...f, end_date } : f);
+    fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(id) ? { ...f, end_date } : f);
   }
   renderFixedDiscounts();
 }
@@ -5333,7 +5335,7 @@ async function deleteFixedDiscount(id) {
   if (currentUser) {
     try { await fetch(`/api/fixed-discounts/${id}`, { method: 'DELETE' }); } catch(e) {}
   }
-  fixedDiscounts = fixedDiscounts.filter(f => f.id !== id);
+  fixedDiscounts = fixedDiscounts.filter(f => String(f.id) !== String(id));
   renderFixedDiscounts();
 }
 
