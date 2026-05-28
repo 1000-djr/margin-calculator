@@ -512,6 +512,33 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 도매처 관리 모달 ══════════════════════════════════════════════════ -->
+<div id="wholesaleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;width:520px;max-width:95vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #0008">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700">🏪 도매처 관리</div>
+      <button onclick="closeWholesaleModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-dim);line-height:1">×</button>
+    </div>
+    <!-- 추가/수정 폼 -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;align-items:flex-end">
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">도매처명</div>
+        <input id="wsName" type="text" placeholder="예: 마켓봄" maxlength="100"
+          style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans)">
+      </div>
+      <div style="flex:2">
+        <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">URL</div>
+        <input id="wsUrl" type="url" placeholder="https://..." maxlength="500"
+          style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans)">
+      </div>
+      <button id="wsSaveBtn" onclick="saveWholesaleSupplier()" class="btn btn-primary btn-sm" style="white-space:nowrap">저장</button>
+      <button id="wsCancelBtn" onclick="cancelWsEdit()" class="btn btn-ghost btn-sm" style="display:none;white-space:nowrap">취소</button>
+    </div>
+    <!-- 목록 -->
+    <div id="wholesaleList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
 <!-- ══ 주문번호 일괄 미인식 모달 ══════════════════════════════════════════ -->
 <div id="bulkExcludeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 8px 40px #0008;opacity:1">
@@ -697,6 +724,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
     <div class="header-right" style="display:flex;align-items:center;gap:12px;margin-left:auto">
+      <!-- 도매처 버튼 -->
+      <button class="shortcut-dropdown-btn" onclick="openWholesaleModal()" title="도매처 관리" style="font-size:13px;font-weight:600;padding:6px 12px">🏪 도매처</button>
       <!-- 바로가기 드롭다운 -->
       <div class="shortcut-dropdown-wrap" id="shortcutDropdownWrap">
         <button class="shortcut-dropdown-btn" onclick="toggleShortcutDropdown(event)" title="바로가기">🔗</button>
@@ -2223,6 +2252,9 @@ function closePlatformModal() {
 // 모달 바깥 클릭 시 닫기
 document.getElementById('platformModal')?.addEventListener('click', e => {
   if (e.target === document.getElementById('platformModal')) closePlatformModal();
+});
+document.getElementById('wholesaleModal')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('wholesaleModal')) closeWholesaleModal();
 });
 
 function updateExemptNote() {
@@ -7837,6 +7869,113 @@ async function runCoupangSync() {
   } finally {
     runBtn.disabled = false;
   }
+}
+
+// ── 도매처 관리 ──────────────────────────────────────────────────────────────
+let wholesaleSuppliers = [];
+let editingWsId = null;
+
+async function openWholesaleModal() {
+  document.getElementById('wholesaleModal').style.display = 'flex';
+  await loadWholesaleSuppliers();
+}
+
+function closeWholesaleModal() {
+  document.getElementById('wholesaleModal').style.display = 'none';
+  cancelWsEdit();
+}
+
+async function loadWholesaleSuppliers() {
+  if (currentUser) {
+    try {
+      const res = await fetch('/api/wholesale-suppliers');
+      wholesaleSuppliers = await res.json();
+    } catch (e) { wholesaleSuppliers = []; }
+  }
+  renderWholesaleList();
+}
+
+function renderWholesaleList() {
+  const el = document.getElementById('wholesaleList');
+  if (!el) return;
+  if (!wholesaleSuppliers.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);font-size:13px;padding:24px 0">등록된 도매처가 없습니다</div>';
+    return;
+  }
+  el.innerHTML = wholesaleSuppliers.map(s => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px">${escHtml(s.name)}</div>
+        <a href="${escHtml(s.url)}" target="_blank" rel="noopener"
+           style="font-size:11px;color:var(--accent);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%"
+           title="${escHtml(s.url)}">${escHtml(s.url)}</a>
+      </div>
+      <button onclick="editWholesaleSupplier('${String(s.id)}')" class="btn btn-ghost btn-xs">수정</button>
+      <button onclick="deleteWholesaleSupplier('${String(s.id)}')" class="btn btn-xs" style="background:var(--red-light);color:var(--red);border:1px solid rgba(192,57,43,0.2)">삭제</button>
+    </div>`).join('');
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function editWholesaleSupplier(id) {
+  const s = wholesaleSuppliers.find(x => String(x.id) === String(id));
+  if (!s) return;
+  editingWsId = s.id;
+  document.getElementById('wsName').value = s.name;
+  document.getElementById('wsUrl').value  = s.url;
+  document.getElementById('wsSaveBtn').textContent   = '수정 저장';
+  document.getElementById('wsCancelBtn').style.display = '';
+  document.getElementById('wsName').focus();
+}
+
+function cancelWsEdit() {
+  editingWsId = null;
+  document.getElementById('wsName').value = '';
+  document.getElementById('wsUrl').value  = '';
+  document.getElementById('wsSaveBtn').textContent     = '저장';
+  document.getElementById('wsCancelBtn').style.display = 'none';
+}
+
+async function saveWholesaleSupplier() {
+  const currentId = editingWsId;
+  const name = (document.getElementById('wsName').value || '').trim();
+  const url  = (document.getElementById('wsUrl').value  || '').trim();
+  if (!name) return alert('도매처명을 입력하세요');
+  if (!url)  return alert('URL을 입력하세요');
+  const payload = { name, url };
+  if (currentUser) {
+    try {
+      const method = currentId ? 'PUT' : 'POST';
+      const endpoint = currentId ? `/api/wholesale-suppliers/${currentId}` : '/api/wholesale-suppliers';
+      const res = await fetch(endpoint, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      if (currentId) {
+        wholesaleSuppliers = wholesaleSuppliers.map(x => String(x.id) === String(currentId) ? d : x);
+      } else {
+        wholesaleSuppliers.push(d);
+      }
+    } catch (e) { return alert('저장 실패: ' + e.message); }
+  } else {
+    if (currentId) {
+      wholesaleSuppliers = wholesaleSuppliers.map(x => String(x.id) === String(currentId) ? { ...x, ...payload } : x);
+    } else {
+      wholesaleSuppliers.push({ id: Date.now(), ...payload });
+    }
+  }
+  cancelWsEdit();
+  renderWholesaleList();
+}
+
+async function deleteWholesaleSupplier(id) {
+  if (!confirm('이 도매처를 삭제할까요?')) return;
+  if (currentUser) {
+    try { await fetch(`/api/wholesale-suppliers/${id}`, { method: 'DELETE' }); } catch (e) {}
+  }
+  wholesaleSuppliers = wholesaleSuppliers.filter(x => String(x.id) !== String(id));
+  renderWholesaleList();
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

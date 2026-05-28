@@ -451,6 +451,17 @@ async function initDB() {
     );
   `);
 
+  // 도매처 관리 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS wholesale_suppliers (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      name       VARCHAR(200) NOT NULL,
+      url        TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
   console.log('[db] Tables ready');
 }
 

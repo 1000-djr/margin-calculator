@@ -2363,4 +2363,47 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── 도매처 관리 ──────────────────────────────────────────────────────────────
+router.get('/wholesale-suppliers', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM wholesale_suppliers WHERE user_id=$1 ORDER BY created_at ASC',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/wholesale-suppliers', requireAuth, async (req, res) => {
+  const { name, url } = req.body;
+  if (!name || !url) return res.status(400).json({ error: '이름과 URL을 입력하세요' });
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO wholesale_suppliers (user_id,name,url) VALUES ($1,$2,$3) RETURNING *',
+      [req.user.id, name.trim(), url.trim()]
+    );
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
+  const { name, url } = req.body;
+  if (!name || !url) return res.status(400).json({ error: '이름과 URL을 입력하세요' });
+  try {
+    const { rows } = await pool.query(
+      'UPDATE wholesale_suppliers SET name=$1, url=$2 WHERE id=$3 AND user_id=$4 RETURNING *',
+      [name.trim(), url.trim(), req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: '항목 없음' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM wholesale_suppliers WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
