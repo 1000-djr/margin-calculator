@@ -489,6 +489,29 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ══ 기간 삭제 모달 ═════════════════════════════════════════════════════ -->
+<div id="periodDeleteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;width:400px;max-width:95vw;box-shadow:0 8px 40px #0008">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px" id="periodDeleteTitle">기간 삭제</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:20px" id="periodDeleteDesc"></div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px">
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:600">시작일</div>
+        <input type="date" id="periodDeleteFrom" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:14px">
+      </div>
+      <span style="color:var(--text-dim);margin-top:16px">~</span>
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:600">종료일</div>
+        <input type="date" id="periodDeleteTo" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:14px">
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn" onclick="closePeriodDeleteModal()">취소</button>
+      <button class="btn btn-danger" id="periodDeleteConfirmBtn" onclick="confirmPeriodDelete()">삭제</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 주문번호 일괄 미인식 모달 ══════════════════════════════════════════ -->
 <div id="bulkExcludeModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px 32px;width:480px;max-width:95vw;box-shadow:0 8px 40px #0008;opacity:1">
@@ -1050,6 +1073,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="field"><label>상품명 검색</label><input type="text" id="ordersSearchName" placeholder="등록상품명 검색…"></div>
         <button class="btn btn-ghost btn-sm" onclick="searchOrders()" style="margin-bottom:0">검색</button>
         <button class="btn btn-ghost btn-sm" onclick="openColSettingsModal()" style="margin-bottom:0">⚙️ 컬럼 설정</button>
+        <button class="btn btn-sm" onclick="openPeriodDeleteModal('orders')" style="margin-bottom:0;background:#f97316;color:#fff;border:none">기간 삭제</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="margin-bottom:0">전체 삭제</button>
         <select id="ordersPageSizeSelect" onchange="setOrdersPageSize(+this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);height:30px;margin-bottom:0">
           <option value="10" selected>10개씩</option>
@@ -1118,6 +1142,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           </div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="renderAds()" style="margin-bottom:0">검색</button>
+        <button class="btn btn-sm" onclick="openPeriodDeleteModal('ads')" style="margin-bottom:0;background:#f97316;color:#fff;border:none">기간 삭제</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllAds()" style="margin-bottom:0">전체 삭제</button>
       </div>
     </div>
@@ -4187,6 +4212,107 @@ function setOrdersSort(col) {
   }
   ordersPage = 1;
   renderOrders();
+}
+
+// ── 기간 삭제 ─────────────────────────────────────────────────────────────────
+let _periodDeleteTarget = ''; // 'orders' | 'ads'
+
+function openPeriodDeleteModal(target) {
+  _periodDeleteTarget = target;
+  const modal = document.getElementById('periodDeleteModal');
+  const title = document.getElementById('periodDeleteTitle');
+  const desc  = document.getElementById('periodDeleteDesc');
+  const btn   = document.getElementById('periodDeleteConfirmBtn');
+  if (target === 'orders') {
+    title.textContent = '주문 기간 삭제';
+    desc.textContent  = '삭제할 주문일 범위를 선택하세요';
+    btn.textContent   = '이 기간 주문 삭제';
+  } else {
+    title.textContent = '광고 기간 삭제';
+    desc.textContent  = '삭제할 광고집행일 범위를 선택하세요';
+    btn.textContent   = '이 기간 광고 삭제';
+  }
+  document.getElementById('periodDeleteFrom').value = '';
+  document.getElementById('periodDeleteTo').value   = '';
+  modal.style.display = 'flex';
+}
+
+function closePeriodDeleteModal() {
+  document.getElementById('periodDeleteModal').style.display = 'none';
+}
+
+async function confirmPeriodDelete() {
+  const from = document.getElementById('periodDeleteFrom').value;
+  const to   = document.getElementById('periodDeleteTo').value;
+  if (!from || !to)     { alert('시작일과 종료일을 모두 입력하세요'); return; }
+  if (from > to)        { alert('시작일이 종료일보다 늦을 수 없습니다'); return; }
+
+  if (_periodDeleteTarget === 'orders') {
+    const count = orders.filter(o => {
+      const d = parseOrderDate(o['주문일']);
+      if (!d) return false;
+      const ds = d.toISOString().slice(0, 10);
+      return ds >= from && ds <= to;
+    }).length;
+    const ok = await showConfirmModal({
+      icon: '🗑️',
+      title: '주문 기간 삭제',
+      message: `<strong>${from} ~ ${to}</strong> 주문 <strong>${count.toLocaleString()}건</strong>을 삭제하시겠습니까?<br><span style="font-size:12px;color:var(--red)">되돌릴 수 없습니다.</span>`,
+      confirmText: '삭제',
+      cancelText: '취소',
+    });
+    if (!ok) return;
+    closePeriodDeleteModal();
+    orders = orders.filter(o => {
+      const d = parseOrderDate(o['주문일']);
+      if (!d) return true;
+      const ds = d.toISOString().slice(0, 10);
+      return ds < from || ds > to;
+    });
+    localStorage.setItem('ordersData', JSON.stringify(orders));
+    if (currentUser) {
+      try {
+        await fetch('/api/orders/by-period', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start_date: from, end_date: to }),
+        });
+      } catch(e) {}
+    }
+    ordersPage = 1;
+    renderOrders();
+    loadOrdersSummary();
+  } else {
+    const count = adReports.filter(r => {
+      const d = formatAdDate(r['날짜'] ?? r['report_date'] ?? '');
+      return d >= from && d <= to;
+    }).length;
+    const ok = await showConfirmModal({
+      icon: '🗑️',
+      title: '광고 기간 삭제',
+      message: `<strong>${from} ~ ${to}</strong> 광고 <strong>${count.toLocaleString()}건</strong>을 삭제하시겠습니까?<br><span style="font-size:12px;color:var(--red)">되돌릴 수 없습니다.</span>`,
+      confirmText: '삭제',
+      cancelText: '취소',
+    });
+    if (!ok) return;
+    closePeriodDeleteModal();
+    adReports = adReports.filter(r => {
+      const d = formatAdDate(r['날짜'] ?? r['report_date'] ?? '');
+      return d < from || d > to;
+    });
+    localStorage.setItem('adReportsData', JSON.stringify(adReports));
+    if (currentUser) {
+      try {
+        await fetch('/api/ad-reports/by-period', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start_date: from, end_date: to }),
+        });
+      } catch(e) {}
+    }
+    renderAds();
+    loadAdsSummary();
+  }
 }
 
 async function deleteAllOrders() {

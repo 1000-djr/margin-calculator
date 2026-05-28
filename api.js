@@ -613,6 +613,20 @@ router.delete('/orders', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.delete('/orders/by-period', requireAuth, async (req, res) => {
+  const { start_date, end_date } = req.body || {};
+  if (!start_date || !end_date) return res.status(400).json({ error: 'start_date, end_date 필수' });
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM orders
+       WHERE user_id = $1
+         AND REPLACE(LEFT(order_date, 10), '.', '-') BETWEEN $2 AND $3`,
+      [req.user.id, start_date, end_date]
+    );
+    res.json({ ok: true, deleted: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/orders/:id', requireAuth, async (req, res) => {
   try {
     const { rowCount } = await pool.query(
@@ -819,6 +833,18 @@ router.delete('/ad-reports', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM ad_reports WHERE user_id=$1', [req.user.id]);
     res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/ad-reports/by-period', requireAuth, async (req, res) => {
+  const { start_date, end_date } = req.body || {};
+  if (!start_date || !end_date) return res.status(400).json({ error: 'start_date, end_date 필수' });
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM ad_reports WHERE user_id=$1 AND report_date BETWEEN $2 AND $3`,
+      [req.user.id, start_date, end_date]
+    );
+    res.json({ ok: true, deleted: rowCount });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
