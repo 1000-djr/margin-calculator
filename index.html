@@ -5223,20 +5223,28 @@ function resetFdForm() {
 }
 
 function applyDiscountModeUI() {
-  const isCoupon = discountMode === 'coupon';
+  const isCoupon  = discountMode === 'coupon';
   const btnCoupon = document.getElementById('discountModeCoupon');
   const btnFixed  = document.getElementById('discountModeFixed');
   const desc      = document.getElementById('discountModeDesc');
   if (!btnCoupon) return;
-  if (isCoupon) {
-    btnCoupon.style.cssText += ';background:var(--primary);color:#fff;border-color:var(--primary)';
-    btnFixed.style.cssText  += ';background:var(--surface);color:var(--text-dim);border-color:var(--border)';
-    if (desc) desc.textContent = '등록된 쿠폰 데이터 기준으로 계산';
-  } else {
-    btnFixed.style.cssText  += ';background:var(--primary);color:#fff;border-color:var(--primary)';
-    btnCoupon.style.cssText += ';background:var(--surface);color:var(--text-dim);border-color:var(--border)';
-    if (desc) desc.textContent = '상시할인가 우선 → 없으면 쿠폰 적용';
-  }
+
+  const activeBtn   = isCoupon ? btnCoupon : btnFixed;
+  const inactiveBtn = isCoupon ? btnFixed  : btnCoupon;
+
+  activeBtn.style.background   = '#3b82f6';
+  activeBtn.style.color        = '#ffffff';
+  activeBtn.style.borderColor  = '#3b82f6';
+  activeBtn.style.fontWeight   = '600';
+
+  inactiveBtn.style.background  = '#6b7280';
+  inactiveBtn.style.color       = '#e5e7eb';
+  inactiveBtn.style.borderColor = '#6b7280';
+  inactiveBtn.style.fontWeight  = '400';
+
+  if (desc) desc.textContent = isCoupon
+    ? '등록된 쿠폰 데이터 기준으로 계산'
+    : '상시할인가 우선 → 없으면 쿠폰 적용';
 }
 
 async function setDiscountMode(mode) {
