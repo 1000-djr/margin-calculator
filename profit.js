@@ -91,10 +91,14 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
                OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
                    AND bp.end_date
                        >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-            WHERE pnm.user_id         = o.user_id
-              AND pnm.registered_name = o.product_name
-              AND pnm.option_name     = COALESCE(o.option_name, '')
-            ORDER BY bp.start_date DESC NULLS LAST
+            WHERE pnm.user_id = o.user_id
+              AND (
+                (pnm.option_id IS NOT NULL AND pnm.option_id = o.option_id)
+                OR
+                (pnm.option_id IS NULL AND pnm.registered_name = o.product_name
+                 AND pnm.option_name = COALESCE(o.option_name, ''))
+              )
+            ORDER BY (pnm.option_id IS NOT NULL) DESC, bp.start_date DESC NULLS LAST
             LIMIT 1
           ),
           0
@@ -218,10 +222,14 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
                OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
                    AND bp.end_date
                        >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
-            WHERE pnm.user_id         = o.user_id
-              AND pnm.registered_name = o.product_name
-              AND pnm.option_name     = COALESCE(o.option_name, '')
-            ORDER BY bp.start_date DESC NULLS LAST
+            WHERE pnm.user_id = o.user_id
+              AND (
+                (pnm.option_id IS NOT NULL AND pnm.option_id = o.option_id)
+                OR
+                (pnm.option_id IS NULL AND pnm.registered_name = o.product_name
+                 AND pnm.option_name = COALESCE(o.option_name, ''))
+              )
+            ORDER BY (pnm.option_id IS NOT NULL) DESC, bp.start_date DESC NULLS LAST
             LIMIT 1
           ),
           0

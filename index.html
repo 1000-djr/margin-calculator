@@ -6124,8 +6124,12 @@ async function renderProfit() {
     return matches.reduce((best, p) => (!best || p.id > best.id) ? p : best, null);
   }
 
-  // product_name_mapping 조회: registered_name+option_name 우선, 없으면 option_name='' fallback
-  function findPNM(productName, optionName) {
+  // product_name_mapping 조회: option_id 우선 → 이름 기준 fallback
+  function findPNM(optionId, productName, optionName) {
+    if (optionId) {
+      const byId = productNameMappings.find(m => m.option_id && String(m.option_id) === String(optionId));
+      if (byId) return byId;
+    }
     return productNameMappings.find(m =>
       m.registered_name === productName && (m.option_name || '') === (optionName || '')
     ) || productNameMappings.find(m =>
@@ -6137,7 +6141,7 @@ async function renderProfit() {
   // returns { unitCost, taxType, source: 'auto'|'manual'|null }
   function resolveUnitCost(productName, optionName, optionId, orderDateStr) {
     const taxType = getProfitTaxType(optionId, productName, optionName);
-    const pnm = findPNM(productName, optionName);
+    const pnm = findPNM(optionId, productName, optionName);
     if (pnm) {
       const b2b = localB2bCost(pnm.b2b_name, orderDateStr, pnm.b2b_unit || undefined);
       if (b2b) return { unitCost: parseFloat(b2b.cost), taxType, source: 'auto', pnm, b2b };
@@ -6173,17 +6177,17 @@ async function renderProfit() {
 
   const feeRate = getPlatformRate();
 
-  // 상품별 집계 — 등록상품명+등록옵션명 기준으로만 그룹핑 (옵션ID 차이로 행 분리 방지)
+  // 상품별 집계 — option_id 기준 그룹핑 (없으면 상품명+옵션명 fallback)
   const optionMap = new Map();
   filtered.forEach(o => {
-    const oid = o['옵션ID'] || '';
-    const key = `${o['등록상품명']}||${o['등록옵션명']}`;
+    const oid = String(o['옵션ID'] || '').trim();
+    const key = oid ? oid : `${o['등록상품명']}||${o['등록옵션명']}`;
     if (!optionMap.has(key)) {
       optionMap.set(key, {
         productName: o['등록상품명'],
         optionName: o['등록옵션명'],
-        optionId: oid,           // 매칭 폼/수동매칭 대표 optionId (첫 번째)
-        optionIds: new Set(),    // 광고비 합산용 전체 optionId 집합
+        optionId: oid,
+        optionIds: new Set(),
         qty: 0, payment: 0, shipping: 0, couponDiscount: 0, lastOrderDate: ''
       });
     }
@@ -6201,7 +6205,7 @@ async function renderProfit() {
   let matchedCount = 0, unmatchedCount = 0;
   const unmatchedItems = [], autoItems = [], manualItems = [];
   optionMap.forEach((g) => {
-    const pnm = findPNM(g.productName, g.optionName);
+    const pnm = findPNM(g.optionId, g.productName, g.optionName);
     if (pnm) {
       matchedCount++;
       autoItems.push({ ...g, pnm });
@@ -6219,11 +6223,7 @@ async function renderProfit() {
 
   // ── 매칭 폼 공통 HTML 생성 헬퍼 ────────────────────────────────────────────
   function matchFormHtml(g, colspan) {
-    const pnm = productNameMappings.find(m =>
-      m.registered_name === g.productName && (m.option_name || '') === (g.optionName || '')
-    ) || productNameMappings.find(m =>
-      m.registered_name === g.productName && !m.option_name
-    ) || null;
+    const pnm = findPNM(g.optionId, g.productName, g.optionName);
     const curKey = pnm ? (pnm.b2b_name + '\t' + (pnm.b2b_unit || '')) : '';
 
     const b2bItems = [];
@@ -6508,7 +6508,13 @@ async function saveOptionMatching(optionId, productName, optionName) {
     optionName  = order ? (order['등록옵션명'] || '') : '';
   }
   const [b2bName, b2bUnit] = raw.split('\t');
-  const entry = { registered_name: productName, option_name: optionName || '', b2b_name: b2bName, b2b_unit: b2bUnit || '' };
+  const entry = {
+    registered_name: productName,
+    option_name: optionName || '',
+    b2b_name: b2bName,
+    b2b_unit: b2bUnit || '',
+    option_id: optionId || null,
+  };
 
   if (currentUser) {
     try {
@@ -6520,7 +6526,8 @@ async function saveOptionMatching(optionId, productName, optionName) {
       if (r.ok) {
         const saved = await r.json();
         const idx = productNameMappings.findIndex(m =>
-          m.registered_name === productName && (m.option_name || '') === (optionName || '')
+          (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
+          (m.registered_name === productName && (m.option_name || '') === (optionName || ''))
         );
         if (idx >= 0) productNameMappings[idx] = saved;
         else productNameMappings.push(saved);
@@ -6528,7 +6535,8 @@ async function saveOptionMatching(optionId, productName, optionName) {
     } catch(e) {}
   } else {
     const idx = productNameMappings.findIndex(m =>
-      m.registered_name === productName && (m.option_name || '') === (optionName || '')
+      (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
+      (m.registered_name === productName && (m.option_name || '') === (optionName || ''))
     );
     const local = { id: Date.now(), ...entry };
     if (idx >= 0) productNameMappings[idx] = local;

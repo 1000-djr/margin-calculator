@@ -274,6 +274,12 @@ async function initDB() {
   await pool.query(`
     ALTER TABLE product_name_mapping ADD COLUMN IF NOT EXISTS option_name TEXT NOT NULL DEFAULT '';
     ALTER TABLE product_name_mapping ADD COLUMN IF NOT EXISTS b2b_unit    TEXT NOT NULL DEFAULT '';
+    ALTER TABLE product_name_mapping ADD COLUMN IF NOT EXISTS option_id   VARCHAR(100) DEFAULT NULL;
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pnm_option_id
+      ON product_name_mapping(user_id, option_id)
+      WHERE option_id IS NOT NULL;
   `);
   // UNIQUE 제약 마이그레이션: (user_id, registered_name) → (user_id, registered_name, option_name)
   await pool.query(`

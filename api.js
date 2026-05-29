@@ -1441,18 +1441,50 @@ router.get('/product-name-mappings', requireAuth, async (req, res) => {
 });
 
 router.post('/product-name-mappings', requireAuth, async (req, res) => {
-  const { registered_name, option_name = '', b2b_name, b2b_unit = '' } = req.body;
+  const { registered_name, option_name = '', b2b_name, b2b_unit = '', option_id = null } = req.body;
   if (!registered_name || !b2b_name) return res.status(400).json({ error: '필수값 누락' });
+  const oid = option_id ? String(option_id) : null;
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO product_name_mapping (user_id, registered_name, option_name, b2b_name, b2b_unit)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (user_id, registered_name, option_name)
-         DO UPDATE SET b2b_name = EXCLUDED.b2b_name, b2b_unit = EXCLUDED.b2b_unit
-       RETURNING *`,
-      [req.user.id, registered_name, option_name, b2b_name, b2b_unit]
-    );
-    res.json(rows[0]);
+    let row;
+    if (oid) {
+      // option_id 기준 upsert: 기존 option_id 항목이 있으면 갱신, 없으면 이름 기준 insert/update
+      const { rows: existing } = await pool.query(
+        'SELECT id FROM product_name_mapping WHERE user_id=$1 AND option_id=$2',
+        [req.user.id, oid]
+      );
+      if (existing.length) {
+        const { rows } = await pool.query(
+          `UPDATE product_name_mapping
+             SET registered_name=$2, option_name=$3, b2b_name=$4, b2b_unit=$5
+           WHERE user_id=$1 AND option_id=$6 RETURNING *`,
+          [req.user.id, registered_name, option_name, b2b_name, b2b_unit, oid]
+        );
+        row = rows[0];
+      } else {
+        const { rows } = await pool.query(
+          `INSERT INTO product_name_mapping
+             (user_id, registered_name, option_name, b2b_name, b2b_unit, option_id)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (user_id, registered_name, option_name)
+             DO UPDATE SET b2b_name=EXCLUDED.b2b_name, b2b_unit=EXCLUDED.b2b_unit,
+                           option_id=EXCLUDED.option_id
+           RETURNING *`,
+          [req.user.id, registered_name, option_name, b2b_name, b2b_unit, oid]
+        );
+        row = rows[0];
+      }
+    } else {
+      const { rows } = await pool.query(
+        `INSERT INTO product_name_mapping (user_id, registered_name, option_name, b2b_name, b2b_unit)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (user_id, registered_name, option_name)
+           DO UPDATE SET b2b_name=EXCLUDED.b2b_name, b2b_unit=EXCLUDED.b2b_unit
+         RETURNING *`,
+        [req.user.id, registered_name, option_name, b2b_name, b2b_unit]
+      );
+      row = rows[0];
+    }
+    res.json(row);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
