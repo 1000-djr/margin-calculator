@@ -4063,8 +4063,8 @@ function renderOrdersPagination(total) {
   let winEnd = Math.min(totalPages, winStart + 4);
   if (winEnd - winStart < 4) winStart = Math.max(1, winEnd - 4);
 
-  const base = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer';
-  const activeStyle = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer';
+  const base = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-sub);cursor:pointer';
+  const activeStyle = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid #0071e3;background:#0071e3;color:#fff;font-weight:600;cursor:pointer';
   const disabledStyle = base + ';opacity:0.4;cursor:default';
 
   let html = `<span style="font-size:12px;color:var(--text-dim)">${start}–${end} / ${total.toLocaleString('ko-KR')}건</span>`;
