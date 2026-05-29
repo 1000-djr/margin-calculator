@@ -1857,11 +1857,17 @@ router.put('/returns/:id/process', requireAuth, async (req, res) => {
 router.get('/analytics', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date, group_by = 'month' } = req.query;
+    const { rows: modeRows } = await pool.query(
+      'SELECT discount_mode FROM users WHERE id=$1',
+      [req.user.id]
+    );
+    const discountMode = modeRows[0]?.discount_mode || 'coupon';
     const result = await calculateProfit(
       req.user.id,
       start_date || null,
       end_date   || null,
-      group_by
+      group_by,
+      discountMode
     );
     res.json(result);
   } catch (e) {

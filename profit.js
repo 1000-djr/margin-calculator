@@ -17,10 +17,47 @@ const { pool } = require('./db');
  * @param {string}      groupBy   - 'day' | 'week' | 'month'  (기본: 'month')
  * @returns {Promise<{ summary, by_period }>}
  */
-async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
+async function calculateProfit(userId, startDate, endDate, groupBy = 'month', discountMode = null) {
   if (!['day', 'week', 'month'].includes(groupBy)) groupBy = 'month';
 
+  // discount_mode가 전달되지 않으면 DB에서 조회
+  if (!discountMode) {
+    const { rows: modeRows } = await pool.query(
+      'SELECT discount_mode FROM users WHERE id=$1',
+      [userId]
+    );
+    discountMode = modeRows[0]?.discount_mode || 'coupon';
+  }
+
   const params = [userId, startDate || null, endDate || null];
+
+  // ── 할인 계산 서브쿼리 (discount_mode에 따라 분기) ────────────────────────────
+  const discountSubquery = discountMode === 'fixed'
+    ? `
+      SELECT fd.discount_amount
+      FROM fixed_discounts fd
+      WHERE fd.user_id = o.user_id
+        AND fd.option_id = o.option_id
+        AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND fd.start_date <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')
+        AND (fd.end_date IS NULL
+          OR fd.end_date >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD'))
+      ORDER BY fd.start_date DESC
+      LIMIT 1`
+    : `
+      SELECT c.discount_amount
+      FROM coupons c
+      WHERE c.user_id = o.user_id
+        AND c.option_ids @> jsonb_build_array(o.option_id)
+        AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND (c.start_at IS NULL
+          OR SUBSTRING(o.order_date,1,10)
+             >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+        AND (c.end_at IS NULL
+          OR SUBSTRING(o.order_date,1,10)
+             <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+      ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
+      LIMIT 1`;
 
   // ── 공통 order_detail CTE 조각 (SQL 재사용) ─────────────────────────────────
   const ORDER_DETAIL_CTE = `
@@ -30,20 +67,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
         o.payment_amount + o.shipping_fee                 AS gross_sale,
         GREATEST(
           o.payment_amount + o.shipping_fee
-          - COALESCE((
-              SELECT c.discount_amount
-              FROM coupons c
-              WHERE c.user_id = o.user_id
-                AND c.option_ids @> jsonb_build_array(o.option_id)
-                AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                AND (c.start_at IS NULL
-                  OR SUBSTRING(o.order_date,1,10)
-                     >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
-                AND (c.end_at IS NULL
-                  OR SUBSTRING(o.order_date,1,10)
-                     <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
-              ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
-              LIMIT 1
+          - COALESCE((${discountSubquery}
             ), 0),
           0
         )                                                 AS net_sale,
@@ -170,20 +194,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month') {
         o.payment_amount + o.shipping_fee                 AS gross_sale,
         GREATEST(
           o.payment_amount + o.shipping_fee
-          - COALESCE((
-              SELECT c.discount_amount
-              FROM coupons c
-              WHERE c.user_id = o.user_id
-                AND c.option_ids @> jsonb_build_array(o.option_id)
-                AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
-                AND (c.start_at IS NULL
-                  OR SUBSTRING(o.order_date,1,10)
-                     >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
-                AND (c.end_at IS NULL
-                  OR SUBSTRING(o.order_date,1,10)
-                     <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
-              ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST
-              LIMIT 1
+          - COALESCE((${discountSubquery}
             ), 0),
           0
         )                                                 AS net_sale,
