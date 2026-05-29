@@ -6173,20 +6173,22 @@ async function renderProfit() {
 
   const feeRate = getPlatformRate();
 
-  // 옵션별 집계
+  // 상품별 집계 — 등록상품명+등록옵션명 기준으로만 그룹핑 (옵션ID 차이로 행 분리 방지)
   const optionMap = new Map();
   filtered.forEach(o => {
     const oid = o['옵션ID'] || '';
-    const key = `${o['등록상품명']}||${o['등록옵션명']}||${oid}`;
+    const key = `${o['등록상품명']}||${o['등록옵션명']}`;
     if (!optionMap.has(key)) {
       optionMap.set(key, {
         productName: o['등록상품명'],
         optionName: o['등록옵션명'],
-        optionId: oid,
+        optionId: oid,           // 매칭 폼/수동매칭 대표 optionId (첫 번째)
+        optionIds: new Set(),    // 광고비 합산용 전체 optionId 집합
         qty: 0, payment: 0, shipping: 0, couponDiscount: 0, lastOrderDate: ''
       });
     }
     const g = optionMap.get(key);
+    if (oid) g.optionIds.add(oid);
     g.qty += parseFloat(o['구매수(수량)']) || 1;
     g.payment += parseFloat(o['결제액']) || 0;
     g.shipping += parseFloat(o['배송비']) || 0;
@@ -6203,7 +6205,10 @@ async function renderProfit() {
     if (pnm) {
       matchedCount++;
       autoItems.push({ ...g, pnm });
-    } else if (g.optionId && optionMatchings[g.optionId]) {
+    } else if ([...g.optionIds].some(id => optionMatchings[id])) {
+      // optionIds 중 하나라도 수동매칭 있으면 매칭 처리 (대표 optionId도 갱신)
+      const matchedId = [...g.optionIds].find(id => optionMatchings[id]) || g.optionId;
+      if (matchedId !== g.optionId) g.optionId = matchedId;
       matchedCount++;
       manualItems.push(g);
     } else {
@@ -6328,7 +6333,8 @@ async function renderProfit() {
         const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
         const resolved = resolveUnitCost(g.productName, g.optionName, g.optionId, repDate);
         const cost = resolved.unitCost !== null ? resolved.unitCost * g.qty : null;
-        const adCostRaw = g.optionId ? localAdCost(g.optionId) : 0;
+        const adCostRaw = [...(g.optionIds.size ? g.optionIds : (g.optionId ? [g.optionId] : []))]
+          .reduce((sum, id) => sum + localAdCost(id), 0);
         const realAdCost = adCostRaw * 1.1;
         const taxTyp = resolved.taxType;
         let vat = 0;
