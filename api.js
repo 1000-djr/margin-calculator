@@ -2326,8 +2326,12 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
         const orderNumber = String(sheet.orderId || '');
         if (!orderNumber) { skipped++; continue; }
 
-        // 날짜 포맷: orderedAt은 ISO 문자열, YYYY-MM-DD 추출
-        const orderDate = (sheet.orderedAt || '').slice(0, 10);
+        // 날짜+시간 포맷: orderedAt은 ISO 문자열 (KST 기준)
+        // "2026-05-28T10:30:00" → "2026-05-28 10:30" (엑셀 업로드와 동일 포맷)
+        const rawOrderedAt = sheet.orderedAt || '';
+        const orderDate = rawOrderedAt.length >= 16
+          ? rawOrderedAt.slice(0, 16).replace('T', ' ')
+          : rawOrderedAt.slice(0, 10);
 
         const productName  = item.sellerProductName || '';
         const optionName   = item.sellerProductItemName || '';
