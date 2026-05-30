@@ -1703,7 +1703,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
 <!-- ══ 쿠팡 주문 동기화 모달 ════════════════════════════════════════════ -->
 <div id="coupangSyncModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1100;align-items:center;justify-content:center">
-  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+  <div style="background:#ffffff;border-radius:16px;padding:28px 32px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div style="font-size:18px;font-weight:700">🔄 쿠팡 주문 불러오기</div>
       <button onclick="closeCoupangSyncModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#9ca3af">✕</button>
@@ -1719,7 +1719,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <input type="date" id="coupangSyncTo" style="width:100%;box-sizing:border-box">
       </div>
     </div>
-    <div id="coupangSyncResult" style="font-size:12px;min-height:18px;margin-bottom:12px"></div>
+    <div id="coupangSyncResult" style="font-size:12px;min-height:18px;margin-bottom:12px;line-height:1.6"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button id="coupangSyncRunBtn" class="btn btn-primary btn-sm" onclick="runCoupangSync()">불러오기</button>
       <button class="btn btn-ghost btn-sm" onclick="closeCoupangSyncModal()">닫기</button>
@@ -7949,7 +7949,7 @@ async function saveCoupangApi() {
 function openCoupangSyncModal() {
   const modal = document.getElementById('coupangSyncModal');
   modal.style.display = 'flex';
-  document.getElementById('coupangSyncResult').textContent = '';
+  document.getElementById('coupangSyncResult').innerHTML = '';
   // 기본값: 오늘 날짜
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('coupangSyncFrom').value = today;
@@ -7968,14 +7968,12 @@ async function runCoupangSync() {
   const runBtn    = document.getElementById('coupangSyncRunBtn');
 
   if (!startDate || !endDate) {
-    resultEl.style.color = '#ef4444';
-    resultEl.textContent = '날짜를 선택해 주세요.';
+    resultEl.innerHTML = '<span style="color:#ef4444">날짜를 선택해 주세요.</span>';
     return;
   }
 
   runBtn.disabled = true;
-  resultEl.style.color = '#6b7280';
-  resultEl.textContent = '주문 불러오는 중…';
+  resultEl.innerHTML = '<span style="color:#6b7280">주문 불러오는 중…</span>';
 
   try {
     const res  = await fetch('/api/orders/sync', {
@@ -7985,8 +7983,31 @@ async function runCoupangSync() {
     });
     const data = await res.json();
     if (data.ok) {
-      resultEl.style.color = '#22c55e';
-      resultEl.textContent = `✅ 완료: ${data.total_fetched}건 조회, ${data.inserted}건 신규 저장, ${data.skipped}건 중복 스킵`;
+      // 동기화 요약 + 크로스체크 결과 렌더링
+      const cc = data.cross_check || {};
+      let html = `<div style="color:#22c55e;font-weight:600;margin-bottom:6px">✅ 저장 완료: ${data.inserted}건 신규 / ${data.total_fetched}건 조회</div>`;
+      if (cc.no_match > 0) {
+        html += `<div style="color:#f97316;margin-bottom:4px">⚠️ 원가 미매칭: ${cc.no_match}건 <span style="color:#9ca3af;font-size:11px">(B2B 공급가 등록 필요)</span></div>`;
+      }
+      if (cc.cost_changed > 0) {
+        html += `<div style="color:#3b82f6;margin-bottom:4px">🔔 공급가 변동 감지: ${cc.cost_changed}건</div>`;
+        html += `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 10px;margin-top:4px;font-size:11px">`;
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px 10px;font-weight:600;color:#6b7280;margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid #bae6fd">
+          <span>상품명</span><span>옵션명</span><span>이전공급가</span><span>현재공급가</span></div>`;
+        for (const d of (cc.cost_changed_detail || [])) {
+          html += `<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:4px 10px;align-items:center;padding:2px 0">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(d.product_name)}">${escHtml(d.product_name)}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(d.option_name)}">${escHtml(d.option_name || '-')}</span>
+            <span style="text-decoration:line-through;color:#9ca3af;text-align:right">${d.prev_cost.toLocaleString()}원</span>
+            <span style="color:#ef4444;font-weight:600;text-align:right">${d.current_cost.toLocaleString()}원</span>
+          </div>`;
+        }
+        html += `</div>`;
+      }
+      if (!cc.no_match && !cc.cost_changed) {
+        html += `<div style="color:#6b7280;font-size:11px">공급가 이상 없음</div>`;
+      }
+      resultEl.innerHTML = html;
       // 마지막 동기화 시간 즉시 업데이트
       updateLastSyncLabel(data.last_sync_at);
       // 주문 목록 갱신
@@ -7996,12 +8017,10 @@ async function runCoupangSync() {
       } catch(e) {}
       await renderOrders();
     } else {
-      resultEl.style.color = '#ef4444';
-      resultEl.textContent = '❌ ' + (data.error || '동기화 실패');
+      resultEl.innerHTML = `<span style="color:#ef4444">❌ ${escHtml(data.error || '동기화 실패')}</span>`;
     }
   } catch (e) {
-    resultEl.style.color = '#ef4444';
-    resultEl.textContent = '❌ 오류: ' + e.message;
+    resultEl.innerHTML = `<span style="color:#ef4444">❌ 오류: ${escHtml(e.message)}</span>`;
   } finally {
     runBtn.disabled = false;
   }

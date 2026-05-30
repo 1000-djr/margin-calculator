@@ -2446,6 +2446,82 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
       }
     }
 
+    // ── 공급가 크로스체크 ─────────────────────────────────────────────────────
+    // 동기화된 주문 대상으로 원가 매칭 여부 및 공급가 변동 여부 체크 (비블로킹)
+    const seenOptions = new Map();
+    for (const sheet of allItems) {
+      for (const item of (sheet.orderItems || [])) {
+        const oid   = item.sellerProductItemId != null ? String(item.sellerProductItemId) : '';
+        const pname = item.sellerProductName || '';
+        const oname = item.sellerProductItemName || '';
+        const rawAt = sheet.orderedAt || '';
+        const odate = rawAt.length >= 10 ? rawAt.slice(0, 10) : '';
+        if (!odate) continue;
+        const key = oid || `${pname}||${oname}`;
+        if (!seenOptions.has(key)) {
+          seenOptions.set(key, { option_id: oid || null, product_name: pname, option_name: oname, order_date: odate });
+        }
+      }
+    }
+
+    let no_match_count = 0, cost_changed_count = 0;
+    const cost_changed_detail = [];
+
+    try {
+      for (const ci of seenOptions.values()) {
+        const { rows: cc } = await pool.query(`
+          SELECT
+            bp.cost::NUMERIC AS current_cost,
+            (
+              SELECT bp2.cost::NUMERIC
+              FROM b2b_prices bp2
+              WHERE bp2.user_id        = bp.user_id
+                AND bp2.b2b_product_id = bp.b2b_product_id
+                AND bp.start_date IS NOT NULL
+                AND bp2.start_date < bp.start_date
+              ORDER BY bp2.start_date DESC
+              LIMIT 1
+            ) AS prev_cost
+          FROM product_name_mapping pnm
+          JOIN b2b_products b2bp
+            ON b2bp.user_id = pnm.user_id
+           AND b2bp.name    = pnm.b2b_name
+           AND b2bp.unit    = pnm.b2b_unit
+          JOIN b2b_prices bp
+            ON bp.user_id        = pnm.user_id
+           AND bp.b2b_product_id = b2bp.id
+           AND (bp.start_date IS NULL OR bp.start_date <= $3::date)
+           AND (bp.end_date   IS NULL OR bp.end_date   >= $3::date)
+          WHERE pnm.user_id = $1
+            AND (
+              ($2 IS NOT NULL AND pnm.option_id IS NOT NULL AND pnm.option_id = $2)
+              OR (pnm.option_id IS NULL AND pnm.registered_name = $4
+                  AND pnm.option_name = COALESCE($5, ''))
+            )
+          ORDER BY (pnm.option_id IS NOT NULL) DESC, bp.start_date DESC NULLS LAST
+          LIMIT 1
+        `, [req.user.id, ci.option_id, ci.order_date, ci.product_name, ci.option_name]);
+
+        if (!cc.length) {
+          no_match_count++;
+        } else {
+          const cur = parseFloat(cc[0].current_cost);
+          const prv = cc[0].prev_cost !== null ? parseFloat(cc[0].prev_cost) : null;
+          if (prv !== null && cur !== prv) {
+            cost_changed_count++;
+            cost_changed_detail.push({
+              product_name:  ci.product_name,
+              option_name:   ci.option_name,
+              prev_cost:     Math.round(prv),
+              current_cost:  Math.round(cur),
+            });
+          }
+        }
+      }
+    } catch (ccErr) {
+      console.error('[sync] 크로스체크 오류:', ccErr.message);
+    }
+
     // 마지막 동기화 시간 저장
     const now = new Date();
     await pool.query(
@@ -2453,7 +2529,14 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
       [now, req.user.id]
     );
 
-    res.json({ ok: true, total_fetched: allItems.length, inserted, skipped, last_sync_at: now.toISOString() });
+    res.json({
+      ok: true,
+      total_fetched: allItems.length,
+      inserted,
+      skipped,
+      last_sync_at: now.toISOString(),
+      cross_check: { no_match: no_match_count, cost_changed: cost_changed_count, cost_changed_detail },
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
