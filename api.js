@@ -1008,13 +1008,43 @@ function fdRow(r) {
   };
 }
 
+// 옵션ID로 상품명/옵션명 조회: product_name_mapping 우선, 없으면 orders fallback
+async function lookupOptionInfo(userId, optionId) {
+  // 1순위: product_name_mapping (option_id 컬럼 기준)
+  const { rows: pnm } = await pool.query(
+    `SELECT registered_name AS product_name, option_name
+     FROM product_name_mapping
+     WHERE user_id = $1 AND option_id = $2
+     LIMIT 1`,
+    [userId, String(optionId)]
+  );
+  if (pnm.length && pnm[0].product_name) return pnm[0];
+
+  // 2순위: orders (최신 주문 기준)
+  const { rows: ord } = await pool.query(
+    `SELECT product_name, option_name
+     FROM orders
+     WHERE user_id = $1 AND option_id = $2 AND product_name IS NOT NULL
+     ORDER BY order_date DESC
+     LIMIT 1`,
+    [userId, String(optionId)]
+  );
+  return ord[0] || { product_name: null, option_name: null };
+}
+
 router.get('/fixed-discounts', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT fd.*,
-              o.product_name,
-              o.option_name
+              COALESCE(pnm.registered_name, o.product_name) AS product_name,
+              COALESCE(pnm.option_name,     o.option_name)  AS option_name
        FROM fixed_discounts fd
+       LEFT JOIN LATERAL (
+         SELECT registered_name, option_name
+         FROM product_name_mapping
+         WHERE user_id = fd.user_id AND option_id = fd.option_id
+         LIMIT 1
+       ) pnm ON true
        LEFT JOIN LATERAL (
          SELECT product_name, option_name
          FROM orders
@@ -1023,7 +1053,7 @@ router.get('/fixed-discounts', requireAuth, async (req, res) => {
            AND product_name IS NOT NULL
          ORDER BY order_date DESC
          LIMIT 1
-       ) o ON true
+       ) o ON (pnm.registered_name IS NULL)
        WHERE fd.user_id = $1
        ORDER BY fd.start_date DESC, fd.created_at DESC`,
       [req.user.id]
@@ -1037,16 +1067,8 @@ router.get('/fixed-discounts/option-info', requireAuth, async (req, res) => {
   const { option_id } = req.query;
   if (!option_id) return res.json({ product_name: null, option_name: null });
   try {
-    const { rows } = await pool.query(
-      `SELECT product_name, option_name
-       FROM orders
-       WHERE user_id = $1 AND option_id = $2 AND product_name IS NOT NULL
-       ORDER BY order_date DESC
-       LIMIT 1`,
-      [req.user.id, String(option_id)]
-    );
-    const row = rows[0] || {};
-    res.json({ product_name: row.product_name || null, option_name: row.option_name || null });
+    const info = await lookupOptionInfo(req.user.id, option_id);
+    res.json(info);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -1055,14 +1077,29 @@ router.post('/fixed-discounts', requireAuth, async (req, res) => {
   if (!option_id)                          return res.status(400).json({ error: 'option_id 필수' });
   if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
   if (!start_date)                         return res.status(400).json({ error: '시작일 필수' });
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
+    await client.query('BEGIN');
+    // 동일 option_id 진행중(end_date IS NULL) 이력 → 새 시작일 - 1초로 자동 종료
+    await client.query(
+      `UPDATE fixed_discounts
+       SET end_date = $3::TIMESTAMPTZ - INTERVAL '1 second'
+       WHERE user_id = $1 AND option_id = $2 AND end_date IS NULL`,
+      [req.user.id, option_id, start_date]
+    );
+    const { rows } = await client.query(
       `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
       [req.user.id, option_id, discount_amount, start_date, end_date || null]
     );
+    await client.query('COMMIT');
     res.status(201).json(fdRow(rows[0]));
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 router.post('/fixed-discounts/bulk', requireAuth, async (req, res) => {
