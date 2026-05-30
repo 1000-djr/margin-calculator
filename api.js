@@ -1072,26 +1072,34 @@ router.get('/fixed-discounts/option-info', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// 동일 option_id 진행중 이력 전체 종료 (트랜잭션 client 사용)
+async function autoCloseActiveDiscounts(client, userId, optionId, newStartDate) {
+  const oid = String(optionId);
+  const result = await client.query(
+    `UPDATE fixed_discounts
+     SET end_date = $3::TIMESTAMPTZ - INTERVAL '1 second'
+     WHERE user_id = $1
+       AND option_id = $2
+       AND (end_date IS NULL OR end_date >= $3::TIMESTAMPTZ)`,
+    [userId, oid, newStartDate]
+  );
+  return result.rowCount;
+}
+
 router.post('/fixed-discounts', requireAuth, async (req, res) => {
   const { option_id, discount_amount, start_date, end_date } = req.body;
-  if (!option_id)                          return res.status(400).json({ error: 'option_id 필수' });
+  if (!option_id)                               return res.status(400).json({ error: 'option_id 필수' });
   if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
-  if (!start_date)                         return res.status(400).json({ error: '시작일 필수' });
+  if (!start_date)                              return res.status(400).json({ error: '시작일 필수' });
+  const oid = String(option_id);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // 동일 option_id 진행중(end_date IS NULL 또는 새 시작일 이후까지 유효) 이력 전체 종료
-    await client.query(
-      `UPDATE fixed_discounts
-       SET end_date = $3::TIMESTAMPTZ - INTERVAL '1 second'
-       WHERE user_id = $1 AND option_id = $2
-         AND (end_date IS NULL OR end_date >= $3::TIMESTAMPTZ)`,
-      [req.user.id, option_id, start_date]
-    );
+    await autoCloseActiveDiscounts(client, req.user.id, oid, start_date);
     const { rows } = await client.query(
       `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
        VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.user.id, option_id, discount_amount, start_date, end_date || null]
+      [req.user.id, oid, discount_amount, start_date, end_date || null]
     );
     await client.query('COMMIT');
     res.status(201).json(fdRow(rows[0]));
@@ -1109,20 +1117,38 @@ router.post('/fixed-discounts/bulk', requireAuth, async (req, res) => {
   const BATCH = 100;
   let inserted = 0, skipped = 0, errors = 0;
   const insertedRows = [];
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     for (let start = 0; start < items.length; start += BATCH) {
       const batch = items.slice(start, start + BATCH);
+      const validItems = [];
+      for (const item of batch) {
+        if (!item.option_id || !(item.discount_amount > 0) || !item.start_date) { errors++; continue; }
+        validItems.push({ ...item, option_id: String(item.option_id) });
+      }
+      if (!validItems.length) continue;
+
+      // 배치 내 고유 option_id별 자동 종료 처리
+      const uniqueOids = [...new Set(validItems.map(it => it.option_id))];
+      for (const oid of uniqueOids) {
+        // 해당 option_id 중 가장 빠른 새 start_date 기준으로 종료
+        const earliest = validItems
+          .filter(it => it.option_id === oid)
+          .map(it => it.start_date)
+          .sort()[0];
+        await autoCloseActiveDiscounts(client, req.user.id, oid, earliest);
+      }
+
       const placeholders = [];
       const params = [];
       let p = 1;
-      for (const item of batch) {
-        if (!item.option_id || !(item.discount_amount > 0) || !item.start_date) { errors++; continue; }
+      for (const item of validItems) {
         placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4})`);
-        params.push(req.user.id, String(item.option_id), item.discount_amount, item.start_date, item.end_date || null);
+        params.push(req.user.id, item.option_id, item.discount_amount, item.start_date, item.end_date || null);
         p += 5;
       }
-      if (!placeholders.length) continue;
-      const result = await pool.query(
+      const result = await client.query(
         `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
          VALUES ${placeholders.join(',')}
          ON CONFLICT (user_id,option_id,start_date) DO NOTHING
@@ -1133,8 +1159,14 @@ router.post('/fixed-discounts/bulk', requireAuth, async (req, res) => {
       skipped  += placeholders.length - result.rowCount;
       result.rows.forEach(r => insertedRows.push(fdRow(r)));
     }
+    await client.query('COMMIT');
     res.json({ inserted, skipped, errors, rows: insertedRows });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
 });
 
 router.put('/fixed-discounts/:id', requireAuth, async (req, res) => {
