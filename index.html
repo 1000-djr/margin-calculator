@@ -1084,6 +1084,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="btn-row" style="margin-top:8px;margin-bottom:0">
         <button class="btn btn-ghost btn-sm" onclick="openBulkExcludeModal()">🚫 주문번호 일괄 미인식</button>
         <button id="coupangSyncBtn" class="btn btn-sm" onclick="openCoupangSyncModal()" style="display:none;background:#3b82f6;color:#fff;border:none;font-size:12px;padding:3px 12px">🔄 API로 불러오기</button>
+        <span id="lastSyncLabel" style="display:none;font-size:11px;color:var(--text-sub);margin-left:6px"></span>
       </div>
     </div>
     <div class="section-label">필터</div>
@@ -7805,6 +7806,24 @@ async function deleteFakeRecord(id) {
 
 // ── 쿠팡 Open API 연동 ───────────────────────────────────────────────────────
 
+function formatSyncTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  const pad = n => String(n).padStart(2, '0');
+  return `최근 동기화: ${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function updateLastSyncLabel(isoStr) {
+  const label = document.getElementById('lastSyncLabel');
+  if (!label) return;
+  if (isoStr) {
+    label.textContent = formatSyncTime(isoStr);
+    label.style.display = 'inline';
+  } else {
+    label.style.display = 'none';
+  }
+}
+
 async function checkCoupangApiStatus() {
   try {
     const res  = await fetch('/api/coupang-keys/status');
@@ -7814,9 +7833,15 @@ async function checkCoupangApiStatus() {
     if (data.connected) {
       if (dot) dot.style.background = '#22c55e';
       if (btn) btn.style.display = 'inline-flex';
+      // 마지막 동기화 시간 로드
+      try {
+        const r = await fetch('/api/orders/last-sync');
+        if (r.ok) { const d = await r.json(); updateLastSyncLabel(d.last_sync_at); }
+      } catch (e) {}
     } else {
       if (dot) dot.style.background = '#6b7280';
       if (btn) btn.style.display = 'none';
+      updateLastSyncLabel(null);
     }
   } catch (e) { console.warn('[coupang] 상태 확인 실패', e); }
 }
@@ -7962,6 +7987,8 @@ async function runCoupangSync() {
     if (data.ok) {
       resultEl.style.color = '#22c55e';
       resultEl.textContent = `✅ 완료: ${data.total_fetched}건 조회, ${data.inserted}건 신규 저장, ${data.skipped}건 중복 스킵`;
+      // 마지막 동기화 시간 즉시 업데이트
+      updateLastSyncLabel(data.last_sync_at);
       // 주문 목록 갱신
       try {
         const r = await fetch('/api/orders');

@@ -2444,7 +2444,25 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ ok: true, total_fetched: allItems.length, inserted, skipped });
+    // 마지막 동기화 시간 저장
+    const now = new Date();
+    await pool.query(
+      'UPDATE users SET last_sync_at = $1 WHERE id = $2',
+      [now, req.user.id]
+    );
+
+    res.json({ ok: true, total_fetched: allItems.length, inserted, skipped, last_sync_at: now.toISOString() });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── 마지막 동기화 시간 조회 ────────────────────────────────────────────────────
+router.get('/orders/last-sync', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT last_sync_at FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    res.json({ last_sync_at: rows[0]?.last_sync_at || null });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
