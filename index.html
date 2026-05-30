@@ -1259,7 +1259,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn" id="fdCancelBtn" onclick="resetFdForm()" style="display:none">취소</button>
       </div>
     </div>
-    <div class="section-label">상시할인가 목록</div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>상시할인가 목록</span>
+      <div class="period-toggle">
+        <button class="period-btn" id="fdFilterAll"    onclick="setFdFilter('all')">전체</button>
+        <button class="period-btn active" id="fdFilterActive" onclick="setFdFilter('active')">진행중</button>
+        <button class="period-btn" id="fdFilterEnded" onclick="setFdFilter('ended')">종료</button>
+      </div>
+    </div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table">
         <thead><tr>
@@ -1937,6 +1944,7 @@ let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let fixedDiscounts = [];
+let fdStatusFilter = 'active'; // 'all' | 'active' | 'ended'
 let discountMode = 'coupon'; // 'coupon' | 'fixed'
 let editingCouponId = null;
 let editingFdId = null;
@@ -5374,16 +5382,36 @@ async function handleFdBulkUpload(input) {
   } catch(e) { alert('파일 읽기 오류: ' + e.message); }
 }
 
+function setFdFilter(filter) {
+  fdStatusFilter = filter;
+  ['all', 'active', 'ended'].forEach(f => {
+    const btn = document.getElementById(`fdFilter${f.charAt(0).toUpperCase() + f.slice(1)}`);
+    if (btn) btn.classList.toggle('active', f === filter);
+  });
+  renderFixedDiscounts();
+}
+
 function renderFixedDiscounts() {
   const tbody = document.getElementById('fdTbody');
   if (!tbody) return;
   const nowStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
-  if (!fixedDiscounts.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px">등록된 상시할인가 없음</td></tr>';
+
+  const filtered = fixedDiscounts.filter(fd => {
+    const active = !fd.end_date || fd.end_date > nowStr;
+    if (fdStatusFilter === 'active') return active;
+    if (fdStatusFilter === 'ended')  return !active;
+    return true; // 'all'
+  });
+
+  if (!filtered.length) {
+    const msg = fdStatusFilter === 'active' ? '진행중인 상시할인가 없음'
+              : fdStatusFilter === 'ended'  ? '종료된 상시할인가 없음'
+              : '등록된 상시할인가 없음';
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px">${msg}</td></tr>`;
     return;
   }
-  tbody.innerHTML = fixedDiscounts.map(fd => {
-    const active = !fd.end_date || fd.end_date >= nowStr;
+  tbody.innerHTML = filtered.map(fd => {
+    const active = !fd.end_date || fd.end_date > nowStr;
     const status = active
       ? '<span style="color:var(--green);font-weight:600">진행중</span>'
       : '<span style="color:var(--text-dim)">종료</span>';
