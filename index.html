@@ -1102,6 +1102,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="field"><label>상품명 검색</label><input type="text" id="ordersSearchName" placeholder="등록상품명 검색…"></div>
         <button class="btn btn-ghost btn-sm" onclick="searchOrders()" style="margin-bottom:0">검색</button>
         <button class="btn btn-ghost btn-sm" onclick="openColSettingsModal()" style="margin-bottom:0">⚙️ 컬럼 설정</button>
+        <button class="btn btn-ghost btn-sm" onclick="downloadOrdersExcel()" style="margin-bottom:0">📥 엑셀 다운로드</button>
         <button class="btn btn-sm" onclick="openPeriodDeleteModal('orders')" style="margin-bottom:0;background:#f97316;color:#fff;border:none">기간 삭제</button>
         <button class="btn btn-danger btn-sm" onclick="deleteAllOrders()" style="margin-bottom:0">전체 삭제</button>
         <select id="ordersPageSizeSelect" onchange="setOrdersPageSize(+this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);height:30px;margin-bottom:0">
@@ -4091,6 +4092,97 @@ function goToOrdersPage(p) {
 function searchOrders() {
   ordersPage = 1;
   renderOrders();
+}
+
+async function downloadOrdersExcel() {
+  const from   = document.getElementById('ordersDateFrom')?.value || '';
+  const to     = document.getElementById('ordersDateTo')?.value   || '';
+  const search = (document.getElementById('ordersSearchName')?.value || '').toLowerCase().trim();
+
+  let data = [];
+
+  if (currentUser) {
+    // 서버에서 전체 데이터 fetch (페이지네이션 없이)
+    try {
+      const qs = new URLSearchParams({ sort_col: ordersSortCol, sort_dir: ordersSortDir });
+      if (from) qs.set('start_date', from);
+      if (to)   qs.set('end_date', to);
+      if (search) qs.set('search', search);
+      if (ordersExcludeFilter !== 'all') qs.set('exclusion_filter', ordersExcludeFilter);
+      const res = await fetch(`/api/orders?${qs.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        data = Array.isArray(json) ? json : (json.orders || []);
+      }
+    } catch(e) { alert('데이터 로드 실패: ' + e.message); return; }
+  } else {
+    // 로컬 필터링
+    data = orders.filter(o => {
+      if (search && !o['등록상품명'].toLowerCase().includes(search)) return false;
+      const d = parseOrderDate(o['주문일']);
+      if (from && d && d < new Date(from)) return false;
+      if (to   && d && d > new Date(to + 'T23:59:59')) return false;
+      if (ordersExcludeFilter === 'included'  && o.is_excluded) return false;
+      if (ordersExcludeFilter === 'excluded'  && !o.is_excluded) return false;
+      if (['fake_order','return','other'].includes(ordersExcludeFilter) && o.exclusion_type !== ordersExcludeFilter) return false;
+      return true;
+    });
+  }
+
+  if (!data.length) { alert('다운로드할 데이터가 없습니다.'); return; }
+
+  // 헤더
+  const headers = [
+    '인식여부', '주문번호', '주문일시', '등록상품명', '등록옵션명',
+    '노출상품ID', '옵션ID', '수량', '결제금액', '배송비',
+    '쿠폰할인액', '실매출', '수취인명(마스킹)', '연락처(마스킹)'
+  ];
+
+  const rows = data.map(o => {
+    const couponDisc = getCouponDiscountForOrder(o);
+    const payment    = parseFloat(o['결제액'])    || 0;
+    const shipping   = parseFloat(o['배송비'])    || 0;
+    const realSale   = payment + shipping - couponDisc;
+    const excluded   = o.is_excluded;
+    let recognition  = '인식';
+    if (excluded) {
+      const t = o.exclusion_type;
+      recognition = t === 'fake_order' ? '가구매' : t === 'return' ? '반품' : t === 'other' ? '기타' : '미인식';
+    }
+    return [
+      recognition,
+      o['주문번호']     || '',
+      o['주문일']       || '',
+      o['등록상품명']   || '',
+      o['등록옵션명']   || '',
+      o['노출상품ID']   || '',
+      o['옵션ID']       || '',
+      parseFloat(o['구매수(수량)']) || 1,
+      payment,
+      shipping,
+      couponDisc,
+      Math.round(realSale),
+      o['수취인이름']   || '',
+      o['수취인전화번호'] || '',
+    ];
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+  // 컬럼 너비 설정
+  ws['!cols'] = [
+    { wch: 8 }, { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 20 },
+    { wch: 14 }, { wch: 14 }, { wch: 6 }, { wch: 12 }, { wch: 10 },
+    { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, '주문서');
+
+  const today = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
+  XLSX.writeFile(wb, `orders_${dateStr}.xlsx`);
 }
 
 async function loadAdsSummary() {
