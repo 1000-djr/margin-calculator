@@ -1400,12 +1400,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <!-- ── 반품 섹션 ── -->
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>반품</span>
-      <label class="btn btn-primary btn-sm" style="cursor:pointer;font-weight:600">
-        📂 반품 업로드
-        <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleReturnsUpload(event)">
-      </label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm" style="background:#3b82f6;color:#fff;border:none;font-weight:600" onclick="openReturnSyncModal('return')">📡 API로 불러오기</button>
+        <label class="btn btn-primary btn-sm" style="cursor:pointer;font-weight:600">
+          📂 반품 업로드
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleReturnsUpload(event)">
+        </label>
+      </div>
     </div>
-    <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim);margin-bottom:6px"></div>
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:6px">
+      <div id="returnsUploadStatus" style="font-size:12px;color:var(--text-dim)"></div>
+      <div id="returnsSyncTime" style="font-size:12px;color:var(--text-dim)"></div>
+    </div>
     <div id="returnsSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
     <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <input type="date" id="returnsFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
@@ -1437,12 +1443,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <!-- ── 출고중지 섹션 ── -->
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>출고중지</span>
-      <label class="btn btn-sm" style="cursor:pointer;background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600">
-        🚫 출고중지 업로드
-        <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleCancelShipmentUpload(event)">
-      </label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm" style="background:#3b82f6;color:#fff;border:none;font-weight:600" onclick="openReturnSyncModal('cancel')">📡 API로 불러오기</button>
+        <label class="btn btn-sm" style="cursor:pointer;background:#f97316;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-weight:600">
+          🚫 출고중지 업로드
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleCancelShipmentUpload(event)">
+        </label>
+      </div>
     </div>
-    <div id="cancelUploadStatus" style="font-size:12px;color:var(--text-dim);margin-bottom:6px"></div>
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:6px">
+      <div id="cancelUploadStatus" style="font-size:12px;color:var(--text-dim)"></div>
+      <div id="cancelSyncTime" style="font-size:12px;color:var(--text-dim)"></div>
+    </div>
     <div id="cancelSummaryCards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0"></div>
     <div class="card" style="padding:12px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <input type="date" id="cancelFrom" style="font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
@@ -1465,6 +1477,30 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- ══ 반품/출고중지 API 동기화 모달 ══════════════════════════════════ -->
+<div id="returnSyncBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center" onclick="closeReturnSyncModal(event)">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:440px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.2)" onclick="event.stopPropagation()">
+    <div style="font-size:18px;font-weight:700;margin-bottom:18px">📡 쿠팡 API로 불러오기</div>
+    <div class="field-row" style="margin-bottom:16px">
+      <div class="field"><label>시작일시</label><input type="datetime-local" id="returnSyncFrom"></div>
+      <div class="field"><label>종료일시</label><input type="datetime-local" id="returnSyncTo"></div>
+    </div>
+    <div style="margin-bottom:18px">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;font-weight:600">불러올 유형</div>
+      <div class="period-toggle">
+        <button class="period-btn active" id="syncTypeBtnReturn" onclick="setSyncType('return')">반품</button>
+        <button class="period-btn" id="syncTypeBtnCancel" onclick="setSyncType('cancel')">출고중지</button>
+        <button class="period-btn" id="syncTypeBtnAll"    onclick="setSyncType('all')">전체</button>
+      </div>
+    </div>
+    <div id="returnSyncResult" style="min-height:20px;font-size:13px;margin-bottom:16px;line-height:1.6"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="closeReturnSyncModal()">닫기</button>
+      <button class="btn btn-primary" id="returnSyncRunBtn" onclick="runReturnSync()">불러오기</button>
+    </div>
   </div>
 </div>
 
@@ -1992,7 +2028,7 @@ function _activateTabUI(name) {
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
   if (name === 'coupons')  { applyDiscountModeUI(); renderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
   if (name === 'profit')   { renderProfit(); }
-  if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); }
+  if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -7293,6 +7329,100 @@ async function handleReturnsUpload(event) {
     if (statusEl) statusEl.textContent = `오류: ${e.message}`;
     console.error(e);
   }
+}
+
+// ── 반품/출고중지 API 동기화 ─────────────────────────────────────────────────
+let _returnSyncType = 'return'; // 'return' | 'cancel' | 'all'
+
+function setSyncType(type) {
+  _returnSyncType = type;
+  ['return', 'cancel', 'all'].forEach(t => {
+    const btn = document.getElementById(`syncTypeBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    if (btn) btn.classList.toggle('active', t === type);
+  });
+}
+
+function openReturnSyncModal(initialType) {
+  setSyncType(initialType || 'return');
+  // 기본 범위: 현재 KST 기준 어제~오늘
+  const now  = new Date();
+  const toKST = d => d.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).slice(0, 16).replace(' ', 'T');
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  document.getElementById('returnSyncFrom').value = toKST(yesterday);
+  document.getElementById('returnSyncTo').value   = toKST(now);
+  document.getElementById('returnSyncResult').innerHTML = '';
+  document.getElementById('returnSyncRunBtn').disabled  = false;
+  document.getElementById('returnSyncBackdrop').style.display = 'flex';
+}
+
+function closeReturnSyncModal(e) {
+  if (e && e.target !== document.getElementById('returnSyncBackdrop')) return;
+  document.getElementById('returnSyncBackdrop').style.display = 'none';
+}
+
+async function runReturnSync() {
+  const from    = document.getElementById('returnSyncFrom').value;
+  const to      = document.getElementById('returnSyncTo').value;
+  const resultEl = document.getElementById('returnSyncResult');
+  const runBtn   = document.getElementById('returnSyncRunBtn');
+
+  if (!from || !to) {
+    resultEl.innerHTML = '<span style="color:#ef4444">시작일시와 종료일시를 입력하세요</span>';
+    return;
+  }
+
+  runBtn.disabled = true;
+  const types = _returnSyncType === 'all' ? ['return', 'cancel'] : [_returnSyncType];
+  let lines = [];
+
+  for (const type of types) {
+    const label = type === 'return' ? '반품' : '출고중지';
+    resultEl.innerHTML = `<span style="color:#6b7280">${label} 불러오는 중…</span>`;
+    try {
+      const url = type === 'return' ? '/api/returns/sync' : '/api/cancel-shipments/sync';
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+
+      const kst = new Date(data.synced_at).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false });
+      lines.push(`<span style="color:#22c55e;font-weight:600">[${label}]</span> 조회 ${data.total_fetched}건 · 신규 ${data.inserted}건 · 중복 ${data.skipped}건 · 주문제외 ${data.ordersUpdated}건`);
+
+      // 마지막 동기화 시간 갱신
+      const syncEl = document.getElementById(type === 'return' ? 'returnsSyncTime' : 'cancelSyncTime');
+      if (syncEl) syncEl.textContent = `마지막 동기화: ${kst}`;
+    } catch(e) {
+      lines.push(`<span style="color:#ef4444">[${label}] 오류: ${(e.message||'').replace(/</g,'&lt;')}</span>`);
+    }
+  }
+
+  resultEl.innerHTML = lines.join('<br>');
+  runBtn.disabled = false;
+
+  // UI 갱신
+  if (types.includes('return'))  { renderReturns();          loadReturnsSummary(); }
+  if (types.includes('cancel'))  { renderCancelShipments();  loadCancelSummary();  }
+}
+
+async function loadReturnSyncStatus() {
+  if (!currentUser) return;
+  try {
+    const r = await fetch('/api/returns/sync-status');
+    if (!r.ok) return;
+    const data = await r.json();
+    const fmt = iso => iso
+      ? new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false })
+      : null;
+    const rTime = fmt(data.returns_last_sync_at);
+    const cTime = fmt(data.cancel_last_sync_at);
+    const rEl = document.getElementById('returnsSyncTime');
+    const cEl = document.getElementById('cancelSyncTime');
+    if (rEl && rTime) rEl.textContent = `마지막 동기화: ${rTime}`;
+    if (cEl && cTime) cEl.textContent = `마지막 동기화: ${cTime}`;
+  } catch(e) { /* silent */ }
 }
 
 async function handleCancelShipmentUpload(event) {

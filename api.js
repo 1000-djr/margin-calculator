@@ -1844,6 +1844,236 @@ router.post('/cancel-shipments/bulk', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 쿠팡 반품/출고중지 API 동기화 ────────────────────────────────────────────
+
+// 쿠팡 returnRequests API 페이지네이션 수집 헬퍼
+async function fetchReturnRequests(vendorId, accessKey, secretKey, from, to, status) {
+  const allItems = [];
+  let nextToken  = null;
+  let pageIndex  = 1;
+  let callCount  = 0;
+  const MAX_CALLS = 200;
+
+  do {
+    let qs;
+    if (nextToken) {
+      qs = `searchType=timeFrame&createdAtFrom=${encodeURIComponent(from)}&createdAtTo=${encodeURIComponent(to)}&status=${status}&maxPerPage=50&nextToken=${encodeURIComponent(nextToken)}`;
+    } else {
+      qs = `searchType=timeFrame&createdAtFrom=${encodeURIComponent(from)}&createdAtTo=${encodeURIComponent(to)}&status=${status}&maxPerPage=50&pageIndex=${pageIndex}`;
+    }
+
+    const urlPath = `/v2/providers/openapi/apis/api/v6/vendors/${vendorId}/returnRequests?${qs}`;
+    console.log(`[return-sync] status=${status} call#${callCount + 1}: GET ${urlPath}`);
+
+    const result = await coupangRequest('GET', urlPath, accessKey, secretKey);
+    callCount++;
+
+    console.log(`[return-sync] response status=${result.status} body=${JSON.stringify(result.body).slice(0, 200)}`);
+
+    if (result.status !== 200) {
+      const err = new Error(`쿠팡 API 오류 HTTP ${result.status}`);
+      err.httpStatus = result.status;
+      err.body       = result.body;
+      throw err;
+    }
+
+    const body  = result.body || {};
+    const items = Array.isArray(body.data) ? body.data : [];
+    allItems.push(...items);
+
+    nextToken = body.nextToken || null;
+    pageIndex++;
+
+    if (!nextToken && items.length < 50) break;
+  } while (callCount < MAX_CALLS);
+
+  return allItems;
+}
+
+// API 키 + secretKey 복호화 공통 헬퍼
+async function getCoupangKeys(userId) {
+  const { rows } = await pool.query(
+    'SELECT vendor_id, access_key, secret_key FROM coupang_api_keys WHERE user_id=$1 AND is_active=TRUE',
+    [userId]
+  );
+  if (!rows[0]) throw Object.assign(new Error('쿠팡 API 키가 등록되지 않았습니다.'), { noKey: true });
+  const { vendor_id, access_key, secret_key: encSecret } = rows[0];
+  let secretKey;
+  try { secretKey = aesDecrypt(encSecret); } catch(e) {
+    throw Object.assign(new Error('API 키 복호화 실패. 키를 다시 저장해 주세요.'), { decryptErr: true });
+  }
+  return { vendor_id, access_key, secretKey };
+}
+
+// 마지막 동기화 시간 조회
+router.get('/returns/sync-status', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT returns_last_sync_at, cancel_last_sync_at FROM users WHERE id=$1',
+      [req.user.id]
+    );
+    const u = rows[0] || {};
+    res.json({
+      returns_last_sync_at: u.returns_last_sync_at || null,
+      cancel_last_sync_at:  u.cancel_last_sync_at  || null,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 반품(UC) API 동기화
+router.post('/returns/sync', requireAuth, async (req, res) => {
+  const { from, to } = req.body;
+  if (!from || !to) return res.status(400).json({ error: 'from, to 필수 (YYYY-MM-DDTHH:mm)' });
+  try {
+    const { vendor_id, access_key, secretKey } = await getCoupangKeys(req.user.id);
+    const allItems = await fetchReturnRequests(vendor_id, access_key, secretKey, from, to, 'UC');
+    console.log(`[returns/sync] UC 수신: ${allItems.length}건`);
+
+    let inserted = 0, skipped = 0;
+    const orderNumbers = [];
+    const BATCH = 100;
+
+    for (let start = 0; start < allItems.length; start += BATCH) {
+      const batch = allItems.slice(start, start + BATCH);
+      const placeholders = [];
+      const params = [];
+      let p = 1;
+
+      for (const item of batch) {
+        const receiptNum = item.receiptId ? String(item.receiptId) : null;
+        if (!receiptNum) { skipped++; continue; }
+        const orderNum = item.orderId ? String(item.orderId) : null;
+        if (orderNum) orderNumbers.push(orderNum);
+
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},'return',$${p+11})`);
+        params.push(
+          req.user.id,
+          receiptNum,
+          item.receivedAt                          || null,
+          orderNum,
+          item.productName || item.exposedProductName || null,
+          item.optionName                          || null,
+          parseInt(item.quantity)                  || 1,
+          parseInt(item.returnShippingCharge)      || 0,
+          parseInt(item.refundAmount)              || 0,
+          item.returnReason                        || null,
+          item.status                              || null,
+          JSON.stringify(item),
+        );
+        p += 12;
+      }
+
+      if (!placeholders.length) continue;
+      const result = await pool.query(`
+        INSERT INTO returns (
+          user_id, receipt_number, received_at, order_number,
+          product_name, option_name, quantity,
+          return_shipping_fee, refund_amount, return_reason,
+          delivery_status, record_type, raw_data
+        ) VALUES ${placeholders.join(',')}
+        ON CONFLICT (user_id, receipt_number) DO NOTHING
+      `, params);
+      inserted += result.rowCount;
+      skipped  += batch.length - result.rowCount;
+    }
+
+    let ordersUpdated = 0;
+    if (orderNumbers.length) {
+      const { rowCount } = await pool.query(
+        `UPDATE orders SET is_excluded=TRUE, exclusion_type='return' WHERE user_id=$1 AND order_number=ANY($2)`,
+        [req.user.id, orderNumbers]
+      );
+      ordersUpdated = rowCount;
+    }
+
+    const syncedAt = new Date();
+    await pool.query('UPDATE users SET returns_last_sync_at=$2 WHERE id=$1', [req.user.id, syncedAt]);
+
+    res.json({ inserted, skipped, ordersUpdated, synced_at: syncedAt.toISOString(), total_fetched: allItems.length });
+  } catch(e) {
+    if (e.noKey || e.decryptErr) return res.status(400).json({ error: e.message });
+    if (e.httpStatus) return res.status(502).json({ error: e.message, detail: e.body });
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 출고중지(RU) API 동기화
+router.post('/cancel-shipments/sync', requireAuth, async (req, res) => {
+  const { from, to } = req.body;
+  if (!from || !to) return res.status(400).json({ error: 'from, to 필수 (YYYY-MM-DDTHH:mm)' });
+  try {
+    const { vendor_id, access_key, secretKey } = await getCoupangKeys(req.user.id);
+    const allItems = await fetchReturnRequests(vendor_id, access_key, secretKey, from, to, 'RU');
+    console.log(`[cancel/sync] RU 수신: ${allItems.length}건`);
+
+    let inserted = 0, skipped = 0;
+    const orderNumbers = [];
+    const BATCH = 100;
+
+    for (let start = 0; start < allItems.length; start += BATCH) {
+      const batch = allItems.slice(start, start + BATCH);
+      const placeholders = [];
+      const params = [];
+      let p = 1;
+
+      for (const item of batch) {
+        const receiptNum = item.receiptId ? String(item.receiptId) : null;
+        if (!receiptNum) { skipped++; continue; }
+        const orderNum = item.orderId ? String(item.orderId) : null;
+        if (orderNum) orderNumbers.push(orderNum);
+
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},'cancel',$${p+11})`);
+        params.push(
+          req.user.id,
+          receiptNum,
+          item.receivedAt                          || null,
+          orderNum,
+          item.productName || item.exposedProductName || null,
+          item.optionName                          || null,
+          parseInt(item.quantity)                  || 1,
+          parseInt(item.returnShippingCharge)      || 0,
+          parseInt(item.refundAmount)              || 0,
+          item.returnReason                        || null,
+          item.status                              || null,
+          JSON.stringify(item),
+        );
+        p += 12;
+      }
+
+      if (!placeholders.length) continue;
+      const result = await pool.query(`
+        INSERT INTO returns (
+          user_id, receipt_number, received_at, order_number,
+          product_name, option_name, quantity,
+          return_shipping_fee, refund_amount, return_reason,
+          delivery_status, record_type, raw_data
+        ) VALUES ${placeholders.join(',')}
+        ON CONFLICT (user_id, receipt_number) DO NOTHING
+      `, params);
+      inserted += result.rowCount;
+      skipped  += batch.length - result.rowCount;
+    }
+
+    let ordersUpdated = 0;
+    if (orderNumbers.length) {
+      const { rowCount } = await pool.query(
+        `UPDATE orders SET is_excluded=TRUE, exclusion_type='cancel' WHERE user_id=$1 AND order_number=ANY($2)`,
+        [req.user.id, orderNumbers]
+      );
+      ordersUpdated = rowCount;
+    }
+
+    const syncedAt = new Date();
+    await pool.query('UPDATE users SET cancel_last_sync_at=$2 WHERE id=$1', [req.user.id, syncedAt]);
+
+    res.json({ inserted, skipped, ordersUpdated, synced_at: syncedAt.toISOString(), total_fetched: allItems.length });
+  } catch(e) {
+    if (e.noKey || e.decryptErr) return res.status(400).json({ error: e.message });
+    if (e.httpStatus) return res.status(502).json({ error: e.message, detail: e.body });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 출고중지완료 처리
 router.post('/cancel-shipments/:id/complete', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
