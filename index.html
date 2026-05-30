@@ -1100,6 +1100,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="filter-row">
         <div class="field"><label>주문일 시작</label><input type="date" id="ordersDateFrom"></div>
         <div class="field"><label>주문일 종료</label><input type="date" id="ordersDateTo"></div>
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">빠른 선택</div>
+          <div class="quick-date-pills">
+            <button class="quick-pill" id="ordersQpYesterday" onclick="setOrdersQuickDate('yesterday')">어제</button>
+            <button class="quick-pill" id="ordersQpWeek"      onclick="setOrdersQuickDate('week')">최근 7일</button>
+            <button class="quick-pill" id="ordersQpMonth"     onclick="setOrdersQuickDate('month')">이번달</button>
+          </div>
+        </div>
         <div class="field"><label>상품명 검색</label><input type="text" id="ordersSearchName" placeholder="등록상품명 검색…"></div>
         <button class="btn btn-ghost btn-sm" onclick="searchOrders()" style="margin-bottom:0">검색</button>
         <button class="btn btn-ghost btn-sm" onclick="openColSettingsModal()" style="margin-bottom:0">⚙️ 컬럼 설정</button>
@@ -6043,6 +6051,30 @@ function clearQuickSelect() {
   document.getElementById('qpYesterday')?.classList.remove('active');
   document.getElementById('qpWeek')?.classList.remove('active');
   document.getElementById('qpMonth')?.classList.remove('active');
+}
+
+function setOrdersQuickDate(type) {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  let from, to;
+  if (type === 'yesterday') {
+    from = to = fmt(yesterday);
+  } else if (type === 'week') {
+    const start = new Date(today); start.setDate(today.getDate() - 7);
+    from = fmt(start); to = fmt(today);
+  } else if (type === 'month') {
+    from = fmt(new Date(today.getFullYear(), today.getMonth(), 1));
+    to   = fmt(today);
+  }
+  document.getElementById('ordersDateFrom').value = from;
+  document.getElementById('ordersDateTo').value   = to;
+  // pill 하이라이트
+  ['yesterday','week','month'].forEach(t => {
+    const el = document.getElementById('ordersQp' + t.charAt(0).toUpperCase() + t.slice(1));
+    el?.classList.toggle('active', t === type);
+  });
+  searchOrders();
 }
 
 function getPlatformRate() {
