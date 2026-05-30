@@ -1080,11 +1080,12 @@ router.post('/fixed-discounts', requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    // 동일 option_id 진행중(end_date IS NULL) 이력 → 새 시작일 - 1초로 자동 종료
+    // 동일 option_id 진행중(end_date IS NULL 또는 새 시작일 이후까지 유효) 이력 전체 종료
     await client.query(
       `UPDATE fixed_discounts
        SET end_date = $3::TIMESTAMPTZ - INTERVAL '1 second'
-       WHERE user_id = $1 AND option_id = $2 AND end_date IS NULL`,
+       WHERE user_id = $1 AND option_id = $2
+         AND (end_date IS NULL OR end_date >= $3::TIMESTAMPTZ)`,
       [req.user.id, option_id, start_date]
     );
     const { rows } = await client.query(
