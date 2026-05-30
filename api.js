@@ -992,12 +992,17 @@ router.delete('/coupons/:id', requireAuth, async (req, res) => {
 
 // ─── 상시할인가 ────────────────────────────────────────────────────────────────
 function fdRow(r) {
+  function toKSTDatetime(d) {
+    if (!d) return null;
+    // TIMESTAMPTZ → "YYYY-MM-DD HH:mm:ss" (KST)
+    return d.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
+  }
   return {
     id:              r.id,
     option_id:       r.option_id,
     discount_amount: parseFloat(r.discount_amount) || 0,
-    start_date:      r.start_date ? r.start_date.toISOString().slice(0, 10) : '',
-    end_date:        r.end_date   ? r.end_date.toISOString().slice(0, 10)   : null,
+    start_date:      toKSTDatetime(r.start_date) || '',
+    end_date:        toKSTDatetime(r.end_date),
   };
 }
 

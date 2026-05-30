@@ -174,8 +174,8 @@ async function initDB() {
       user_id         INTEGER REFERENCES users(id) ON DELETE CASCADE,
       option_id       VARCHAR(100) NOT NULL,
       discount_amount NUMERIC(12,2) NOT NULL,
-      start_date      DATE NOT NULL,
-      end_date        DATE,
+      start_date      TIMESTAMPTZ NOT NULL,
+      end_date        TIMESTAMPTZ,
       created_at      TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE UNIQUE INDEX IF NOT EXISTS fixed_discounts_unique
@@ -467,6 +467,22 @@ async function initDB() {
       url        TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+  `);
+
+  // fixed_discounts: DATE → TIMESTAMPTZ 마이그레이션
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'fixed_discounts'
+          AND column_name = 'start_date'
+          AND data_type = 'date'
+      ) THEN
+        ALTER TABLE fixed_discounts ALTER COLUMN start_date TYPE TIMESTAMPTZ USING start_date::TIMESTAMPTZ;
+        ALTER TABLE fixed_discounts ALTER COLUMN end_date   TYPE TIMESTAMPTZ USING end_date::TIMESTAMPTZ;
+      END IF;
+    END $$;
   `);
 
   console.log('[db] Tables ready');

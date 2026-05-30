@@ -1247,8 +1247,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="field-row">
         <div class="field"><label>옵션ID</label><input type="text" id="fdOptionId" placeholder="예: 123456789"></div>
         <div class="field"><label>할인금액 (원)</label><input type="number" id="fdAmount" placeholder="0" min="0"></div>
-        <div class="field"><label>적용시작일</label><input type="date" id="fdStartDate"></div>
-        <div class="field"><label>적용종료일 <span style="font-weight:400;color:var(--text-dim)">(미입력 시 진행중)</span></label><input type="date" id="fdEndDate"></div>
+        <div class="field"><label>적용시작일시</label><input type="datetime-local" id="fdStartDate" step="1"></div>
+        <div class="field"><label>적용종료일시 <span style="font-weight:400;color:var(--text-dim)">(미입력 시 진행중)</span></label><input type="datetime-local" id="fdEndDate" step="1"></div>
       </div>
       <div class="btn-row" style="margin-top:12px">
         <button class="btn btn-primary" id="fdSaveBtn" onclick="saveFixedDiscount()">+ 추가</button>
@@ -5252,10 +5252,10 @@ function openAdMappingForOid(oid) {
 
 // ── 상시할인가 관리 ───────────────────────────────────────────────────────────
 function downloadFdTemplate() {
-  const headers = ['옵션ID', '할인금액', '적용시작일(YYYY-MM-DD)', '적용종료일(YYYY-MM-DD, 미입력시 진행중)'];
-  const example = ['123456789', '4900', '2026-05-01', '2026-12-31'];
+  const headers = ['옵션ID', '할인금액', '적용시작일시(YYYY-MM-DD HH:mm:ss)', '적용종료일시(YYYY-MM-DD HH:mm:ss, 미입력시 진행중)'];
+  const example = ['123456789', '4900', '2026-05-01 00:00:00', '2026-12-31 23:59:59'];
   const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-  ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 24 }, { wch: 32 }];
+  ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 30 }, { wch: 38 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '상시할인가등록양식');
   XLSX.writeFile(wb, '상시할인가_대량등록_양식.xlsx');
@@ -5280,27 +5280,34 @@ async function handleFdBulkUpload(input) {
     }
     const colOpt   = findCol(['옵션ID', '옵션 ID']);
     const colAmt   = findCol(['할인금액', '할인 금액']);
-    const colStart = findCol(['적용시작일(YYYY-MM-DD)', '적용시작일', '시작일']);
-    const colEnd   = findCol(['적용종료일(YYYY-MM-DD, 미입력시 진행중)', '적용종료일', '종료일']);
+    const colStart = findCol(['적용시작일시(YYYY-MM-DD HH:mm:ss)', '적용시작일(YYYY-MM-DD)', '적용시작일시', '적용시작일', '시작일']);
+    const colEnd   = findCol(['적용종료일시(YYYY-MM-DD HH:mm:ss, 미입력시 진행중)', '적용종료일(YYYY-MM-DD, 미입력시 진행중)', '적용종료일시', '적용종료일', '종료일']);
 
     console.log('[상시할인가업로드] 헤더:', headers);
     console.log('[상시할인가업로드] 컬럼:', { colOpt, colAmt, colStart, colEnd });
 
-    // 날짜-only 파싱: Date객체 / 직렬번호 / 텍스트 → "yyyy-MM-dd" (KST)
+    // 날짜/시간 파싱: Date객체 / 직렬번호 / 텍스트 → "YYYY-MM-DD HH:mm:ss+09:00" (KST)
     function parseFdDate(val) {
       const pad = n => String(n).padStart(2, '0');
       if (val instanceof Date) {
         if (isNaN(val.getTime())) return null;
-        return `${val.getFullYear()}-${pad(val.getMonth()+1)}-${pad(val.getDate())}`;
+        // XLSX cellDates:true 시 UTC Date로 반환됨 → KST 변환
+        const s = val.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
+        return s + '+09:00';
       }
       if (typeof val === 'number') {
-        // 날짜-only 직렬번호: UTC 날짜부 추출 (KST +9h로 이전날 방지)
-        const d = new Date(Math.round((val - 25569) * 86400 * 1000) + 9 * 3600 * 1000);
+        // 엑셀 날짜 직렬번호: KST 기준으로 변환
+        const d = new Date(Math.round((val - 25569) * 86400 * 1000));
         if (isNaN(d.getTime())) return null;
-        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
+        const s = d.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
+        return s + '+09:00';
       }
-      const s = String(val).trim().slice(0, 10);
-      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+      const s = String(val).trim();
+      // "YYYY-MM-DD HH:mm:ss" 또는 "YYYY-MM-DD" 형식 허용
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) return s + '+09:00';
+      if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s))        return s + ':00+09:00';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s.slice(0, 10)))        return s.slice(0, 10) + ' 00:00:00+09:00';
+      return null;
     }
 
     const validItems = [];
@@ -5366,13 +5373,13 @@ async function handleFdBulkUpload(input) {
 function renderFixedDiscounts() {
   const tbody = document.getElementById('fdTbody');
   if (!tbody) return;
-  const today = new Date().toISOString().slice(0, 10);
+  const nowStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
   if (!fixedDiscounts.length) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px">등록된 상시할인가 없음</td></tr>';
     return;
   }
   tbody.innerHTML = fixedDiscounts.map(fd => {
-    const active = !fd.end_date || fd.end_date >= today;
+    const active = !fd.end_date || fd.end_date >= nowStr;
     const status = active
       ? '<span style="color:var(--green);font-weight:600">진행중</span>'
       : '<span style="color:var(--text-dim)">종료</span>';
@@ -5396,15 +5403,22 @@ function renderFixedDiscounts() {
   }).join('');
 }
 
+// datetime-local 값(YYYY-MM-DDTHH:mm 또는 YYYY-MM-DDTHH:mm:ss)을 KST ISO 문자열로 변환
+function fdLocalToKST(val) {
+  if (!val) return null;
+  const s = val.length <= 16 ? val + ':00' : val;  // 초 없으면 보충
+  return s + '+09:00';
+}
+
 async function saveFixedDiscount() {
   const currentEditingId = editingFdId; // capture before any await
   const option_id       = (document.getElementById('fdOptionId').value || '').trim();
   const discount_amount = parseFloat(document.getElementById('fdAmount').value) || 0;
-  const start_date      = document.getElementById('fdStartDate').value;
-  const end_date        = document.getElementById('fdEndDate').value || null;
+  const start_date      = fdLocalToKST(document.getElementById('fdStartDate').value);
+  const end_date        = fdLocalToKST(document.getElementById('fdEndDate').value);
   if (!option_id)           return alert('옵션ID를 입력하세요');
   if (discount_amount <= 0) return alert('할인금액을 입력하세요');
-  if (!start_date)          return alert('적용시작일을 입력하세요');
+  if (!start_date)          return alert('적용시작일시를 입력하세요');
   const payload = { option_id, discount_amount, start_date, end_date };
   if (currentUser) {
     try {
@@ -5436,8 +5450,8 @@ function editFixedDiscount(id) {
   editingFdId = fd.id;
   document.getElementById('fdOptionId').value  = fd.option_id;
   document.getElementById('fdAmount').value    = fd.discount_amount;
-  document.getElementById('fdStartDate').value = fd.start_date;
-  document.getElementById('fdEndDate').value   = fd.end_date || '';
+  document.getElementById('fdStartDate').value = fd.start_date ? fd.start_date.slice(0, 19).replace(' ', 'T') : '';
+  document.getElementById('fdEndDate').value   = fd.end_date   ? fd.end_date.slice(0, 19).replace(' ', 'T')   : '';
   document.getElementById('fdFormTitle').textContent    = '상시할인가 수정';
   document.getElementById('fdSaveBtn').textContent      = '저장';
   document.getElementById('fdCancelBtn').style.display  = '';
@@ -5445,9 +5459,11 @@ function editFixedDiscount(id) {
 }
 
 async function endFixedDiscount(id) {
-  const today = new Date().toISOString().slice(0, 10);
-  const end_date = prompt('종료일 입력 (YYYY-MM-DD)', today);
-  if (!end_date) return;
+  const nowKST = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
+  const input = prompt('종료일시 입력 (YYYY-MM-DD HH:mm:ss)', nowKST);
+  if (!input) return;
+  // 입력값을 KST ISO로 변환
+  const end_date = input.trim().replace(' ', 'T') + (input.includes('+') ? '' : '+09:00');
   if (currentUser) {
     try {
       const res = await fetch(`/api/fixed-discounts/${id}/end`, {
@@ -5458,7 +5474,7 @@ async function endFixedDiscount(id) {
       fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(id) ? d : f);
     } catch(e) { return alert('종료 처리 실패: ' + e.message); }
   } else {
-    fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(id) ? { ...f, end_date } : f);
+    fixedDiscounts = fixedDiscounts.map(f => String(f.id) === String(id) ? { ...f, end_date: input.trim() } : f);
   }
   renderFixedDiscounts();
 }
@@ -6097,10 +6113,12 @@ function getCouponDiscountForOrder(order) {
 
   // 상시할인가 우선 모드일 때만 fixed_discounts 확인
   if (discountMode === 'fixed') {
+    // 주문일시 문자열: "YYYY-MM-DD HH:mm:ss" 또는 "YYYY-MM-DD" 형식으로 정규화
+    const orderDT = d.toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
     const fd = fixedDiscounts.find(f => {
       if (String(f.option_id) !== orderOptionId) return false;
-      if (f.start_date && orderDate < f.start_date) return false;
-      if (f.end_date   && orderDate > f.end_date)   return false;
+      if (f.start_date && orderDT < f.start_date) return false;
+      if (f.end_date   && orderDT > f.end_date)   return false;
       return true;
     });
     if (fd) return fd.discount_amount || 0;
