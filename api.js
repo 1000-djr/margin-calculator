@@ -1083,6 +1083,7 @@ async function autoCloseActiveDiscounts(client, userId, optionId, newStartDate) 
        AND (end_date IS NULL OR end_date >= $3::TIMESTAMPTZ)`,
     [userId, oid, newStartDate]
   );
+  console.log(`[autoClose] user=${userId} option_id=${oid} start=${newStartDate} → closed ${result.rowCount}건`);
   return result.rowCount;
 }
 
@@ -1092,19 +1093,29 @@ router.post('/fixed-discounts', requireAuth, async (req, res) => {
   if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
   if (!start_date)                              return res.status(400).json({ error: '시작일 필수' });
   const oid = String(option_id);
+  console.log(`[fixed-discounts POST] user=${req.user.id} option_id=${oid} start_date=${start_date}`);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await autoCloseActiveDiscounts(client, req.user.id, oid, start_date);
+    // ON CONFLICT DO UPDATE: start_date가 동일한 기존 레코드(DATE→TIMESTAMPTZ 마이그레이션 후 같은 UTC값)가
+    // 있을 경우 INSERT 오류로 ROLLBACK되어 autoClose가 취소되는 버그 방지.
+    // 충돌 시 기존 레코드를 새 값으로 갱신한다.
     const { rows } = await client.query(
       `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (user_id,option_id,start_date)
+       DO UPDATE SET discount_amount = EXCLUDED.discount_amount,
+                     end_date        = EXCLUDED.end_date
+       RETURNING *`,
       [req.user.id, oid, discount_amount, start_date, end_date || null]
     );
     await client.query('COMMIT');
+    console.log(`[fixed-discounts POST] COMMIT → id=${rows[0]?.id}`);
     res.status(201).json(fdRow(rows[0]));
   } catch(e) {
     await client.query('ROLLBACK');
+    console.error(`[fixed-discounts POST] ROLLBACK: ${e.message}`);
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
