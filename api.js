@@ -2359,6 +2359,15 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
     let inserted = 0;
     let skipped  = 0;
 
+    // 첫 번째 item 전체 구조 로깅 (필드명 확인용)
+    const firstSheet = allItems[0];
+    const firstItem  = firstSheet?.orderItems?.[0];
+    if (firstItem) {
+      console.log('[sync] sheet keys:', Object.keys(firstSheet).join(', '));
+      console.log('[sync] item keys:', Object.keys(firstItem).join(', '));
+      console.log('[sync] item sample:', JSON.stringify(firstItem).slice(0, 500));
+    }
+
     for (const sheet of allItems) {
       for (const item of (sheet.orderItems || [])) {
         const orderNumber = String(sheet.orderId || '');
@@ -2371,15 +2380,28 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
           ? rawOrderedAt.slice(0, 16).replace('T', ' ')
           : rawOrderedAt.slice(0, 10);
 
-        const productName  = item.sellerProductName || '';
-        const optionName   = item.sellerProductItemName || '';
-        const optionId     = String(item.sellerProductItemId || '');
+        const productName = item.sellerProductName || '';
+        const optionName  = item.sellerProductItemName || '';
+
+        // 옵션ID: sellerProductItemId (셀러 등록 옵션ID = Wing 엑셀의 "옵션ID")
+        // null/undefined 안전하게 처리 (0도 유효한 값이므로 || 대신 != null 사용)
+        const optionId = item.sellerProductItemId != null
+          ? String(item.sellerProductItemId)
+          : (item.vendorItemId != null ? String(item.vendorItemId) : '');
+
+        // 노출상품ID: vendorItemId (쿠팡 노출 기준 ID = Wing 엑셀의 "노출상품ID")
+        const displayProductId = item.vendorItemId != null
+          ? String(item.vendorItemId)
+          : (item.externalVendorSkuCode != null ? String(item.externalVendorSkuCode) : '');
+
+        // 노출상품명(옵션명): vendorItemName → 없으면 sellerProductItemName
+        const displayName = item.vendorItemName || item.sellerProductItemName || '';
+
         const paymentAmt   = Math.round(Number(item.orderPrice || 0));
         const shippingFee  = Math.round(Number(sheet.shippingPrice || 0));
         const qty          = Number(item.quantity || 1);
         const unitPrice    = qty > 0 ? Math.round(paymentAmt / qty) : paymentAmt;
         const bundleNumber = String(sheet.shipmentBoxId || '');
-        const displayName  = item.sellerProductName || '';
 
         const buyerMasked     = maskName(sheet.orderer?.name || '');
         const recipientMasked = maskName(sheet.receiver?.name || '');
@@ -2390,21 +2412,30 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
           const upsertRes = await pool.query(
             `INSERT INTO orders (
               user_id, order_number, bundle_number, order_date,
-              product_name, option_name, display_name, option_id,
+              product_name, option_name, display_name, display_product_id, option_id,
               payment_amount, shipping_fee, quantity, unit_price,
               buyer_masked, recipient_name_masked, recipient_phone_masked, recipient_address_masked,
               is_excluded, exclusion_type
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,FALSE,'normal')
-            ON CONFLICT (user_id, order_number) DO NOTHING
-            RETURNING id`,
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,FALSE,'normal')
+            ON CONFLICT (user_id, order_number) DO UPDATE SET
+              display_product_id = CASE
+                WHEN orders.display_product_id IS NULL OR orders.display_product_id = ''
+                THEN EXCLUDED.display_product_id ELSE orders.display_product_id END,
+              option_id = CASE
+                WHEN orders.option_id IS NULL OR orders.option_id = ''
+                THEN EXCLUDED.option_id ELSE orders.option_id END,
+              display_name = CASE
+                WHEN orders.display_name IS NULL OR orders.display_name = ''
+                THEN EXCLUDED.display_name ELSE orders.display_name END
+            RETURNING id, (xmax = 0) AS is_insert`,
             [
               req.user.id, orderNumber, bundleNumber, orderDate,
-              productName, optionName, displayName, optionId,
+              productName, optionName, displayName, displayProductId, optionId,
               paymentAmt, shippingFee, qty, unitPrice,
               buyerMasked, recipientMasked, phoneMasked, addrMasked,
             ]
           );
-          if (upsertRes.rowCount > 0) inserted++;
+          if (upsertRes.rowCount > 0 && upsertRes.rows[0]?.is_insert) inserted++;
           else skipped++;
         } catch (dbErr) {
           console.error('[sync] DB insert error:', dbErr.message);
