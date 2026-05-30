@@ -2374,11 +2374,13 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
         if (!orderNumber) { skipped++; continue; }
 
         // 날짜+시간 포맷: orderedAt은 ISO 문자열 (KST 기준)
-        // "2026-05-28T10:30:00" → "2026-05-28 10:30" (엑셀 업로드와 동일 포맷)
+        // "2026-05-28T10:30:15" → "2026-05-28 10:30:15"
         const rawOrderedAt = sheet.orderedAt || '';
-        const orderDate = rawOrderedAt.length >= 16
-          ? rawOrderedAt.slice(0, 16).replace('T', ' ')
-          : rawOrderedAt.slice(0, 10);
+        const orderDate = rawOrderedAt.length >= 19
+          ? rawOrderedAt.slice(0, 19).replace('T', ' ')
+          : rawOrderedAt.length >= 16
+            ? rawOrderedAt.slice(0, 16).replace('T', ' ')
+            : rawOrderedAt.slice(0, 10);
 
         const productName = item.sellerProductName || '';
         const optionName  = item.sellerProductItemName || '';
