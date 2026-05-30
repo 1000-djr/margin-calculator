@@ -1245,7 +1245,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="card">
       <div class="card-title"><span class="dot"></span><span id="fdFormTitle">새 상시할인가 추가</span></div>
       <div class="field-row">
-        <div class="field"><label>옵션ID</label><input type="text" id="fdOptionId" placeholder="예: 123456789"></div>
+        <div class="field">
+          <label>옵션ID</label>
+          <input type="text" id="fdOptionId" placeholder="예: 123456789" onblur="fetchFdOptionInfo()">
+          <div id="fdOptionPreview" style="margin-top:4px;font-size:12px;color:var(--text-dim);min-height:16px"></div>
+        </div>
         <div class="field"><label>할인금액 (원)</label><input type="number" id="fdAmount" placeholder="0" min="0"></div>
         <div class="field"><label>적용시작일시</label><input type="datetime-local" id="fdStartDate" step="1"></div>
         <div class="field"><label>적용종료일시 <span style="font-weight:400;color:var(--text-dim)">(미입력 시 진행중)</span></label><input type="datetime-local" id="fdEndDate" step="1"></div>
@@ -1259,7 +1263,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table">
         <thead><tr>
-          <th>옵션ID</th><th>할인금액</th><th>적용시작일</th><th>적용종료일</th><th>상태</th><th></th>
+          <th>옵션ID</th><th>상품명</th><th>옵션명</th><th>할인금액</th><th>적용시작일시</th><th>적용종료일시</th><th>상태</th><th></th>
         </tr></thead>
         <tbody id="fdTbody"></tbody>
       </table>
@@ -5375,7 +5379,7 @@ function renderFixedDiscounts() {
   if (!tbody) return;
   const nowStr = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' }).replace('T', ' ');
   if (!fixedDiscounts.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px">등록된 상시할인가 없음</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px">등록된 상시할인가 없음</td></tr>';
     return;
   }
   tbody.innerHTML = fixedDiscounts.map(fd => {
@@ -5388,8 +5392,12 @@ function renderFixedDiscounts() {
     const endBtn = active
       ? `<button class="btn btn-sm" onclick="endFixedDiscount('${idStr}')" style="padding:2px 8px;background:#f97316;color:#fff;border:none;border-radius:6px;cursor:pointer">종료</button>`
       : '';
+    const pName = fd.product_name ? fd.product_name.replace(/</g,'&lt;') : '<span style="color:var(--text-dim)">-</span>';
+    const oName = fd.option_name  ? fd.option_name.replace(/</g,'&lt;')  : '<span style="color:var(--text-dim)">-</span>';
     return `<tr>
       <td style="font-family:var(--mono)">${fd.option_id}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(fd.product_name||'').replace(/"/g,'&quot;')}">${pName}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(fd.option_name||'').replace(/"/g,'&quot;')}">${oName}</td>
       <td style="font-family:var(--mono);text-align:right">${(fd.discount_amount||0).toLocaleString('ko-KR')}원</td>
       <td>${fd.start_date}</td>
       <td>${endStr}</td>
@@ -5452,6 +5460,13 @@ function editFixedDiscount(id) {
   document.getElementById('fdAmount').value    = fd.discount_amount;
   document.getElementById('fdStartDate').value = fd.start_date ? fd.start_date.slice(0, 19).replace(' ', 'T') : '';
   document.getElementById('fdEndDate').value   = fd.end_date   ? fd.end_date.slice(0, 19).replace(' ', 'T')   : '';
+  // 수정 시 상품명/옵션명 미리보기
+  const preview = document.getElementById('fdOptionPreview');
+  if (preview) {
+    preview.textContent = fd.product_name
+      ? `${fd.product_name}${fd.option_name ? ' / ' + fd.option_name : ''}`
+      : '';
+  }
   document.getElementById('fdFormTitle').textContent    = '상시할인가 수정';
   document.getElementById('fdSaveBtn').textContent      = '저장';
   document.getElementById('fdCancelBtn').style.display  = '';
@@ -5488,12 +5503,30 @@ async function deleteFixedDiscount(id) {
   renderFixedDiscounts();
 }
 
+async function fetchFdOptionInfo() {
+  const optionId = (document.getElementById('fdOptionId').value || '').trim();
+  const preview  = document.getElementById('fdOptionPreview');
+  if (!preview) return;
+  if (!optionId || !currentUser) { preview.textContent = ''; return; }
+  try {
+    const res  = await fetch(`/api/fixed-discounts/option-info?option_id=${encodeURIComponent(optionId)}`);
+    const data = res.ok ? await res.json() : {};
+    if (data.product_name) {
+      preview.textContent = `${data.product_name}${data.option_name ? ' / ' + data.option_name : ''}`;
+    } else {
+      preview.textContent = '주문 내역에서 상품명을 찾을 수 없습니다';
+    }
+  } catch(e) { preview.textContent = ''; }
+}
+
 function resetFdForm() {
   editingFdId = null;
   document.getElementById('fdOptionId').value   = '';
   document.getElementById('fdAmount').value     = '';
   document.getElementById('fdStartDate').value  = '';
   document.getElementById('fdEndDate').value    = '';
+  const preview = document.getElementById('fdOptionPreview');
+  if (preview) preview.textContent = '';
   document.getElementById('fdFormTitle').textContent   = '새 상시할인가 추가';
   document.getElementById('fdSaveBtn').textContent     = '+ 추가';
   document.getElementById('fdCancelBtn').style.display = 'none';

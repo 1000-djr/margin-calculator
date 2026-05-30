@@ -1000,6 +1000,8 @@ function fdRow(r) {
   return {
     id:              r.id,
     option_id:       r.option_id,
+    product_name:    r.product_name || null,
+    option_name:     r.option_name  || null,
     discount_amount: parseFloat(r.discount_amount) || 0,
     start_date:      toKSTDatetime(r.start_date) || '',
     end_date:        toKSTDatetime(r.end_date),
@@ -1009,10 +1011,42 @@ function fdRow(r) {
 router.get('/fixed-discounts', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT * FROM fixed_discounts WHERE user_id=$1 ORDER BY start_date DESC, created_at DESC',
+      `SELECT fd.*,
+              o.product_name,
+              o.option_name
+       FROM fixed_discounts fd
+       LEFT JOIN LATERAL (
+         SELECT product_name, option_name
+         FROM orders
+         WHERE user_id = fd.user_id
+           AND option_id = fd.option_id
+           AND product_name IS NOT NULL
+         ORDER BY order_date DESC
+         LIMIT 1
+       ) o ON true
+       WHERE fd.user_id = $1
+       ORDER BY fd.start_date DESC, fd.created_at DESC`,
       [req.user.id]
     );
     res.json(rows.map(fdRow));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 옵션ID로 상품명/옵션명 미리보기
+router.get('/fixed-discounts/option-info', requireAuth, async (req, res) => {
+  const { option_id } = req.query;
+  if (!option_id) return res.json({ product_name: null, option_name: null });
+  try {
+    const { rows } = await pool.query(
+      `SELECT product_name, option_name
+       FROM orders
+       WHERE user_id = $1 AND option_id = $2 AND product_name IS NOT NULL
+       ORDER BY order_date DESC
+       LIMIT 1`,
+      [req.user.id, String(option_id)]
+    );
+    const row = rows[0] || {};
+    res.json({ product_name: row.product_name || null, option_name: row.option_name || null });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
