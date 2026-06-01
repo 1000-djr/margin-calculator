@@ -1959,22 +1959,29 @@ router.post('/returns/sync', requireAuth, async (req, res) => {
         const orderNum = item.orderId ? String(item.orderId) : null;
         if (orderNum) orderNumbers.push(orderNum);
 
-        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},'return',$${p+11})`);
+        const ri = Array.isArray(item.returnItems) && item.returnItems[0] ? item.returnItems[0] : {};
+        const returnType = item.faultByType === 'VENDOR' ? 'seller'
+                         : item.faultByType === 'BUYER'  ? 'buyer'
+                         : 'other';
+
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},'return',$${p+11},$${p+12},$${p+13})`);
         params.push(
-          req.user.id,
-          receiptNum,
-          item.receivedAt                          || null,
-          orderNum,
-          item.productName || item.exposedProductName || null,
-          item.optionName                          || null,
-          parseInt(item.quantity)                  || 1,
-          parseInt(item.returnShippingCharge)      || 0,
-          parseInt(item.refundAmount)              || 0,
-          item.returnReason                        || null,
-          item.status                              || null,
-          JSON.stringify(item),
+          req.user.id,                                              // user_id
+          receiptNum,                                               // receipt_number
+          item.createdAt                             || null,       // received_at (접수일)
+          orderNum,                                                 // order_number
+          ri.vendorItemPackageName                   || null,       // product_name (노출상품명)
+          ri.vendorItemName || ri.sellerProductName  || null,       // option_name (옵션명)
+          parseInt(ri.cancelCount)                   || 1,          // quantity (수량)
+          parseInt(item.returnShippingCharge?.units) || 0,          // return_shipping_fee (반품배송비)
+          parseInt(item.enclosePrice?.units)         || 0,          // refund_amount (환불예정금액)
+          item.reasonCodeText                        || null,       // return_reason (취소사유)
+          item.status                                || null,       // delivery_status
+          JSON.stringify(item),                                     // raw_data
+          ri.vendorItemId ? String(ri.vendorItemId)  : null,       // option_id (옵션ID)
+          returnType,                                               // return_type (반품유형)
         );
-        p += 12;
+        p += 14;
       }
 
       if (!placeholders.length) continue;
@@ -1983,7 +1990,8 @@ router.post('/returns/sync', requireAuth, async (req, res) => {
           user_id, receipt_number, received_at, order_number,
           product_name, option_name, quantity,
           return_shipping_fee, refund_amount, return_reason,
-          delivery_status, record_type, raw_data
+          delivery_status, record_type, raw_data,
+          option_id, return_type
         ) VALUES ${placeholders.join(',')}
         ON CONFLICT (user_id, receipt_number) DO NOTHING
       `, params);
