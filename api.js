@@ -199,6 +199,28 @@ router.get('/admin/user-debug', requireRealAdmin, async (req, res) => {
       ORDER BY created_at DESC LIMIT 5
     `, [uid]);
 
+    // 5. 원가 진단 쿼리
+    const { rows: costDiag } = await pool.query(`
+      SELECT
+        (SELECT COUNT(*)::INTEGER FROM product_name_mapping WHERE user_id = $1) AS pnm_count,
+        (SELECT COUNT(*)::INTEGER FROM b2b_products          WHERE user_id = $1) AS b2b_products_count,
+        (SELECT COUNT(*)::INTEGER FROM b2b_prices            WHERE user_id = $1) AS b2b_prices_count,
+        (SELECT COUNT(*)::INTEGER FROM orders
+          WHERE user_id = $1 AND override_cost_price IS NOT NULL AND is_excluded = FALSE) AS override_orders_count,
+        (SELECT COALESCE(SUM(override_cost_price * quantity), 0)::BIGINT FROM orders
+          WHERE user_id = $1 AND override_cost_price IS NOT NULL AND is_excluded = FALSE) AS override_total_cost
+    `, [uid]);
+
+    // 6. override_cost_price 설정된 주문 샘플 (최대 10건)
+    const { rows: overrideSamples } = await pool.query(`
+      SELECT id, order_number, order_date, product_name, option_name,
+             quantity, override_cost_price, override_cost_note
+      FROM orders
+      WHERE user_id = $1 AND override_cost_price IS NOT NULL AND is_excluded = FALSE
+      ORDER BY override_cost_price * quantity DESC
+      LIMIT 10
+    `, [uid]);
+
     res.json({
       found: true,
       user: userRow,
@@ -207,6 +229,11 @@ router.get('/admin/user-debug', requireRealAdmin, async (req, res) => {
         recent: recentOrders,
       },
       ad_reports: adStats[0],
+      cost_diagnosis: {
+        ...costDiag[0],
+        override_samples: overrideSamples,
+        note: 'override_cost_price가 product_name_mapping보다 우선 적용됩니다. pnm_count=0이어도 override가 있으면 원가가 잡힙니다.',
+      },
       note: 'raw_data는 별도 테이블이 아닌 ad_reports/returns 테이블의 JSONB 컬럼입니다.',
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
