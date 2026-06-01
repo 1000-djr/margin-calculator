@@ -537,16 +537,29 @@ router.put('/orders/exclude-bulk', requireAuth, async (req, res) => {
   const { order_numbers, is_excluded, exclusion_type = 'normal' } = req.body;
   if (!Array.isArray(order_numbers) || !order_numbers.length)
     return res.status(400).json({ error: 'order_numbers 배열 필수' });
+  if (order_numbers.length > 200)
+    return res.status(400).json({ error: '한 번에 최대 200건까지 처리 가능합니다' });
   const VALID = ['normal','fake_order','return','other','cancel'];
   const safeType = VALID.includes(exclusion_type) ? exclusion_type : 'normal';
   try {
-    const result = await pool.query(
-      `UPDATE orders SET is_excluded=$1, exclusion_type=$2
-       WHERE user_id=$3 AND order_number = ANY($4::varchar[])`,
-      [is_excluded !== false, safeType, req.user.id, order_numbers]
-    );
+    // statement_timeout: 청크당 15초 (Railway 30초 HTTP timeout의 절반)
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query('SET LOCAL statement_timeout = 15000');
+      result = await client.query(
+        `UPDATE orders SET is_excluded=$1, exclusion_type=$2
+         WHERE user_id=$3 AND order_number = ANY($4::varchar[])`,
+        [is_excluded !== false, safeType, req.user.id, order_numbers]
+      );
+    } finally {
+      client.release();
+    }
     res.json({ updated: result.rowCount });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    if (e.code === '57014') return res.status(504).json({ error: '처리 시간 초과, 다시 시도해주세요' });
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.put('/orders/:orderNumber/exclude', requireAuth, async (req, res) => {
