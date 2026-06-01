@@ -6336,6 +6336,8 @@ async function renderProfit() {
     if (Array.isArray(bData))   pB2b            = bData;
     if (Array.isArray(fdData2)) pFixedDiscounts = fdData2;
     if (Array.isArray(pnmData)) productNameMappings = pnmData;
+    console.log('[profit] PNM 로드:', productNameMappings.length, '건', productNameMappings.slice(0, 3).map(m => ({ option_id: m.option_id, registered_name: m.registered_name, option_name: m.option_name, b2b_name: m.b2b_name })));
+    console.log('[profit] 주문 로드(pOrders):', pOrders.length, '건');
   }
 
   // ── 로컬 헬퍼 (전역 변수 대신 fetch된 데이터 사용) ───────────────────────
@@ -6393,14 +6395,17 @@ async function renderProfit() {
 
   // product_name_mapping 조회: option_id 우선 → 이름 기준 fallback
   function findPNM(optionId, productName, optionName) {
-    if (optionId) {
-      const byId = productNameMappings.find(m => m.option_id && String(m.option_id) === String(optionId));
+    const oidStr = String(optionId || '').trim();
+    if (oidStr) {
+      const byId = productNameMappings.find(m => m.option_id && String(m.option_id).trim() === oidStr);
       if (byId) return byId;
     }
+    const pName = (productName || '').trim();
+    const oName = (optionName || '').trim();
     return productNameMappings.find(m =>
-      m.registered_name === productName && (m.option_name || '') === (optionName || '')
+      (m.registered_name || '').trim() === pName && (m.option_name || '').trim() === oName
     ) || productNameMappings.find(m =>
-      m.registered_name === productName && !m.option_name
+      (m.registered_name || '').trim() === pName && !(m.option_name || '').trim()
     ) || null;
   }
 
