@@ -2178,18 +2178,44 @@ router.post('/cancel-shipments/:id/transfer', requireAuth, async (req, res) => {
 });
 
 router.delete('/returns', requireAuth, async (req, res) => {
-  const { ids } = req.body;
+  const { ids, restore_order } = req.body;
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids 배열 필수' });
   const intIds = ids.map(Number).filter(n => n > 0);
   if (!intIds.length) return res.status(400).json({ error: '유효한 id가 없습니다.' });
-  console.log(`[DELETE /returns] user=${req.user.id} ids=${intIds}`);
+  console.log(`[DELETE /returns] user=${req.user.id} ids=${intIds} restore_order=${restore_order}`);
   try {
+    // 삭제 전 주문번호 수집
+    let orderNumbers = [];
+    if (restore_order) {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT order_number FROM returns
+          WHERE user_id=$1 AND id = ANY($2::int[]) AND order_number IS NOT NULL`,
+        [req.user.id, intIds]
+      );
+      orderNumbers = rows.map(r => r.order_number);
+    }
+
     const { rowCount } = await pool.query(
       'DELETE FROM returns WHERE user_id=$1 AND id = ANY($2::int[])',
       [req.user.id, intIds]
     );
     console.log(`[DELETE /returns] deleted=${rowCount}`);
-    res.json({ deleted: rowCount });
+
+    let ordersRestored = 0;
+    if (restore_order && orderNumbers.length) {
+      const { rowCount: rc } = await pool.query(
+        `UPDATE orders
+            SET is_excluded = FALSE, exclusion_type = NULL
+          WHERE user_id = $1
+            AND order_number = ANY($2)
+            AND exclusion_type IN ('return', 'cancel')`,
+        [req.user.id, orderNumbers]
+      );
+      ordersRestored = rc;
+      console.log(`[DELETE /returns] ordersRestored=${ordersRestored}`);
+    }
+
+    res.json({ deleted: rowCount, ordersRestored });
   } catch(e) {
     console.error('[DELETE /returns] error:', e.message);
     res.status(500).json({ error: e.message });
@@ -2224,10 +2250,10 @@ router.delete('/returns/:id', requireAuth, async (req, res) => {
       const { rowCount } = await pool.query(`
         UPDATE orders
            SET is_excluded    = FALSE,
-               exclusion_type = 'normal'
+               exclusion_type = NULL
          WHERE user_id = $1
            AND order_number = $2
-           AND exclusion_type = 'return'
+           AND exclusion_type IN ('return', 'cancel')
       `, [req.user.id, orderNumber]);
       orderRestored = rowCount > 0;
     }

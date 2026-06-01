@@ -7068,7 +7068,7 @@ async function bulkDeleteCancel() {
     const r = await fetch('/api/returns', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [...selectedCancelIds] }),
+      body: JSON.stringify({ ids: [...selectedCancelIds], restore_order: true }),
     });
     const d = await r.json();
     alert(`${d.deleted}건 삭제되었습니다.`);
@@ -7129,7 +7129,7 @@ async function bulkDeleteReturns() {
     const r = await fetch('/api/returns', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: [...selectedReturnIds] }),
+      body: JSON.stringify({ ids: [...selectedReturnIds], restore_order: true }),
     });
     if (!r.ok) {
       const text = await r.text();
