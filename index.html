@@ -3528,29 +3528,20 @@ function handleOrdersUpload(input) {
         return obj;
       }).filter(o => o['주문번호']);
 
-      // 중복 체크
+      // 중복 체크 (로컬 기준 안내용 — DB가 ON CONFLICT DO NOTHING으로 최종 처리)
       const existingNums = new Set(orders.map(o => o['주문번호']));
-      const dupOrders = newOrders.filter(o => existingNums.has(o['주문번호']));
-      const freshOrders = newOrders.filter(o => !existingNums.has(o['주문번호']));
+      const dupOrders    = newOrders.filter(o => existingNums.has(o['주문번호']));
 
       if (dupOrders.length === 0) {
-        doOrdersUpload(freshOrders);
-      } else if (freshOrders.length === 0) {
-        showConfirmModal({
-          icon: '⚠️',
-          title: '중복 데이터',
-          message: `이미 업로드된 데이터입니다.<br>중복 주문번호 <strong>${dupOrders.length}건</strong> — 업로드가 차단됩니다.`,
-          confirmText: '확인',
-          cancelText: '확인',
-        });
+        doOrdersUpload(newOrders);
       } else {
         showConfirmModal({
           icon: '⚠️',
-          title: '일부 중복 데이터',
-          message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 있습니다.<br>신규 <strong>${freshOrders.length}건</strong>만 업로드할까요?`,
-          confirmText: `신규 ${freshOrders.length}건만 업로드`,
+          title: dupOrders.length === newOrders.length ? '중복 데이터' : '일부 중복 데이터',
+          message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 감지됐습니다.<br>전체 <strong>${newOrders.length}건</strong>을 업로드하면 DB가 자동으로 중복을 건너뜁니다.`,
+          confirmText: `전체 ${newOrders.length}건 업로드`,
           cancelText: '취소',
-        }).then(ok => { if (ok) doOrdersUpload(freshOrders); });
+        }).then(ok => { if (ok) doOrdersUpload(newOrders); });
       }
     } catch(err) {
       alert('파일 파싱 오류: ' + err.message);
@@ -3562,30 +3553,29 @@ function handleOrdersUpload(input) {
 
 // 공통 업로드 실행 함수 (handleOrdersUpload · uploadFilteredOrders 공용)
 async function doOrdersUpload(toAdd) {
-  orders = [...orders, ...toAdd];
-  localStorage.setItem('ordersData', JSON.stringify(orders));
+  if (!toAdd.length) return;
+
+  const CHUNK         = 500;
+  const FETCH_TIMEOUT = 120000; // 청크당 최대 2분
+  const total         = toAdd.length;
+  let   inserted      = 0;
+  let   failed        = 0;
+
+  const progressWrap = document.getElementById('ordersUploadProgress');
+  const progressText = document.getElementById('ordersUploadProgressText');
+  const progressBar  = document.getElementById('ordersUploadProgressBar');
+
+  function showProgress(done) {
+    if (!progressWrap) return;
+    progressWrap.style.display = 'flex';
+    progressText.textContent   = `업로드 중... ${done.toLocaleString()} / ${total.toLocaleString()}건`;
+    progressBar.style.width    = `${Math.round(done / total * 100)}%`;
+  }
+  function hideProgress() {
+    if (progressWrap) progressWrap.style.display = 'none';
+  }
 
   if (currentUser) {
-    const CHUNK         = 500;
-    const FETCH_TIMEOUT = 120000; // 청크당 최대 2분
-    const total         = toAdd.length;
-    let   inserted      = 0;
-    let   failed        = 0;
-
-    const progressWrap = document.getElementById('ordersUploadProgress');
-    const progressText = document.getElementById('ordersUploadProgressText');
-    const progressBar  = document.getElementById('ordersUploadProgressBar');
-
-    function showProgress(done) {
-      if (!progressWrap) return;
-      progressWrap.style.display = 'flex';
-      progressText.textContent   = `업로드 중... ${done.toLocaleString()} / ${total.toLocaleString()}건`;
-      progressBar.style.width    = `${Math.round(done / total * 100)}%`;
-    }
-    function hideProgress() {
-      if (progressWrap) progressWrap.style.display = 'none';
-    }
-
     showProgress(0);
     try {
       for (let start = 0; start < total; start += CHUNK) {
@@ -3621,11 +3611,24 @@ async function doOrdersUpload(toAdd) {
       setTimeout(hideProgress, 800);
     }
 
+    // DB 업로드 완료 후 서버에서 최신 데이터 다시 로드
+    try {
+      const r = await fetch('/api/orders');
+      if (r.ok) {
+        orders = await r.json();
+        try { localStorage.setItem('ordersData', JSON.stringify(orders)); } catch(e) { /* quota 초과 무시 */ }
+      }
+    } catch(e) { console.warn('[orders] 재로드 실패:', e.message); }
+
     if (failed > 0) {
-      alert(`⚠️ 일부 저장 실패: ${failed}건\n${inserted}건은 정상 저장됐습니다.\n로컬에는 전체 저장됐습니다.`);
+      alert(`⚠️ 일부 저장 실패: ${failed}건\n${inserted}건은 정상 저장됐습니다.`);
     } else {
       console.log(`[orders] DB 저장 완료: ${inserted}건 삽입 / 전체 ${total}건`);
     }
+  } else {
+    // 비로그인 — 로컬 전용
+    orders = [...orders, ...toAdd];
+    try { localStorage.setItem('ordersData', JSON.stringify(orders)); } catch(e) { /* quota 초과 무시 */ }
   }
 
   const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
@@ -3634,7 +3637,7 @@ async function doOrdersUpload(toAdd) {
   ordersPage = 1;
   renderOrders();
   loadOrdersSummary();
-  alert(`${toAdd.length}건 추가됨 (총 ${orders.length}건)`);
+  alert(`${inserted}건 신규 저장 / ${total - inserted - failed}건 중복 스킵 / 총 ${orders.length}건`);
 }
 
 // ── 필터링 업로드 ──────────────────────────────────────────────────────────────
@@ -3764,27 +3767,22 @@ async function uploadFilteredOrders() {
 
   const selected = _orderFilterParsedRows.filter((_, i) => checkedIdxs.has(i));
 
-  // 중복 체크 (기존 업로드 로직과 동일)
+  // 중복 체크 (로컬 기준 안내용 — DB가 ON CONFLICT DO NOTHING으로 최종 처리)
   const existingNums = new Set(orders.map(o => o['주문번호']));
-  const dupOrders   = selected.filter(o => existingNums.has(o['주문번호']));
-  const freshOrders = selected.filter(o => !existingNums.has(o['주문번호']));
+  const dupOrders    = selected.filter(o => existingNums.has(o['주문번호']));
 
   closeOrderFilterModal();
 
   if (dupOrders.length === 0) {
-    await doOrdersUpload(freshOrders);
-  } else if (freshOrders.length === 0) {
-    showConfirmModal({
-      icon: '⚠️', title: '중복 데이터',
-      message: `이미 업로드된 데이터입니다.<br>중복 주문번호 <strong>${dupOrders.length}건</strong> — 업로드가 차단됩니다.`,
-      confirmText: '확인', cancelText: '확인',
-    });
+    await doOrdersUpload(selected);
   } else {
     showConfirmModal({
-      icon: '⚠️', title: '일부 중복 데이터',
-      message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 있습니다.<br>신규 <strong>${freshOrders.length}건</strong>만 업로드할까요?`,
-      confirmText: `신규 ${freshOrders.length}건만 업로드`, cancelText: '취소',
-    }).then(ok => { if (ok) doOrdersUpload(freshOrders); });
+      icon: '⚠️',
+      title: dupOrders.length === selected.length ? '중복 데이터' : '일부 중복 데이터',
+      message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 감지됐습니다.<br>전체 <strong>${selected.length}건</strong>을 업로드하면 DB가 자동으로 중복을 건너뜁니다.`,
+      confirmText: `전체 ${selected.length}건 업로드`,
+      cancelText: '취소',
+    }).then(ok => { if (ok) doOrdersUpload(selected); });
   }
 }
 
