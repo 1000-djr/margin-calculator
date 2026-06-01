@@ -6671,18 +6671,22 @@ async function renderProfit() {
         paginationEl.style.display = 'none';
       } else {
         paginationEl.style.display = 'flex';
-        const btnStyle = (active) =>
-          `style="min-width:30px;height:28px;padding:0 8px;border-radius:5px;border:1px solid var(--border);background:${active ? 'var(--primary)' : 'var(--surface)'};color:${active ? '#fff' : 'var(--text)'};cursor:pointer;font-size:12px;font-weight:${active ? '600' : '400'}"`;
-        let html = `<button ${btnStyle(false)} onclick="profitPeriodPage=Math.max(1,profitPeriodPage-1);renderProfit()" ${profitPeriodPage===1?'disabled':''}>‹</button>`;
-        for (let i = 1; i <= totalPages; i++) {
-          if (totalPages > 7 && Math.abs(i - profitPeriodPage) > 2 && i !== 1 && i !== totalPages) {
-            if (i === 2 || i === totalPages - 1) html += `<span style="color:var(--text-dim);font-size:12px">…</span>`;
-            continue;
-          }
-          html += `<button ${btnStyle(i === profitPeriodPage)} onclick="profitPeriodPage=${i};renderProfit()">${i}</button>`;
+        const base     = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-sub);cursor:pointer';
+        const active   = 'min-width:30px;padding:3px 8px;font-size:12px;border-radius:6px;border:1px solid #0071e3;background:#0071e3;color:#fff;font-weight:600;cursor:pointer';
+        const disabled = base + ';opacity:0.4;cursor:default';
+
+        let winStart = Math.max(1, profitPeriodPage - 2);
+        let winEnd   = Math.min(totalPages, winStart + 4);
+        if (winEnd - winStart < 4) winStart = Math.max(1, winEnd - 4);
+
+        const start = (profitPeriodPage - 1) * pageSize + 1;
+        const end   = Math.min(profitPeriodPage * pageSize, periods.length);
+        let html = `<span style="font-size:12px;color:var(--text-dim)">${start}–${end} / ${periods.length}건</span>`;
+        html += `<button onclick="profitPeriodPage=Math.max(1,profitPeriodPage-1);renderProfit()" ${profitPeriodPage===1?'disabled':''} style="${profitPeriodPage===1?disabled:base}">‹</button>`;
+        for (let i = winStart; i <= winEnd; i++) {
+          html += `<button onclick="profitPeriodPage=${i};renderProfit()" style="${i===profitPeriodPage?active:base}">${i}</button>`;
         }
-        html += `<button ${btnStyle(false)} onclick="profitPeriodPage=Math.min(${totalPages},profitPeriodPage+1);renderProfit()" ${profitPeriodPage===totalPages?'disabled':''}>›</button>`;
-        html += `<span style="font-size:12px;color:var(--text-dim);margin-left:4px">${profitPeriodPage}/${totalPages} (총 ${periods.length}건)</span>`;
+        html += `<button onclick="profitPeriodPage=Math.min(${totalPages},profitPeriodPage+1);renderProfit()" ${profitPeriodPage===totalPages?'disabled':''} style="${profitPeriodPage===totalPages?disabled:base}">›</button>`;
         paginationEl.innerHTML = html;
       }
     }
