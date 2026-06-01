@@ -556,9 +556,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <textarea id="bulkExcludeTextarea" rows="6"
       style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:var(--mono);resize:vertical"
       placeholder="예시:&#10;11234567890&#10;11234567891&#10;11234567892"></textarea>
+    <div id="bulkExcludeProgress" style="display:none;margin-top:12px;font-size:13px;color:var(--text-dim);text-align:center;padding:8px;background:var(--surface2);border-radius:8px"></div>
     <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
-      <button class="btn btn-ghost" onclick="closeBulkExcludeModal()">취소</button>
-      <button class="btn btn-primary" onclick="confirmBulkExclude()">미인식 처리</button>
+      <button id="bulkExcludeCancelBtn" class="btn btn-ghost" onclick="closeBulkExcludeModal()">취소</button>
+      <button id="bulkExcludeConfirmBtn" class="btn btn-primary" onclick="confirmBulkExclude()">미인식 처리</button>
     </div>
   </div>
 </div>
@@ -3894,6 +3895,12 @@ function openBulkExcludeModal() {
 }
 
 function closeBulkExcludeModal() {
+  const confirmBtn = document.getElementById('bulkExcludeConfirmBtn');
+  const cancelBtn  = document.getElementById('bulkExcludeCancelBtn');
+  const progressEl = document.getElementById('bulkExcludeProgress');
+  if (confirmBtn) confirmBtn.disabled = false;
+  if (cancelBtn)  cancelBtn.disabled  = false;
+  if (progressEl) progressEl.style.display = 'none';
   document.getElementById('bulkExcludeModal').style.display = 'none';
 }
 
@@ -3902,30 +3909,62 @@ async function confirmBulkExclude() {
   const numbers = raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
   if (!numbers.length) { alert('주문번호를 입력해주세요'); return; }
 
+  const CHUNK = 100;
   const isExcluded = bulkExcludeType !== 'normal';
-  let updatedCount = 0;
+
+  // 버튼 비활성화 + 진행상황 표시
+  const progressEl  = document.getElementById('bulkExcludeProgress');
+  const confirmBtn  = document.getElementById('bulkExcludeConfirmBtn');
+  const cancelBtn   = document.getElementById('bulkExcludeCancelBtn');
+  if (progressEl) { progressEl.textContent = '처리 준비 중...'; progressEl.style.display = 'block'; }
+  if (confirmBtn) confirmBtn.disabled = true;
+  if (cancelBtn)  cancelBtn.disabled  = true;
+
+  // 로컬 배열 즉시 업데이트 (UI 반응성)
   numbers.forEach(num => {
     const o = orders.find(x => x['주문번호'] === num);
-    if (o) { o.is_excluded = isExcluded; o.exclusion_type = bulkExcludeType; updatedCount++; }
+    if (o) { o.is_excluded = isExcluded; o.exclusion_type = bulkExcludeType; }
   });
-  localStorage.setItem('ordersData', JSON.stringify(orders));
+  try { localStorage.setItem('ordersData', JSON.stringify(orders)); } catch(e) {}
+
+  let totalUpdated = 0;
 
   if (currentUser) {
-    try {
-      await fetch('/api/orders/exclude-bulk', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_numbers: numbers, is_excluded: isExcluded, exclusion_type: bulkExcludeType })
-      });
-    } catch(e) {}
+    for (let i = 0; i < numbers.length; i += CHUNK) {
+      const chunk = numbers.slice(i, i + CHUNK);
+      const done  = Math.min(i + CHUNK, numbers.length);
+      if (progressEl) progressEl.textContent = `처리 중... ${done} / ${numbers.length}건`;
+      try {
+        const r = await fetch('/api/orders/exclude-bulk', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_numbers: chunk, is_excluded: isExcluded, exclusion_type: bulkExcludeType }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          totalUpdated += data.updated || 0;
+        }
+      } catch(e) { console.error('[bulkExclude] 청크 실패', e); }
+    }
+  } else {
+    // 비로그인: 로컬 데이터 기준으로 카운트
+    totalUpdated = numbers.filter(num => orders.some(x => x['주문번호'] === num)).length;
   }
+
+  // 진행 UI 복원
+  if (progressEl) progressEl.style.display = 'none';
+  if (confirmBtn) confirmBtn.disabled = false;
+  if (cancelBtn)  cancelBtn.disabled  = false;
 
   closeBulkExcludeModal();
   renderOrders();
+  loadOrdersSummary();
+
+  const notFound = numbers.length - totalUpdated;
   showConfirmModal({
     icon: '✅',
     title: '일괄 미인식 처리 완료',
-    message: `입력한 ${numbers.length}개 주문번호 중 <strong>${updatedCount}건</strong>이 미인식 처리되었습니다.`,
+    message: `<strong>${totalUpdated}건</strong> 미인식 처리 완료` + (notFound > 0 ? ` / <strong>${notFound}건</strong> 미발견` : ''),
     confirmText: '확인',
     cancelText: '',
   });
