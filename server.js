@@ -71,8 +71,12 @@ app.get('/', (req, res) => {
 // ─── 서버 시작 ───────────────────────────────────────────────────────────────
 (async () => {
   if (process.env.DATABASE_URL) {
-    await initDB();
-    scheduler.start();
+    try {
+      await initDB();
+      scheduler.start();
+    } catch (e) {
+      console.error('[server] initDB 실패 — 서버는 계속 실행됩니다:', e.message);
+    }
   } else {
     console.warn('[server] DATABASE_URL 없음 — DB 기능 비활성화');
   }

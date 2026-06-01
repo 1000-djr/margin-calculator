@@ -343,12 +343,14 @@ async function initDB() {
     END$$;
   `);
   // 표현식 인덱스로 재생성: campaign_id 추가 + COALESCE로 NULL → '' 처리
-  await pool.query(`DROP INDEX IF EXISTS ad_reports_unique`);
-  await pool.query(`
-    CREATE UNIQUE INDEX ad_reports_unique
-    ON ad_reports(user_id, report_date, campaign_id, option_id,
-                  COALESCE(keyword,''), COALESCE(ad_placement,''))
-  `);
+  try {
+    await pool.query(`DROP INDEX IF EXISTS ad_reports_unique`);
+    await pool.query(`
+      CREATE UNIQUE INDEX ad_reports_unique
+      ON ad_reports(user_id, report_date, campaign_id, option_id,
+                    COALESCE(keyword,''), COALESCE(ad_placement,''))
+    `);
+  } catch(e) { console.warn('[db] ad_reports_unique 인덱스 스킵:', e.message); }
 
   // ad_placement 백필: raw_data->>'광고 노출 지면' 단일 컬럼으로 NULL 행 업데이트
   const { rowCount: backfilled } = await pool.query(`
@@ -490,22 +492,36 @@ async function initDB() {
     END $$;
   `);
 
-  // 성능 인덱스 추가
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
-    CREATE INDEX IF NOT EXISTS idx_orders_user_id      ON orders(user_id);
-    CREATE INDEX IF NOT EXISTS idx_orders_user_order   ON orders(user_id, order_number);
-    CREATE INDEX IF NOT EXISTS idx_ad_reports_user_id  ON ad_reports(user_id);
-    CREATE INDEX IF NOT EXISTS idx_ad_reports_date     ON ad_reports(user_id, report_date);
-    CREATE INDEX IF NOT EXISTS idx_returns_user_id     ON returns(user_id);
-    CREATE INDEX IF NOT EXISTS idx_returns_receipt     ON returns(user_id, receipt_number);
-  `);
-  // 쿠폰 중복 방지: coupon_id가 있는 경우만 (NULL은 제외)
-  await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_coupons_coupon_id
-      ON coupons(user_id, coupon_id)
-      WHERE coupon_id IS NOT NULL;
-  `);
+  // 성능 인덱스 추가 — 각 쿼리를 개별 실행 (pg는 멀티스테이트먼트를 신뢰할 수 없음)
+  const perfIndexes = [
+    'CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_user_id      ON orders(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_user_order   ON orders(user_id, order_number)',
+    'CREATE INDEX IF NOT EXISTS idx_ad_reports_user_id  ON ad_reports(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_ad_reports_date     ON ad_reports(user_id, report_date)',
+    'CREATE INDEX IF NOT EXISTS idx_returns_user_id     ON returns(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_returns_receipt     ON returns(user_id, receipt_number)',
+  ];
+  for (const sql of perfIndexes) {
+    try { await pool.query(sql); } catch(e) { console.warn('[db] 인덱스 생성 스킵:', e.message); }
+  }
+
+  // 쿠폰 unique index: 생성 전 중복 coupon_id 제거
+  try {
+    await pool.query(`
+      DELETE FROM coupons c1
+      USING coupons c2
+      WHERE c1.id > c2.id
+        AND c1.user_id  = c2.user_id
+        AND c1.coupon_id = c2.coupon_id
+        AND c1.coupon_id IS NOT NULL
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_coupons_coupon_id
+        ON coupons(user_id, coupon_id)
+        WHERE coupon_id IS NOT NULL
+    `);
+  } catch(e) { console.warn('[db] coupons unique index 스킵:', e.message); }
 
   console.log('[db] Tables ready');
 }
