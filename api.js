@@ -1939,6 +1939,9 @@ router.post('/returns/sync', requireAuth, async (req, res) => {
     const { vendor_id, access_key, secretKey } = await getCoupangKeys(req.user.id);
     const allItems = await fetchReturnRequests(vendor_id, access_key, secretKey, from, to, 'UC');
     console.log(`[returns/sync] UC 수신: ${allItems.length}건`);
+    if (allItems.length > 0) {
+      console.log('[returns/sync] ★ 첫 번째 항목 전체 필드:', JSON.stringify(allItems[0], null, 2));
+    }
 
     let inserted = 0, skipped = 0;
     const orderNumbers = [];
