@@ -4501,27 +4501,26 @@ function formatAdDate(val) {
 
 // 공통 광고 업로드 실행 함수 (500건씩 청크 분할 API 호출)
 async function doAdUpload(toAdd) {
-  adReports = [...adReports, ...toAdd];
-  localStorage.setItem('adReportsData', JSON.stringify(adReports));
+  if (!toAdd.length) return;
+
+  const CHUNK         = 500;
+  const FETCH_TIMEOUT = 120000; // 청크당 최대 2분
+  const total         = toAdd.length;
+  let inserted = 0, skipped = 0, failed = 0;
+
+  const progressWrap = document.getElementById('adsUploadProgress');
+  const progressText = document.getElementById('adsUploadProgressText');
+  const progressBar  = document.getElementById('adsUploadProgressBar');
+
+  function showProgress(done) {
+    if (!progressWrap) return;
+    progressWrap.style.display = 'flex';
+    progressText.textContent   = `업로드 중... ${done.toLocaleString()} / ${total.toLocaleString()}건`;
+    progressBar.style.width    = `${Math.round(done / total * 100)}%`;
+  }
+  function hideProgress() { if (progressWrap) progressWrap.style.display = 'none'; }
 
   if (currentUser) {
-    const CHUNK         = 500;
-    const FETCH_TIMEOUT = 120000; // 청크당 최대 2분
-    const total         = toAdd.length;
-    let inserted = 0, skipped = 0, failed = 0;
-
-    const progressWrap = document.getElementById('adsUploadProgress');
-    const progressText = document.getElementById('adsUploadProgressText');
-    const progressBar  = document.getElementById('adsUploadProgressBar');
-
-    function showProgress(done) {
-      if (!progressWrap) return;
-      progressWrap.style.display = 'flex';
-      progressText.textContent   = `업로드 중... ${done.toLocaleString()} / ${total.toLocaleString()}건`;
-      progressBar.style.width    = `${Math.round(done / total * 100)}%`;
-    }
-    function hideProgress() { if (progressWrap) progressWrap.style.display = 'none'; }
-
     showProgress(0);
     try {
       for (let start = 0; start < total; start += CHUNK) {
@@ -4540,6 +4539,10 @@ async function doAdUpload(toAdd) {
           inserted += d.inserted ?? 0;
           skipped  += d.skipped  ?? 0;
           failed   += d.failed   ?? 0;
+          if (!res.ok) {
+            console.error(`[ads] 청크 ${start}~${start + chunk.length} 실패 ${res.status}`);
+            failed += chunk.length - (d.inserted ?? 0) - (d.skipped ?? 0);
+          }
         } catch(e) {
           clearTimeout(timer);
           const reason = e.name === 'AbortError' ? '타임아웃' : e.message;
@@ -4552,13 +4555,25 @@ async function doAdUpload(toAdd) {
       setTimeout(hideProgress, 800);
     }
 
+    // DB 업로드 완료 후 서버에서 최신 데이터 다시 로드
+    try {
+      const r = await fetch('/api/ad-reports');
+      if (r.ok) {
+        adReports = await r.json();
+        try { localStorage.setItem('adReportsData', JSON.stringify(adReports)); } catch(e) { /* quota 초과 무시 */ }
+      }
+    } catch(e) { console.warn('[ads] 재로드 실패:', e.message); }
+
     console.log(`[ads] DB 저장 완료: 삽입=${inserted} 중복=${skipped} 실패=${failed}`);
     renderAds();
     loadAdsSummary();
-    alert(`${total}건 처리됨\nDB 저장: ${inserted}건 / 중복스킵: ${skipped}건 / 실패: ${failed}건\n(총 ${adReports.length}건)`);
+    alert(`${inserted}건 신규 저장 / ${skipped}건 중복 스킵 / 총 ${adReports.length}건`);
     return;
   }
 
+  // 비로그인 — 로컬 전용
+  adReports = [...adReports, ...toAdd];
+  try { localStorage.setItem('adReportsData', JSON.stringify(adReports)); } catch(e) { /* quota 초과 무시 */ }
   renderAds();
   alert(`${toAdd.length}건 추가됨 (총 ${adReports.length}건)`);
 }
@@ -4589,26 +4604,8 @@ function handleAdsUpload(input) {
         return obj;
       }).filter(r => { const v = parseFloat(r['광고비']); return isFinite(v) && v !== 0; });
 
-      const adKey = r => `${r['날짜']}|${r[AD_OPTION_COL] || r['광고집행옵션ID'] || ''}|${r['키워드'] || ''}`;
-      const existingKeys = new Set(adReports.map(adKey));
-      const dupReports   = newReports.filter(r =>  existingKeys.has(adKey(r)));
-      const freshReports = newReports.filter(r => !existingKeys.has(adKey(r)));
-
-      if (dupReports.length === 0) {
-        doAdUpload(freshReports);
-      } else if (freshReports.length === 0) {
-        showConfirmModal({
-          icon: '⚠️', title: '중복 데이터',
-          message: `이미 업로드된 광고 데이터입니다.<br>중복 항목 <strong>${dupReports.length}건</strong> — 업로드가 차단됩니다.`,
-          confirmText: '확인', cancelText: '확인',
-        });
-      } else {
-        showConfirmModal({
-          icon: '⚠️', title: '일부 중복 데이터',
-          message: `중복 항목 <strong>${dupReports.length}건</strong>이 있습니다.<br>신규 <strong>${freshReports.length}건</strong>만 업로드할까요?`,
-          confirmText: `신규 ${freshReports.length}건만 업로드`, cancelText: '취소',
-        }).then(ok => { if (ok) doAdUpload(freshReports); });
-      }
+      // 중복 체크는 DB ON CONFLICT DO NOTHING으로만 처리
+      doAdUpload(newReports);
     } catch(err) {
       alert('파일 파싱 오류: ' + err.message);
     }
@@ -4776,29 +4773,9 @@ async function uploadFilteredAds() {
 
   const selected = _adFilterParsedRows.filter(r => selectedKeys.has(r[cfg.keyCol] || ''));
 
-  // 중복 체크 (기존 업로드 로직과 동일)
-  const adKey        = r => `${r['날짜']}|${r[AD_OPTION_COL] || r['광고집행옵션ID'] || ''}|${r['키워드'] || ''}`;
-  const existingKeys = new Set(adReports.map(adKey));
-  const dupReports   = selected.filter(r =>  existingKeys.has(adKey(r)));
-  const freshReports = selected.filter(r => !existingKeys.has(adKey(r)));
-
   closeAdFilterStep2();
-
-  if (dupReports.length === 0) {
-    await doAdUpload(freshReports);
-  } else if (freshReports.length === 0) {
-    showConfirmModal({
-      icon: '⚠️', title: '중복 데이터',
-      message: `이미 업로드된 광고 데이터입니다.<br>중복 항목 <strong>${dupReports.length}건</strong> — 업로드가 차단됩니다.`,
-      confirmText: '확인', cancelText: '확인',
-    });
-  } else {
-    showConfirmModal({
-      icon: '⚠️', title: '일부 중복 데이터',
-      message: `중복 항목 <strong>${dupReports.length}건</strong>이 있습니다.<br>신규 <strong>${freshReports.length}건</strong>만 업로드할까요?`,
-      confirmText: `신규 ${freshReports.length}건만 업로드`, cancelText: '취소',
-    }).then(ok => { if (ok) doAdUpload(freshReports); });
-  }
+  // 중복 체크는 DB ON CONFLICT DO NOTHING으로만 처리
+  await doAdUpload(selected);
 }
 
 function setAdsQuickDate(type) {
