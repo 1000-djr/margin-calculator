@@ -5645,7 +5645,7 @@ async function handleCouponBulkUpload(input) {
       console.log('[쿠폰업로드] 실제 헤더:', headers);
       console.log('[쿠폰업로드] 컬럼 인덱스:', { colName, colCid, colAmt, colStart, colEnd, colOpts });
 
-      let successCount = 0, dupCount = 0;
+      let inserted = 0, skipped = 0;
       const errorRows = [];
       const validItems = [];
 
@@ -5660,18 +5660,15 @@ async function handleCouponBulkUpload(input) {
           const mm   = pad(date.getMinutes());
           return `${yyyy}-${MM}-${dd} ${HH}:${mm}`;
         }
-        // cellDates:true 로 Date 객체가 오면 로컬 시간(KST) 그대로 사용
         if (val instanceof Date) {
           return isNaN(val.getTime()) ? null : fmt(val);
         }
-        // 직렬번호: UTC → KST (+9h) 후 로컬 메서드로 포맷
         if (typeof val === 'number') {
           const utcMs  = (val - 25569) * 86400 * 1000;
           const kstMs  = utcMs + 9 * 60 * 60 * 1000;
           const date   = new Date(kstMs);
           return isNaN(date.getTime()) ? null : fmt(date);
         }
-        // 텍스트: 앞 16자 그대로 반환
         const s = String(val).trim();
         const d = new Date(s.replace(' ', 'T'));
         return isNaN(d.getTime()) ? null : s.slice(0, 16);
@@ -5689,7 +5686,6 @@ async function handleCouponBulkUpload(input) {
         const endRaw    = colEnd   >= 0 ? row[colEnd]   : '';
         const optsRaw   = String(colOpts  >= 0 ? row[colOpts]  : '').trim();
 
-        // 첫 데이터 행 디버그 로그
         if (i === 1) {
           console.log('[쿠폰업로드] 1행 raw 값:', { name: row[colName], coupon_id: row[colCid], amtRaw: row[colAmt], startRaw: row[colStart], endRaw: row[colEnd] });
           console.log('[쿠폰업로드] 1행 타입:', { amtType: typeof row[colAmt], startType: typeof row[colStart], endType: typeof row[colEnd] });
@@ -5706,42 +5702,47 @@ async function handleCouponBulkUpload(input) {
           errorRows.push(`${i + 1}행 (${name}): 날짜 형식 오류 (YYYY-MM-DD HH:mm 사용)`); continue;
         }
 
-        // 쿠폰ID 기준 중복 체크
-        if (coupon_id && coupons.some(c => String(c.coupon_id) === coupon_id)) {
-          dupCount++; continue;
-        }
-
         const option_ids = optsRaw ? optsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-        const payload = { coupon_id: coupon_id || null, name, discount_amount: amt, start_at, end_at, option_ids };
-
-        if (currentUser) {
-          validItems.push(payload);
-        } else {
-          coupons.push({ id: Date.now() + i, ...payload });
-          successCount++;
-        }
+        validItems.push({ coupon_id: coupon_id || null, name, discount_amount: amt, start_at, end_at, option_ids });
       }
 
       if (currentUser && validItems.length) {
-        const CHUNK = 100;
-        for (let start = 0; start < validItems.length; start += CHUNK) {
+        // 중복 체크는 DB ON CONFLICT DO NOTHING으로만 처리
+        const CHUNK         = 500;
+        const FETCH_TIMEOUT = 120000;
+        const total         = validItems.length;
+        for (let start = 0; start < total; start += CHUNK) {
           const chunk = validItems.slice(start, start + CHUNK);
+          const ctrl  = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
           try {
             const res = await fetch('/api/coupons/bulk', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(chunk),
+              body: JSON.stringify(chunk), signal: ctrl.signal,
             });
+            clearTimeout(timer);
             const d = res.ok ? await res.json().catch(()=>({})) : { error: res.statusText };
             if (d.error) throw new Error(d.error);
-            if (d.rows) d.rows.forEach(row => coupons.push(row));
-            successCount += d.inserted || 0;
+            inserted += d.inserted || 0;
+            skipped  += d.skipped  || 0;
           } catch(err) {
-            errorRows.push(`서버 저장 실패 (${start+1}~${Math.min(start+CHUNK, validItems.length)}행): ${err.message}`);
+            clearTimeout(timer);
+            errorRows.push(`서버 저장 실패 (${start+1}~${Math.min(start+CHUNK, total)}행): ${err.message}`);
           }
         }
+        // DB 업로드 완료 후 서버에서 최신 데이터 다시 로드
+        try {
+          const r = await fetch('/api/coupons');
+          if (r.ok) {
+            coupons = await r.json();
+            try { localStorage.setItem('couponsData', JSON.stringify(coupons)); } catch(e) { /* quota 초과 무시 */ }
+          }
+        } catch(e) { console.warn('[coupons] 재로드 실패:', e.message); }
+      } else if (!currentUser) {
+        validItems.forEach((p, i) => { coupons.push({ id: Date.now() + i, ...p }); inserted++; });
+        try { localStorage.setItem('couponsData', JSON.stringify(coupons)); } catch(e) {}
       }
 
-      localStorage.setItem('couponsData', JSON.stringify(coupons));
       renderCoupons();
 
       const errDetail = errorRows.length
@@ -5750,7 +5751,7 @@ async function handleCouponBulkUpload(input) {
       await showConfirmModal({
         icon: '🎟',
         title: '쿠폰 대량 등록 완료',
-        message: `<strong>성공 ${successCount}건</strong> &nbsp;·&nbsp; 중복 ${dupCount}건 &nbsp;·&nbsp; 오류 ${errorRows.length}건${errDetail}`,
+        message: `<strong>${inserted}건 신규 저장</strong> &nbsp;·&nbsp; ${skipped}건 중복 스킵 &nbsp;·&nbsp; 오류 ${errorRows.length}건${errDetail}`,
         confirmText: '확인',
         cancelText: '',
       });
@@ -7279,26 +7280,35 @@ async function handleReturnsUpload(event) {
 
     if (!items.length) { if (statusEl) statusEl.textContent = '접수번호 컬럼을 찾을 수 없습니다'; return; }
 
-    const CHUNK = 100;
-    const total = items.length;
+    const CHUNK         = 500;
+    const FETCH_TIMEOUT = 120000;
+    const total         = items.length;
     let inserted = 0, skipped = 0, ordersUpdated = 0;
     for (let start = 0; start < total; start += CHUNK) {
-      if (statusEl) statusEl.textContent = `처리 중… ${Math.min(start + CHUNK, total).toLocaleString()}건 완료 / ${total.toLocaleString()}건`;
+      if (statusEl) statusEl.textContent = `업로드 중... ${Math.min(start + CHUNK, total).toLocaleString()} / ${total.toLocaleString()}건`;
       const chunk = items.slice(start, start + CHUNK);
-      const r = await fetch('/api/returns/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(chunk),
-      });
-      const d = await r.json();
-      inserted      += d.inserted      || 0;
-      skipped       += d.skipped       || 0;
-      ordersUpdated += d.ordersUpdated || 0;
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+      try {
+        const r = await fetch('/api/returns/bulk', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chunk), signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        inserted      += d.inserted      || 0;
+        skipped       += d.skipped       || 0;
+        ordersUpdated += d.ordersUpdated || 0;
+      } catch(e) {
+        clearTimeout(timer);
+        console.error(`[returns] 청크 ${start}~${start + chunk.length} 오류:`, e.message);
+      }
     }
     if (statusEl) {
       const now = new Date();
       const kst = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      statusEl.textContent = `최근 업로드: ${kst} | 신규 ${inserted}건 / 중복 ${skipped}건 제외` + (ordersUpdated ? ` | 주문 ${ordersUpdated}건 반품 처리` : '');
+      statusEl.textContent = `최근 업로드: ${kst} | ${inserted}건 신규 저장 / ${skipped}건 중복 스킵` + (ordersUpdated ? ` | 주문 ${ordersUpdated}건 반품 처리` : '');
     }
     renderReturns();
     loadReturnsSummary();
@@ -7478,29 +7488,35 @@ async function handleCancelShipmentUpload(event) {
       if (!confirm(`'이미출고' 행 ${missingReceipt.length}건에 접수번호가 없어 반품 목록에 추가되지 않습니다.\n주문 제외만 처리할까요?`)) return;
     }
 
-    const CHUNK = 100;
-    const total = items.length;
+    const CHUNK         = 500;
+    const FETCH_TIMEOUT = 120000;
+    const total         = items.length;
     let inserted = 0, skipped = 0, ordersUpdated = 0;
     for (let start = 0; start < total; start += CHUNK) {
-      if (statusEl) statusEl.textContent = `처리 중… ${Math.min(start + CHUNK, total).toLocaleString()}건 완료 / ${total.toLocaleString()}건`;
+      if (statusEl) statusEl.textContent = `업로드 중... ${Math.min(start + CHUNK, total).toLocaleString()} / ${total.toLocaleString()}건`;
       const chunk = items.slice(start, start + CHUNK);
-      const r = await fetch('/api/cancel-shipments/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(chunk),
-      });
-      if (!r.ok) throw new Error(await r.text());
-      const d = await r.json();
-      inserted      += d.inserted      || 0;
-      skipped       += d.skipped       || 0;
-      ordersUpdated += d.ordersUpdated || 0;
+      const ctrl  = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
+      try {
+        const r = await fetch('/api/cancel-shipments/bulk', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chunk), signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (!r.ok) throw new Error(await r.text());
+        const d = await r.json();
+        inserted      += d.inserted      || 0;
+        skipped       += d.skipped       || 0;
+        ordersUpdated += d.ordersUpdated || 0;
+      } catch(e) {
+        clearTimeout(timer);
+        console.error(`[cancel-shipments] 청크 ${start}~${start + chunk.length} 오류:`, e.message);
+      }
     }
     if (statusEl) {
       const now = new Date();
       const kst = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      const parts = [`최근 출고중지 업로드: ${kst}`];
-      if (inserted)      parts.push(`반품목록 추가 ${inserted}건`);
-      if (skipped)       parts.push(`중복 ${skipped}건`);
+      const parts = [`최근 출고중지 업로드: ${kst}`, `${inserted}건 신규 저장 / ${skipped}건 중복 스킵`];
       if (ordersUpdated) parts.push(`주문 제외 ${ordersUpdated}건`);
       statusEl.textContent = parts.join(' | ');
     }

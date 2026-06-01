@@ -969,11 +969,14 @@ router.post('/coupons/bulk', requireAuth, async (req, res) => {
       if (placeholders.length > 0) {
         const result = await pool.query(
           `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids)
-           VALUES ${placeholders.join(',')} RETURNING *`,
+           VALUES ${placeholders.join(',')}
+           ON CONFLICT (user_id, coupon_id) WHERE coupon_id IS NOT NULL DO NOTHING
+           RETURNING *`,
           params
         );
         inserted += result.rowCount;
         result.rows.forEach(row => insertedRows.push(couponRow(row)));
+        skipped  += (batch.filter(c => c.name).length - result.rowCount);
       }
     }
     res.json({ inserted, skipped, rows: insertedRows });

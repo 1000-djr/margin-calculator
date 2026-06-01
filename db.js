@@ -500,6 +500,12 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_returns_user_id     ON returns(user_id);
     CREATE INDEX IF NOT EXISTS idx_returns_receipt     ON returns(user_id, receipt_number);
   `);
+  // 쿠폰 중복 방지: coupon_id가 있는 경우만 (NULL은 제외)
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_coupons_coupon_id
+      ON coupons(user_id, coupon_id)
+      WHERE coupon_id IS NOT NULL;
+  `);
 
   console.log('[db] Tables ready');
 }
