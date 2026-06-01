@@ -522,6 +522,7 @@ router.get('/orders', requireAuth, async (req, res) => {
       '수취인 주소':         r.recipient_address_masked,
       'is_excluded':         r.is_excluded || false,
       'exclusion_type':      r.exclusion_type || 'normal',
+      'override_cost_price': r.override_cost_price != null ? parseFloat(r.override_cost_price) : null,
     });
 
     if (usePagination) {

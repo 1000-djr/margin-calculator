@@ -6348,9 +6348,16 @@ async function renderProfit() {
 
   // ── 로컬 헬퍼 (전역 변수 대신 fetch된 데이터 사용) ───────────────────────
   function localAdCost(oid) {
+    // ad_cost (원 광고비) — VAT 계산용
     return pAdReports
       .filter(r => (r[AD_OPTION_COL] || r['광고집행옵션ID']) === oid)
       .reduce((s, r) => s + (parseFloat(r['광고비']) || 0), 0);
+  }
+  function localActualAdCost(oid) {
+    // actual_ad_cost (실광고비) — 순이익 차감용 (서버 profit.js와 동일)
+    return pAdReports
+      .filter(r => (r[AD_OPTION_COL] || r['광고집행옵션ID']) === oid)
+      .reduce((s, r) => s + (parseFloat(r['실광고비']) || 0), 0);
   }
   function localCouponDiscount(order) {
     const d = parseOrderDate(order['주문일']);
@@ -6376,7 +6383,7 @@ async function renderProfit() {
       if (s && d < s) return false;
       if (e && d > e) return false;
       const opts = Array.isArray(c.option_ids) ? c.option_ids : [];
-      return !opts.length || opts.includes(oid);
+      return !opts.length || opts.map(String).includes(String(oid));
     });
     if (!applicable.length) return 0;
     applicable.sort((a, b) => {
@@ -6466,15 +6473,24 @@ async function renderProfit() {
         optionName: o['등록옵션명'],
         optionId: oid,
         optionIds: new Set(),
-        qty: 0, payment: 0, shipping: 0, couponDiscount: 0, lastOrderDate: ''
+        qty: 0, payment: 0, shipping: 0, couponDiscount: 0, lastOrderDate: '',
+        overrideCostTotal: 0,  // override_cost_price * qty 합계 (override 있는 주문만)
+        normalQty: 0,          // override 없는 주문의 수량 합계 (PNM/수동매칭용)
       });
     }
     const g = optionMap.get(key);
     if (oid) g.optionIds.add(oid);
-    g.qty += parseFloat(o['구매수(수량)']) || 1;
+    const orderQty = parseFloat(o['구매수(수량)']) || 1;
+    g.qty += orderQty;
     g.payment += parseFloat(o['결제액']) || 0;
     g.shipping += parseFloat(o['배송비']) || 0;
     g.couponDiscount += localCouponDiscount(o);
+    const overridePrice = o['override_cost_price'];
+    if (overridePrice != null && !isNaN(parseFloat(overridePrice))) {
+      g.overrideCostTotal += parseFloat(overridePrice) * orderQty;
+    } else {
+      g.normalQty += orderQty;
+    }
     const od = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
     if (od > g.lastOrderDate) g.lastOrderDate = od;
   });
@@ -6611,10 +6627,14 @@ async function renderProfit() {
         const fee = realRevenue * feeRate;
         const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
         const resolved = resolveUnitCost(g.productName, g.optionName, g.optionId, repDate);
-        const cost = resolved.unitCost !== null ? resolved.unitCost * g.qty : null;
-        const adCostRaw = [...(g.optionIds.size ? g.optionIds : (g.optionId ? [g.optionId] : []))]
-          .reduce((sum, id) => sum + localAdCost(id), 0);
-        const realAdCost = adCostRaw * 1.1;
+        // 원가: override_cost_price(주문별) + PNM/수동 단가 × normalQty 합산 (서버 COALESCE와 동일)
+        const normalCost = resolved.unitCost !== null ? resolved.unitCost * g.normalQty : null;
+        const cost = (g.overrideCostTotal > 0 || normalCost !== null)
+          ? (g.overrideCostTotal + (normalCost || 0))
+          : null;
+        const adIds = [...(g.optionIds.size ? g.optionIds : (g.optionId ? [g.optionId] : []))];
+        const adCostRaw  = adIds.reduce((sum, id) => sum + localAdCost(id), 0);       // ad_cost (VAT용)
+        const realAdCost = adIds.reduce((sum, id) => sum + localActualAdCost(id), 0); // actual_ad_cost (서버와 동일)
         const taxTyp = resolved.taxType;
         let vat = 0;
         if (taxTyp === 'exempt') {
@@ -6624,7 +6644,7 @@ async function renderProfit() {
         }
         const netProfit = cost !== null ? realRevenue - fee - cost - realAdCost - vat : null;
         const marginRate = (netProfit !== null && realRevenue > 0) ? (netProfit / realRevenue * 100) : null;
-        const isUnmatched = resolved.source === null;
+        const isUnmatched = cost === null; // override or PNM/수동 매칭 없는 경우만 미매칭
 
         // 다운로드용 캐시 누적
         profitProductData.push({
