@@ -714,112 +714,127 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   const userId = parseInt(req.user.id, 10);
   if (!items.length) return res.json({ inserted: 0, skipped: 0, failed: 0, total: 0 });
 
-  // 첫 행 컬럼명 로그 → 실제 엑셀 헤더 확인용
   if (items[0]) {
     console.log(`[ad-reports/bulk] user=${userId} items=${items.length} 컬럼:`, Object.keys(items[0]).join(' | '));
   }
 
+  // 배치 INSERT: 행별 쿼리 → 100건씩 멀티행 INSERT (처리속도 ~100배 향상)
+  const COLS  = 47;
   const CHUNK = 100;
   let inserted = 0, skipped = 0, failed = 0;
 
-  try {
-  for (let start = 0; start < items.length; start += CHUNK) {
-    const chunk = items.slice(start, start + CHUNK);
-    for (const r of chunk) {
-      try {
-        // ③ raw_data: 원본 행 전체 무조건 저장
-        const rawData = JSON.stringify(r);
-
-        const productName = r['광고집행 상품명'] || r['광고집행상품명'] || '';
-        const optionId    = r['광고집행 옵션ID'] || r['광고집행옵션ID'] || '';
-        const adCost      = safeFloat(r['광고비']) ?? 0;
-
-        // ② 노출지면: 실제 엑셀 컬럼명 '광고 노출 지면' 그대로 사용
-        if (start === 0 && chunk.indexOf(r) === 0) console.log('[ad-reports] 광고 노출 지면 값(첫행):', r['광고 노출 지면']);
-        const adPlacement = r['광고 노출 지면'] !== undefined ? r['광고 노출 지면'] : null;
-
-        const result = await pool.query(
-          `INSERT INTO ad_reports
-           (user_id,report_date,campaign_id,campaign_name,ad_group,product_name,
-            option_id,keyword,impressions,clicks,ad_cost,actual_ad_cost,
-            orders_1d,quantity_1d,revenue_1d,orders_14d,quantity_14d,revenue_14d,
-            raw_data,billing_type,sales_type,ad_type,ad_placement,click_rate,
-            conv_product,conv_option_id,
-            direct_orders_1d,indirect_orders_1d,direct_qty_1d,indirect_qty_1d,
-            direct_rev_1d,indirect_rev_1d,
-            direct_orders_14d,indirect_orders_14d,direct_qty_14d,indirect_qty_14d,
-            direct_rev_14d,indirect_rev_14d,
-            roas_total_1d,roas_direct_1d,roas_indirect_1d,
-            roas_total_14d,roas_direct_14d,roas_indirect_14d,
-            campaign_start,campaign_end,note)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-                   $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
-                   $35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47)
-           ON CONFLICT DO NOTHING`,
-          [
-            userId,                                                               // $1 ①
-            formatAdDate(r['날짜'] ?? ''),                                       // $2
-            safeStr(r['캠페인 ID'] || r['캠페인ID']),                            // $3
-            safeStr(r['캠페인명']),                                               // $4
-            safeStr(r['광고그룹']),                                               // $5
-            safeStr(productName),                                                 // $6
-            safeStr(optionId),                                                    // $7
-            safeStr(r['키워드']) ?? '',                                           // $8
-            safeInt(r['노출수'])   ?? 0,                                          // $9
-            safeInt(r['클릭수'])   ?? 0,                                          // $10
-            adCost,                                                               // $11
-            Math.round(adCost * 1.1 * 100) / 100,                                // $12
-            safeInt(r['총 주문수(1일)'])        ?? safeInt(r['총주문수(1일)'])        ?? 0, // $13
-            safeInt(r['총 판매수량(1일)'])      ?? safeInt(r['총판매수량(1일)'])      ?? 0, // $14
-            safeFloat(r['총 전환매출액(1일)'])  ?? safeFloat(r['총전환매출액(1일)'])  ?? 0, // $15
-            safeInt(r['총 주문수(14일)'])       ?? safeInt(r['총주문수(14일)'])       ?? 0, // $16
-            safeInt(r['총 판매수량(14일)'])     ?? safeInt(r['총판매수량(14일)'])     ?? 0, // $17
-            safeFloat(r['총 전환매출액(14일)']) ?? safeFloat(r['총전환매출액(14일)']) ?? 0, // $18
-            rawData,                                                              // $19 ③
-            safeStr(r['과금 방식'] || r['과금방식']),                             // $20
-            safeStr(r['판매방식']),                                               // $21
-            safeStr(r['광고유형']),                                               // $22
-            adPlacement,                                                          // $23 ②
-            safeStr(r['클릭률']),                                                 // $24
-            safeStr(r['광고전환매출발생 상품명'] || r['광고전환매출발생상품명']), // $25
-            safeStr(r['광고전환매출발생 옵션ID'] || r['광고전환매출발생옵션ID']), // $26
-            safeInt(r['직접 주문수(1일)'])        ?? safeInt(r['직접주문수(1일)'])        ?? 0, // $27
-            safeInt(r['간접 주문수(1일)'])        ?? safeInt(r['간접주문수(1일)'])        ?? 0, // $28
-            safeInt(r['직접 판매수량(1일)'])      ?? safeInt(r['직접판매수량(1일)'])      ?? 0, // $29
-            safeInt(r['간접 판매수량(1일)'])      ?? safeInt(r['간접판매수량(1일)'])      ?? 0, // $30
-            safeFloat(r['직접 전환매출액(1일)'])  ?? safeFloat(r['직접전환매출액(1일)'])  ?? 0, // $31
-            safeFloat(r['간접 전환매출액(1일)'])  ?? safeFloat(r['간접전환매출액(1일)'])  ?? 0, // $32
-            safeInt(r['직접 주문수(14일)'])       ?? safeInt(r['직접주문수(14일)'])       ?? 0, // $33
-            safeInt(r['간접 주문수(14일)'])       ?? safeInt(r['간접주문수(14일)'])       ?? 0, // $34
-            safeInt(r['직접 판매수량(14일)'])     ?? safeInt(r['직접판매수량(14일)'])     ?? 0, // $35
-            safeInt(r['간접 판매수량(14일)'])     ?? safeInt(r['간접판매수량(14일)'])     ?? 0, // $36
-            safeFloat(r['직접 전환매출액(14일)']) ?? safeFloat(r['직접전환매출액(14일)']) ?? 0, // $37
-            safeFloat(r['간접 전환매출액(14일)']) ?? safeFloat(r['간접전환매출액(14일)']) ?? 0, // $38
-            safeStr(r['총광고수익률(1일)']),    // $39
-            safeStr(r['직접광고수익률(1일)']),  // $40
-            safeStr(r['간접광고수익률(1일)']),  // $41
-            safeStr(r['총광고수익률(14일)']),   // $42
-            safeStr(r['직접광고수익률(14일)']), // $43
-            safeStr(r['간접광고수익률(14일)']), // $44
-            safeStr(r['캠페인 시작일'] || r['캠페인시작일']), // $45
-            safeStr(r['캠페인 종료일'] || r['캠페인종료일']), // $46
-            safeStr(r['비고']),                               // $47
-          ]
-        );
-        if (result.rowCount > 0) inserted++;
-        else skipped++;                                 // ⑤ DO NOTHING 건수
-      } catch(rowErr) {
-        failed++;
-        // ④ 실패 시 에러 상세 + 행 정보 출력
-        console.error(
-          `[ad-reports/bulk] 행 저장 실패 user=${userId}`,
-          `날짜=${r['날짜']} 옵션ID=${optionId} 지면=${r['광고 노출 지면']||r['노출지면']||''}`,
-          rowErr.message
-        );
-      }
-    }
-    console.log(`[ad-reports/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 완료`);
+  function buildRow(r) {
+    const adCost      = safeFloat(r['광고비']) ?? 0;
+    const adPlacement = r['광고 노출 지면'] !== undefined ? r['광고 노출 지면'] : null;
+    return [
+      userId,
+      formatAdDate(r['날짜'] ?? ''),
+      safeStr(r['캠페인 ID'] || r['캠페인ID']),
+      safeStr(r['캠페인명']),
+      safeStr(r['광고그룹']),
+      safeStr(r['광고집행 상품명'] || r['광고집행상품명'] || ''),
+      safeStr(r['광고집행 옵션ID'] || r['광고집행옵션ID'] || ''),
+      safeStr(r['키워드']) ?? '',
+      safeInt(r['노출수'])   ?? 0,
+      safeInt(r['클릭수'])   ?? 0,
+      adCost,
+      Math.round(adCost * 1.1 * 100) / 100,
+      safeInt(r['총 주문수(1일)'])        ?? safeInt(r['총주문수(1일)'])        ?? 0,
+      safeInt(r['총 판매수량(1일)'])      ?? safeInt(r['총판매수량(1일)'])      ?? 0,
+      safeFloat(r['총 전환매출액(1일)'])  ?? safeFloat(r['총전환매출액(1일)'])  ?? 0,
+      safeInt(r['총 주문수(14일)'])       ?? safeInt(r['총주문수(14일)'])       ?? 0,
+      safeInt(r['총 판매수량(14일)'])     ?? safeInt(r['총판매수량(14일)'])     ?? 0,
+      safeFloat(r['총 전환매출액(14일)']) ?? safeFloat(r['총전환매출액(14일)']) ?? 0,
+      JSON.stringify(r),
+      safeStr(r['과금 방식'] || r['과금방식']),
+      safeStr(r['판매방식']),
+      safeStr(r['광고유형']),
+      adPlacement,
+      safeStr(r['클릭률']),
+      safeStr(r['광고전환매출발생 상품명'] || r['광고전환매출발생상품명']),
+      safeStr(r['광고전환매출발생 옵션ID'] || r['광고전환매출발생옵션ID']),
+      safeInt(r['직접 주문수(1일)'])        ?? safeInt(r['직접주문수(1일)'])        ?? 0,
+      safeInt(r['간접 주문수(1일)'])        ?? safeInt(r['간접주문수(1일)'])        ?? 0,
+      safeInt(r['직접 판매수량(1일)'])      ?? safeInt(r['직접판매수량(1일)'])      ?? 0,
+      safeInt(r['간접 판매수량(1일)'])      ?? safeInt(r['간접판매수량(1일)'])      ?? 0,
+      safeFloat(r['직접 전환매출액(1일)'])  ?? safeFloat(r['직접전환매출액(1일)'])  ?? 0,
+      safeFloat(r['간접 전환매출액(1일)'])  ?? safeFloat(r['간접전환매출액(1일)'])  ?? 0,
+      safeInt(r['직접 주문수(14일)'])       ?? safeInt(r['직접주문수(14일)'])       ?? 0,
+      safeInt(r['간접 주문수(14일)'])       ?? safeInt(r['간접주문수(14일)'])       ?? 0,
+      safeInt(r['직접 판매수량(14일)'])     ?? safeInt(r['직접판매수량(14일)'])     ?? 0,
+      safeInt(r['간접 판매수량(14일)'])     ?? safeInt(r['간접판매수량(14일)'])     ?? 0,
+      safeFloat(r['직접 전환매출액(14일)']) ?? safeFloat(r['직접전환매출액(14일)']) ?? 0,
+      safeFloat(r['간접 전환매출액(14일)']) ?? safeFloat(r['간접전환매출액(14일)']) ?? 0,
+      safeStr(r['총광고수익률(1일)']),
+      safeStr(r['직접광고수익률(1일)']),
+      safeStr(r['간접광고수익률(1일)']),
+      safeStr(r['총광고수익률(14일)']),
+      safeStr(r['직접광고수익률(14일)']),
+      safeStr(r['간접광고수익률(14일)']),
+      safeStr(r['캠페인 시작일'] || r['캠페인시작일']),
+      safeStr(r['캠페인 종료일'] || r['캠페인종료일']),
+      safeStr(r['비고']),
+    ];
   }
+
+  const INSERT_SQL = `
+    INSERT INTO ad_reports
+    (user_id,report_date,campaign_id,campaign_name,ad_group,product_name,
+     option_id,keyword,impressions,clicks,ad_cost,actual_ad_cost,
+     orders_1d,quantity_1d,revenue_1d,orders_14d,quantity_14d,revenue_14d,
+     raw_data,billing_type,sales_type,ad_type,ad_placement,click_rate,
+     conv_product,conv_option_id,
+     direct_orders_1d,indirect_orders_1d,direct_qty_1d,indirect_qty_1d,
+     direct_rev_1d,indirect_rev_1d,
+     direct_orders_14d,indirect_orders_14d,direct_qty_14d,indirect_qty_14d,
+     direct_rev_14d,indirect_rev_14d,
+     roas_total_1d,roas_direct_1d,roas_indirect_1d,
+     roas_total_14d,roas_direct_14d,roas_indirect_14d,
+     campaign_start,campaign_end,note)
+    VALUES`;
+
+  try {
+    for (let start = 0; start < items.length; start += CHUNK) {
+      const chunk = items.slice(start, start + CHUNK);
+      const placeholders = [];
+      const params       = [];
+      let p = 1;
+
+      for (const r of chunk) {
+        const cols = Array.from({ length: COLS }, (_, i) => `$${p + i}`);
+        placeholders.push(`(${cols.join(',')})`);
+        params.push(...buildRow(r));
+        p += COLS;
+      }
+
+      try {
+        const result = await pool.query(
+          INSERT_SQL + ' ' + placeholders.join(',') + ' ON CONFLICT DO NOTHING',
+          params
+        );
+        inserted += result.rowCount;
+        skipped  += chunk.length - result.rowCount;
+      } catch (chunkErr) {
+        // 배치 실패 시 행별로 폴백하여 에러 건수만 집계
+        console.error(`[ad-reports/bulk] 청크 오류 — 행별 폴백 실행`, chunkErr.message);
+        for (const r of chunk) {
+          try {
+            const result = await pool.query(
+              INSERT_SQL + ' ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,' +
+              '$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,' +
+              '$39,$40,$41,$42,$43,$44,$45,$46,$47) ON CONFLICT DO NOTHING',
+              buildRow(r)
+            );
+            if (result.rowCount > 0) inserted++;
+            else skipped++;
+          } catch (rowErr) {
+            failed++;
+            console.error(`[ad-reports/bulk] 행 저장 실패 user=${userId} 날짜=${r['날짜']}`, rowErr.message);
+          }
+        }
+      }
+      console.log(`[ad-reports/bulk] 청크 ${start + 1}~${Math.min(start + CHUNK, items.length)} 완료`);
+    }
   } catch (fatalErr) {
     console.error(`[ad-reports/bulk] 치명적 오류 user=${userId}:`, fatalErr.message);
     return res.status(500).json({ error: fatalErr.message, inserted, skipped, failed, total: items.length });

@@ -494,7 +494,11 @@ async function initDB() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
     CREATE INDEX IF NOT EXISTS idx_orders_user_id      ON orders(user_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_user_order   ON orders(user_id, order_number);
     CREATE INDEX IF NOT EXISTS idx_ad_reports_user_id  ON ad_reports(user_id);
+    CREATE INDEX IF NOT EXISTS idx_ad_reports_date     ON ad_reports(user_id, report_date);
+    CREATE INDEX IF NOT EXISTS idx_returns_user_id     ON returns(user_id);
+    CREATE INDEX IF NOT EXISTS idx_returns_receipt     ON returns(user_id, receipt_number);
   `);
 
   console.log('[db] Tables ready');
