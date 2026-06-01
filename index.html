@@ -6275,7 +6275,7 @@ async function renderProfit() {
     const fakeQs = new URLSearchParams();
     if (from) fakeQs.set('start_date', from);
     if (to)   fakeQs.set('end_date',   to);
-    const [analyticsData, oData, arData, cData, bData, fakeData, fdData2] = await Promise.all([
+    const [analyticsData, oData, arData, cData, bData, fakeData, fdData2, pnmData] = await Promise.all([
       safeFetch('/api/analytics?' + analyticsQs.toString()),
       safeFetch('/api/orders'    + qstr),
       safeFetch('/api/ad-reports' + qstr),
@@ -6283,6 +6283,7 @@ async function renderProfit() {
       safeFetch('/api/b2b-prices'),
       includeFake ? safeFetch('/api/fake-records/summary?' + fakeQs.toString()) : Promise.resolve(null),
       safeFetch('/api/fixed-discounts'),
+      safeFetch('/api/product-name-mappings'),
     ]);
     analytics = analyticsData;
     if (fakeData && analytics?.summary) {
@@ -6295,6 +6296,7 @@ async function renderProfit() {
     if (Array.isArray(cData))   pCoupons        = cData;
     if (Array.isArray(bData))   pB2b            = bData;
     if (Array.isArray(fdData2)) pFixedDiscounts = fdData2;
+    if (Array.isArray(pnmData)) productNameMappings = pnmData;
   }
 
   // ── 로컬 헬퍼 (전역 변수 대신 fetch된 데이터 사용) ───────────────────────
@@ -6777,22 +6779,29 @@ async function saveOptionMatching(optionId, productName, optionName) {
   };
 
   if (currentUser) {
+    let saved;
     try {
       const r = await fetch('/api/product-name-mappings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(entry),
       });
-      if (r.ok) {
-        const saved = await r.json();
-        const idx = productNameMappings.findIndex(m =>
-          (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
-          (m.registered_name === productName && (m.option_name || '') === (optionName || ''))
-        );
-        if (idx >= 0) productNameMappings[idx] = saved;
-        else productNameMappings.push(saved);
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        alert('저장 실패: ' + (err.error || `서버 오류 (${r.status})`));
+        return;
       }
-    } catch(e) {}
+      saved = await r.json();
+    } catch(e) {
+      alert('저장 실패: 네트워크 오류');
+      return;
+    }
+    const idx = productNameMappings.findIndex(m =>
+      (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
+      (m.registered_name === productName && (m.option_name || '') === (optionName || ''))
+    );
+    if (idx >= 0) productNameMappings[idx] = saved;
+    else productNameMappings.push(saved);
   } else {
     const idx = productNameMappings.findIndex(m =>
       (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
