@@ -1367,7 +1367,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
     </div>
     <div id="profitSummaryCards" style="display:flex;flex-direction:column;gap:0"></div>
-    <div class="section-label">상품별 수익</div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>상품별 수익</span>
+      <button onclick="downloadProfitByProduct()" class="btn btn-ghost" style="font-size:12px;padding:4px 10px">📥 상품별 수익 다운로드</button>
+    </div>
     <div class="card" style="padding:0;overflow:hidden">
       <div class="data-table-wrap">
         <table class="profit-table">
@@ -1381,6 +1384,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>기간별 집계</span>
       <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="downloadProfitByPeriod()" class="btn btn-ghost" style="font-size:12px;padding:4px 10px">📥 기간별 집계 다운로드</button>
         <label style="font-size:12px;color:var(--text-sub);font-weight:400;display:flex;align-items:center;gap:5px">
           <span>보기</span>
           <select id="profitPeriodPageSize" onchange="profitPeriodPage=1;renderProfit()" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)">
@@ -2013,6 +2017,8 @@ let profitProductSort  = null;  // null | 'asc' | 'desc'
 let profitPeriodSort   = 'asc'; // 'asc' | 'desc'
 let profitPeriodPage   = 1;
 let profitPeriodOpen   = true; // 접기/펼치기 상태
+let profitProductData  = []; // 엑셀 다운로드용 상품별 캐시
+let profitPeriodData   = []; // 엑셀 다운로드용 기간별 캐시
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable', productName } }
 let productNameMappings = []; // [{ id, registered_name, option_name, b2b_name, b2b_unit }] — DB 동기화
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -6590,6 +6596,7 @@ async function renderProfit() {
 
   // 상품별 수익 테이블
   const productTbody = document.getElementById('profitProductTbody');
+  profitProductData = []; // 다운로드용 초기화
   if (productTbody) {
     if (!optionMap.size) {
       productTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
@@ -6618,6 +6625,20 @@ async function renderProfit() {
         const netProfit = cost !== null ? realRevenue - fee - cost - realAdCost - vat : null;
         const marginRate = (netProfit !== null && realRevenue > 0) ? (netProfit / realRevenue * 100) : null;
         const isUnmatched = resolved.source === null;
+
+        // 다운로드용 캐시 누적
+        profitProductData.push({
+          등록상품명: g.productName,
+          옵션명: g.optionName,
+          수량: g.qty,
+          실매출: Math.round(realRevenue),
+          수수료: Math.round(fee),
+          원가: cost !== null ? Math.round(cost) : '',
+          '광고비(실)': Math.round(realAdCost),
+          부가세: Math.round(vat),
+          순이익: netProfit !== null ? Math.round(netProfit) : '',
+          마진율: marginRate !== null ? parseFloat(marginRate.toFixed(2)) : '',
+        });
 
         return `<tr class="${isUnmatched ? 'unmatched-row' : ''}">
           <td>${g.productName}</td>
@@ -6679,12 +6700,30 @@ async function renderProfit() {
   // ── 기간별 집계 테이블 (백엔드 /api/analytics 결과 사용) ──────────────────────
   const periodTbody = document.getElementById('profitPeriodTbody');
   const paginationEl = document.getElementById('profitPeriodPagination');
+  profitPeriodData = []; // 다운로드용 초기화
   if (periodTbody) {
     const periods = [...(analytics?.by_period || [])].sort((a, b) =>
       profitPeriodSort === 'asc'
         ? String(a.period).localeCompare(String(b.period))
         : String(b.period).localeCompare(String(a.period))
     );
+    // 다운로드용: 전체 periods 저장 (페이지 제한 없이)
+    profitPeriodData = periods.map(p => {
+      const tax  = -(p.commission / 11) - (p.ad_cost_raw / 11);
+      const rate = p.revenue_after > 0 ? parseFloat((p.net_profit / p.revenue_after * 100).toFixed(2)) : 0;
+      return {
+        기간: p.period,
+        판매건수: p.orders,
+        '매출(쿠폰전)': p.revenue_before,
+        '매출(쿠폰후)': p.revenue_after,
+        수수료: p.commission,
+        원가: p.total_cost,
+        '광고비(실)': p.actual_ad_cost,
+        부가세: Math.round(tax),
+        순이익: p.net_profit,
+        마진율: rate,
+      };
+    });
 
     const pageSizeEl = document.getElementById('profitPeriodPageSize');
     const pageSize   = pageSizeEl ? parseInt(pageSizeEl.value) || 10 : 10;
@@ -6737,6 +6776,28 @@ async function renderProfit() {
       }
     }
   }
+}
+
+function downloadProfitByProduct() {
+  if (!profitProductData.length) { alert('먼저 분석을 실행해주세요.'); return; }
+  const ws = XLSX.utils.json_to_sheet(profitProductData, {
+    header: ['등록상품명','옵션명','수량','실매출','수수료','원가','광고비(실)','부가세','순이익','마진율'],
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '상품별수익');
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, `profit_by_product_${today}.xlsx`);
+}
+
+function downloadProfitByPeriod() {
+  if (!profitPeriodData.length) { alert('먼저 분석을 실행해주세요.'); return; }
+  const ws = XLSX.utils.json_to_sheet(profitPeriodData, {
+    header: ['기간','판매건수','매출(쿠폰전)','매출(쿠폰후)','수수료','원가','광고비(실)','부가세','순이익','마진율'],
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '기간별집계');
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, `profit_by_period_${today}.xlsx`);
 }
 
 function showMatchForm(optionId, btn, productName, optionName) {
