@@ -3528,21 +3528,8 @@ function handleOrdersUpload(input) {
         return obj;
       }).filter(o => o['주문번호']);
 
-      // 중복 체크 (로컬 기준 안내용 — DB가 ON CONFLICT DO NOTHING으로 최종 처리)
-      const existingNums = new Set(orders.map(o => o['주문번호']));
-      const dupOrders    = newOrders.filter(o => existingNums.has(o['주문번호']));
-
-      if (dupOrders.length === 0) {
-        doOrdersUpload(newOrders);
-      } else {
-        showConfirmModal({
-          icon: '⚠️',
-          title: dupOrders.length === newOrders.length ? '중복 데이터' : '일부 중복 데이터',
-          message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 감지됐습니다.<br>전체 <strong>${newOrders.length}건</strong>을 업로드하면 DB가 자동으로 중복을 건너뜁니다.`,
-          confirmText: `전체 ${newOrders.length}건 업로드`,
-          cancelText: '취소',
-        }).then(ok => { if (ok) doOrdersUpload(newOrders); });
-      }
+      // 중복 체크는 DB ON CONFLICT DO NOTHING으로만 처리
+      doOrdersUpload(newOrders);
     } catch(err) {
       alert('파일 파싱 오류: ' + err.message);
     }
@@ -3767,23 +3754,9 @@ async function uploadFilteredOrders() {
 
   const selected = _orderFilterParsedRows.filter((_, i) => checkedIdxs.has(i));
 
-  // 중복 체크 (로컬 기준 안내용 — DB가 ON CONFLICT DO NOTHING으로 최종 처리)
-  const existingNums = new Set(orders.map(o => o['주문번호']));
-  const dupOrders    = selected.filter(o => existingNums.has(o['주문번호']));
-
   closeOrderFilterModal();
-
-  if (dupOrders.length === 0) {
-    await doOrdersUpload(selected);
-  } else {
-    showConfirmModal({
-      icon: '⚠️',
-      title: dupOrders.length === selected.length ? '중복 데이터' : '일부 중복 데이터',
-      message: `중복 주문번호 <strong>${dupOrders.length}건</strong>이 감지됐습니다.<br>전체 <strong>${selected.length}건</strong>을 업로드하면 DB가 자동으로 중복을 건너뜁니다.`,
-      confirmText: `전체 ${selected.length}건 업로드`,
-      cancelText: '취소',
-    }).then(ok => { if (ok) doOrdersUpload(selected); });
-  }
+  // 중복 체크는 DB ON CONFLICT DO NOTHING으로만 처리
+  await doOrdersUpload(selected);
 }
 
 function escHtml(str) {

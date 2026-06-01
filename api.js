@@ -387,6 +387,22 @@ router.get('/orders/summary', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.get('/orders/stats', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*)::INTEGER                                             AS total_orders,
+        COUNT(*) FILTER (WHERE is_excluded = false OR is_excluded IS NULL)::INTEGER AS active_orders,
+        COUNT(*) FILTER (WHERE is_excluded = true)::INTEGER          AS excluded_orders,
+        MIN(order_date)                                              AS oldest_order,
+        MAX(order_date)                                              AS newest_order,
+        MAX(created_at) AT TIME ZONE 'Asia/Seoul'                   AS last_uploaded_at
+      FROM orders WHERE user_id = $1
+    `, [req.user.id]);
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date, exclude_excluded, offset, limit, search, exclusion_filter, sort_col, sort_dir } = req.query;
