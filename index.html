@@ -7132,11 +7132,16 @@ async function bulkDeleteReturns() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: [...selectedReturnIds] }),
     });
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = `서버 오류 (${r.status})`;
+      try { msg = JSON.parse(text).error || msg; } catch {}
+      throw new Error(msg);
+    }
     const d = await r.json();
     alert(`${d.deleted}건 삭제되었습니다.`);
-    renderReturns();
-    loadReturnsSummary();
-  } catch(e) { alert(e.message); }
+    await Promise.all([renderReturns(), loadReturnsSummary()]);
+  } catch(e) { alert('삭제 실패: ' + e.message); }
 }
 
 function openReturnProcessModal(id, returnType, returnCost, memo) {
@@ -7179,19 +7184,30 @@ function closeReturnDeleteConfirm(e) {
 
 async function confirmReturnDelete() {
   if (!_returnDeleteId) return;
+  const id = _returnDeleteId;
   const restoreOrder = document.getElementById('returnDeleteRestoreOrder')?.checked ?? true;
+  const btn = document.querySelector('#returnDeleteBackdrop .btn[onclick="confirmReturnDelete()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '삭제 중…'; }
   try {
-    const r = await fetch(`/api/returns/${_returnDeleteId}`, {
+    const r = await fetch(`/api/returns/${id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restore_order: restoreOrder }),
     });
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      const text = await r.text();
+      let msg = `서버 오류 (${r.status})`;
+      try { msg = JSON.parse(text).error || msg; } catch {}
+      throw new Error(msg);
+    }
     document.getElementById('returnDeleteBackdrop').style.display = 'none';
     _returnDeleteId = null;
-    renderReturns(); loadReturnsSummary();
-    renderCancelShipments(); loadCancelSummary();
-  } catch(e) { alert(e.message); }
+    await Promise.all([renderReturns(), loadReturnsSummary(), renderCancelShipments(), loadCancelSummary()]);
+  } catch(e) {
+    alert('삭제 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '삭제'; }
+  }
 }
 
 async function submitReturnProcess() {

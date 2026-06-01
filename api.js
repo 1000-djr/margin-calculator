@@ -2172,30 +2172,44 @@ router.post('/cancel-shipments/:id/transfer', requireAuth, async (req, res) => {
 router.delete('/returns', requireAuth, async (req, res) => {
   const { ids } = req.body;
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids 배열 필수' });
+  const intIds = ids.map(Number).filter(n => n > 0);
+  if (!intIds.length) return res.status(400).json({ error: '유효한 id가 없습니다.' });
+  console.log(`[DELETE /returns] user=${req.user.id} ids=${intIds}`);
   try {
     const { rowCount } = await pool.query(
       'DELETE FROM returns WHERE user_id=$1 AND id = ANY($2::int[])',
-      [req.user.id, ids]
+      [req.user.id, intIds]
     );
+    console.log(`[DELETE /returns] deleted=${rowCount}`);
     res.json({ deleted: rowCount });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[DELETE /returns] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.delete('/returns/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id || id <= 0) return res.status(400).json({ error: '유효하지 않은 id' });
   const { restore_order } = req.body || {};
+  console.log(`[DELETE /returns/:id] user=${req.user.id} id=${id} restore_order=${restore_order}`);
   try {
     // 삭제 전 주문번호 조회
     const { rows } = await pool.query(
       'SELECT order_number FROM returns WHERE id=$1 AND user_id=$2',
-      [req.params.id, req.user.id]
+      [id, req.user.id]
     );
-    if (!rows.length) return res.status(404).json({ error: '반품 없음' });
+    if (!rows.length) {
+      console.log(`[DELETE /returns/:id] 404 not found id=${id} user=${req.user.id}`);
+      return res.status(404).json({ error: '반품 없음' });
+    }
     const orderNumber = rows[0].order_number;
 
     await pool.query(
       'DELETE FROM returns WHERE id=$1 AND user_id=$2',
-      [req.params.id, req.user.id]
+      [id, req.user.id]
     );
+    console.log(`[DELETE /returns/:id] deleted id=${id} orderNumber=${orderNumber}`);
 
     let orderRestored = false;
     if (restore_order && orderNumber) {
@@ -2211,7 +2225,10 @@ router.delete('/returns/:id', requireAuth, async (req, res) => {
     }
 
     res.json({ deleted: 1, orderNumber, orderRestored });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) {
+    console.error('[DELETE /returns/:id] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.put('/returns/:id/process', requireAuth, async (req, res) => {
