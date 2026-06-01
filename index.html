@@ -3566,10 +3566,11 @@ async function doOrdersUpload(toAdd) {
   localStorage.setItem('ordersData', JSON.stringify(orders));
 
   if (currentUser) {
-    const CHUNK    = 300;          // 요청당 건수 (Railway 타임아웃 방지)
-    const total    = toAdd.length;
-    let   inserted = 0;
-    let   failed   = 0;
+    const CHUNK         = 500;
+    const FETCH_TIMEOUT = 120000; // 청크당 최대 2분
+    const total         = toAdd.length;
+    let   inserted      = 0;
+    let   failed        = 0;
 
     const progressWrap = document.getElementById('ordersUploadProgress');
     const progressText = document.getElementById('ordersUploadProgressText');
@@ -3578,7 +3579,7 @@ async function doOrdersUpload(toAdd) {
     function showProgress(done) {
       if (!progressWrap) return;
       progressWrap.style.display = 'flex';
-      progressText.textContent   = `업로드 중... (${done.toLocaleString()} / ${total.toLocaleString()}건)`;
+      progressText.textContent   = `업로드 중... ${done.toLocaleString()} / ${total.toLocaleString()}건`;
       progressBar.style.width    = `${Math.round(done / total * 100)}%`;
     }
     function hideProgress() {
@@ -3590,12 +3591,16 @@ async function doOrdersUpload(toAdd) {
       for (let start = 0; start < total; start += CHUNK) {
         showProgress(start);
         const chunk = toAdd.slice(start, start + CHUNK);
+        const ctrl  = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT);
         try {
           const res = await fetch('/api/orders/bulk', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify(chunk),
+            signal:  ctrl.signal,
           });
+          clearTimeout(timer);
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             console.error(`[orders] 청크 ${start}~${start + chunk.length} 실패 ${res.status}:`, err.error);
@@ -3605,7 +3610,9 @@ async function doOrdersUpload(toAdd) {
             inserted += result.inserted || 0;
           }
         } catch(e) {
-          console.error(`[orders] 청크 ${start}~${start + chunk.length} 네트워크 오류:`, e.message);
+          clearTimeout(timer);
+          const reason = e.name === 'AbortError' ? '타임아웃' : e.message;
+          console.error(`[orders] 청크 ${start}~${start + chunk.length} 오류:`, reason);
           failed += chunk.length;
         }
       }
@@ -4521,13 +4528,13 @@ function formatAdDate(val) {
   return s;
 }
 
-// 공통 광고 업로드 실행 함수 (50건씩 청크 분할 API 호출)
+// 공통 광고 업로드 실행 함수 (500건씩 청크 분할 API 호출)
 async function doAdUpload(toAdd) {
   adReports = [...adReports, ...toAdd];
   localStorage.setItem('adReportsData', JSON.stringify(adReports));
 
   if (currentUser) {
-    const CHUNK         = 50;
+    const CHUNK         = 500;
     const FETCH_TIMEOUT = 120000; // 청크당 최대 2분
     const total         = toAdd.length;
     let inserted = 0, skipped = 0, failed = 0;
@@ -4539,7 +4546,7 @@ async function doAdUpload(toAdd) {
     function showProgress(done) {
       if (!progressWrap) return;
       progressWrap.style.display = 'flex';
-      progressText.textContent   = `처리 중... ${done.toLocaleString()}건 / 전체 ${total.toLocaleString()}건`;
+      progressText.textContent   = `업로드 중... ${done.toLocaleString()} / ${total.toLocaleString()}건`;
       progressBar.style.width    = `${Math.round(done / total * 100)}%`;
     }
     function hideProgress() { if (progressWrap) progressWrap.style.display = 'none'; }
