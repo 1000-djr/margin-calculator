@@ -379,6 +379,8 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     product_ads AS (
       SELECT
         option_id,
+        -- 광고보고서의 대표 상품명 (주문이 없는 광고-only 행 식별용)
+        MAX(NULLIF(TRIM(product_name), '')) AS ad_product_name,
         SUM(ad_cost)::NUMERIC(14,2)        AS ad_cost_raw,
         SUM(actual_ad_cost)::NUMERIC(14,2) AS actual_ad_cost
       FROM ad_reports
@@ -389,7 +391,14 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     )
     SELECT
       COALESCE(po.option_id,      pa.option_id) AS option_id,
-      COALESCE(po.product_name,   '')           AS product_name,
+      -- 주문 없는 광고-only 행: 광고보고서 상품명 → "광고비만 발생 (옵션ID: …)" 순으로 fallback
+      COALESCE(
+        NULLIF(TRIM(po.product_name), ''),
+        NULLIF(TRIM(pa.ad_product_name), ''),
+        CASE WHEN pa.option_id IS NOT NULL
+             THEN '광고비만 발생 (옵션ID: ' || pa.option_id || ')'
+             ELSE '' END
+      )                                         AS product_name,
       COALESCE(po.option_name,    '')           AS option_name,
       COALESCE(po.qty,            0)            AS qty,
       COALESCE(po.revenue_before, 0)            AS revenue_before,
@@ -397,10 +406,13 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       COALESCE(po.commission,     0)            AS commission,
       COALESCE(po.total_cost,     0)            AS total_cost,
       COALESCE(pa.ad_cost_raw,    0)            AS ad_cost_raw,
-      COALESCE(pa.actual_ad_cost, 0)            AS actual_ad_cost
+      COALESCE(pa.actual_ad_cost, 0)            AS actual_ad_cost,
+      -- 광고-only 행 여부 플래그
+      (po.option_id IS NULL)                    AS ad_only
     FROM product_orders po
     FULL OUTER JOIN product_ads pa ON pa.option_id = po.option_id
-    ORDER BY COALESCE(po.product_name, ''), COALESCE(po.option_name, '')
+    ORDER BY COALESCE(NULLIF(TRIM(po.product_name),''), NULLIF(TRIM(pa.ad_product_name),''), ''),
+             COALESCE(po.option_name, '')
   `, params);
 
   const by_product = prodRows.map(r => {
@@ -425,6 +437,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       ad_cost_raw:    Math.round(adRaw),
       net_profit:     net,
       margin_rate:    rev > 0 ? parseFloat((net / rev * 100).toFixed(2)) : 0,
+      ad_only:        r.ad_only === true || r.ad_only === 't', // 광고비만 발생 (주문 없음)
     };
   });
 

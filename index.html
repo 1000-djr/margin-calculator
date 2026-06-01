@@ -6634,8 +6634,10 @@ async function renderProfit() {
         productRows.sort((a, b) => (b.product_name || '').localeCompare(a.product_name || '', 'ko'));
 
       productTbody.innerHTML = productRows.map(p => {
-        const tax = -(p.commission / 11) - (p.ad_cost_raw / 11);
+        const tax     = -(p.commission / 11) - (p.ad_cost_raw / 11);
         const hasCost = p.total_cost > 0;
+        const adOnly  = p.ad_only === true;
+        const rowStyle = adOnly ? ' style="background:#fffbea"' : '';
 
         // 다운로드용 캐시 누적
         profitProductData.push({
@@ -6651,17 +6653,17 @@ async function renderProfit() {
           마진율:       p.margin_rate,
         });
 
-        return `<tr>
-          <td>${p.product_name}</td>
+        return `<tr${rowStyle}>
+          <td>${p.product_name}${adOnly ? ' <span style="font-size:10px;color:#b45309;background:#fef3c7;padding:1px 5px;border-radius:4px;margin-left:4px">광고만</span>' : ''}</td>
           <td>${p.option_name || ''}</td>
-          <td style="font-family:var(--mono)">${p.qty.toLocaleString('ko-KR')}</td>
-          <td style="font-family:var(--mono)">${p.revenue_after.toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono);color:var(--red)">${p.commission.toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono)">${hasCost ? p.total_cost.toLocaleString('ko-KR') + '원' : '<span style="color:var(--yellow)">미매칭</span>'}</td>
+          <td style="font-family:var(--mono)">${p.qty > 0 ? p.qty.toLocaleString('ko-KR') : '-'}</td>
+          <td style="font-family:var(--mono)">${p.revenue_after > 0 ? p.revenue_after.toLocaleString('ko-KR') + '원' : '-'}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${p.commission > 0 ? p.commission.toLocaleString('ko-KR') + '원' : '-'}</td>
+          <td style="font-family:var(--mono)">${hasCost ? p.total_cost.toLocaleString('ko-KR') + '원' : adOnly ? '-' : '<span style="color:var(--yellow)">미매칭</span>'}</td>
           <td style="font-family:var(--mono);color:var(--red)">${p.actual_ad_cost.toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono)">${Math.round(tax).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);font-weight:600;color:${p.net_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${p.net_profit.toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono)">${p.margin_rate.toFixed(1)}%</td>
+          <td style="font-family:var(--mono)">${p.revenue_after > 0 ? p.margin_rate.toFixed(1) + '%' : '-'}</td>
         </tr>`;
       }).join('');
     }
