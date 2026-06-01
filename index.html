@@ -1263,8 +1263,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>상시할인가 목록</span>
       <div class="period-toggle">
-        <button class="period-btn" id="fdFilterAll"    onclick="setFdFilter('all')">전체</button>
-        <button class="period-btn active" id="fdFilterActive" onclick="setFdFilter('active')">진행중</button>
+        <button class="period-btn active" id="fdFilterAll"    onclick="setFdFilter('all')">전체</button>
+        <button class="period-btn" id="fdFilterActive" onclick="setFdFilter('active')">진행중</button>
         <button class="period-btn" id="fdFilterEnded" onclick="setFdFilter('ended')">종료</button>
       </div>
     </div>
@@ -1997,7 +1997,7 @@ let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let fixedDiscounts = [];
-let fdStatusFilter = 'active'; // 'all' | 'active' | 'ended'
+let fdStatusFilter = 'all'; // 'all' | 'active' | 'ended'
 let discountMode = 'coupon'; // 'coupon' | 'fixed'
 let editingCouponId = null;
 let editingFdId = null;
@@ -2047,7 +2047,7 @@ function _activateTabUI(name) {
   if (name === 'calc')   { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
   if (name === 'orders') { renderOrders(); loadOrdersSummary(); }
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
-  if (name === 'coupons')  { applyDiscountModeUI(); renderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
+  if (name === 'coupons')  { applyDiscountModeUI(); loadAndRenderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
 }
@@ -5470,6 +5470,28 @@ function setFdFilter(filter) {
     const btn = document.getElementById(`fdFilter${f.charAt(0).toUpperCase() + f.slice(1)}`);
     if (btn) btn.classList.toggle('active', f === filter);
   });
+  renderFixedDiscounts();
+}
+
+async function loadAndRenderFixedDiscounts() {
+  if (currentUser) {
+    try {
+      const r = await fetch('/api/fixed-discounts');
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d)) {
+          fixedDiscounts = d;
+          console.log('[fixedDiscounts] 로드:', d.length, '건');
+        } else {
+          console.warn('[fixedDiscounts] 예상치 못한 응답 형식:', d);
+        }
+      } else {
+        console.warn('[fixedDiscounts] API 오류:', r.status, await r.text().catch(() => ''));
+      }
+    } catch(e) {
+      console.warn('[fixedDiscounts] 네트워크 오류:', e.message);
+    }
+  }
   renderFixedDiscounts();
 }
 
