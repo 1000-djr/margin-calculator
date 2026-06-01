@@ -1377,8 +1377,20 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </table>
       </div>
     </div>
-    <div class="section-label">기간별 집계</div>
-    <div class="card" style="padding:0;overflow:hidden">
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>기간별 집계</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;color:var(--text-sub);font-weight:400;display:flex;align-items:center;gap:5px">
+          <span>보기</span>
+          <select id="profitPeriodPageSize" onchange="profitPeriodPage=1;renderProfit()" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text)">
+            <option value="10" selected>10개</option>
+            <option value="30">30개</option>
+          </select>
+        </label>
+        <button onclick="toggleProfitPeriodTable()" id="profitPeriodToggleBtn" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-sub);padding:2px 4px" title="접기/펼치기">▲</button>
+      </div>
+    </div>
+    <div id="profitPeriodTableWrap" class="card" style="padding:0;overflow:hidden">
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
@@ -1387,6 +1399,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <tbody id="profitPeriodTbody"></tbody>
         </table>
       </div>
+      <div id="profitPeriodPagination" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-top:1px solid var(--border)"></div>
     </div>
     <div class="section-label">원가 매칭</div>
     <div class="card" id="profitMatchSection">
@@ -1997,6 +2010,8 @@ let optionMatchings    = JSON.parse(localStorage.getItem('optionMatchings')    |
 let profitTaxTypeMap   = JSON.parse(localStorage.getItem('profitTaxTypeMap')   || '{}');
 let profitProductSort  = null;  // null | 'asc' | 'desc'
 let profitPeriodSort   = 'asc'; // 'asc' | 'desc'
+let profitPeriodPage   = 1;
+let profitPeriodOpen   = true; // 접기/펼치기 상태
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable', productName } }
 let productNameMappings = []; // [{ id, registered_name, option_name, b2b_name, b2b_unit }] — DB 동기화
 let adOptionMappings = JSON.parse(localStorage.getItem('adOptionMappings') || '{}');
@@ -6048,7 +6063,16 @@ function toggleProfitPeriodSort() {
   profitPeriodSort = profitPeriodSort === 'asc' ? 'desc' : 'asc';
   const icon = document.getElementById('profitPeriodSortIcon');
   if (icon) icon.textContent = profitPeriodSort === 'asc' ? '▲' : '▼';
+  profitPeriodPage = 1;
   renderProfit();
+}
+
+function toggleProfitPeriodTable() {
+  profitPeriodOpen = !profitPeriodOpen;
+  const wrap = document.getElementById('profitPeriodTableWrap');
+  const btn  = document.getElementById('profitPeriodToggleBtn');
+  if (wrap) wrap.style.display = profitPeriodOpen ? '' : 'none';
+  if (btn)  btn.textContent    = profitPeriodOpen ? '▲' : '▼';
 }
 
 function toggleProfitProductSort() {
@@ -6608,16 +6632,24 @@ async function renderProfit() {
 
   // ── 기간별 집계 테이블 (백엔드 /api/analytics 결과 사용) ──────────────────────
   const periodTbody = document.getElementById('profitPeriodTbody');
+  const paginationEl = document.getElementById('profitPeriodPagination');
   if (periodTbody) {
     const periods = [...(analytics?.by_period || [])].sort((a, b) =>
       profitPeriodSort === 'asc'
         ? String(a.period).localeCompare(String(b.period))
         : String(b.period).localeCompare(String(a.period))
     );
+
+    const pageSizeEl = document.getElementById('profitPeriodPageSize');
+    const pageSize   = pageSizeEl ? parseInt(pageSizeEl.value) || 10 : 10;
+    const totalPages = Math.max(1, Math.ceil(periods.length / pageSize));
+    if (profitPeriodPage > totalPages) profitPeriodPage = totalPages;
+    const pageData   = periods.slice((profitPeriodPage - 1) * pageSize, profitPeriodPage * pageSize);
+
     if (!periods.length) {
       periodTbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
-      periodTbody.innerHTML = periods.map(p => {
+      periodTbody.innerHTML = pageData.map(p => {
         const rate = p.revenue_after > 0 ? (p.net_profit / p.revenue_after * 100) : 0;
         return `<tr>
           <td style="font-family:var(--mono)">${p.period}</td>
@@ -6631,6 +6663,28 @@ async function renderProfit() {
           <td style="font-family:var(--mono)">${rate.toFixed(1)}%</td>
         </tr>`;
       }).join('');
+    }
+
+    // 페이지네이션 버튼
+    if (paginationEl) {
+      if (totalPages <= 1) {
+        paginationEl.style.display = 'none';
+      } else {
+        paginationEl.style.display = 'flex';
+        const btnStyle = (active) =>
+          `style="min-width:30px;height:28px;padding:0 8px;border-radius:5px;border:1px solid var(--border);background:${active ? 'var(--primary)' : 'var(--surface)'};color:${active ? '#fff' : 'var(--text)'};cursor:pointer;font-size:12px;font-weight:${active ? '600' : '400'}"`;
+        let html = `<button ${btnStyle(false)} onclick="profitPeriodPage=Math.max(1,profitPeriodPage-1);renderProfit()" ${profitPeriodPage===1?'disabled':''}>‹</button>`;
+        for (let i = 1; i <= totalPages; i++) {
+          if (totalPages > 7 && Math.abs(i - profitPeriodPage) > 2 && i !== 1 && i !== totalPages) {
+            if (i === 2 || i === totalPages - 1) html += `<span style="color:var(--text-dim);font-size:12px">…</span>`;
+            continue;
+          }
+          html += `<button ${btnStyle(i === profitPeriodPage)} onclick="profitPeriodPage=${i};renderProfit()">${i}</button>`;
+        }
+        html += `<button ${btnStyle(false)} onclick="profitPeriodPage=Math.min(${totalPages},profitPeriodPage+1);renderProfit()" ${profitPeriodPage===totalPages?'disabled':''}>›</button>`;
+        html += `<span style="font-size:12px;color:var(--text-dim);margin-left:4px">${profitPeriodPage}/${totalPages} (총 ${periods.length}건)</span>`;
+        paginationEl.innerHTML = html;
+      }
     }
   }
 }
