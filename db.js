@@ -1,8 +1,11 @@
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  connectionString:     process.env.DATABASE_URL,
+  ssl:                  process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  max:                  10,
+  idleTimeoutMillis:    30000,
+  connectionTimeoutMillis: 5000,
 });
 
 async function initDB() {
@@ -485,6 +488,13 @@ async function initDB() {
         ALTER TABLE fixed_discounts ALTER COLUMN end_date   TYPE TIMESTAMPTZ USING end_date::TIMESTAMPTZ;
       END IF;
     END $$;
+  `);
+
+  // 성능 인덱스 추가
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
+    CREATE INDEX IF NOT EXISTS idx_orders_user_id      ON orders(user_id);
+    CREATE INDEX IF NOT EXISTS idx_ad_reports_user_id  ON ad_reports(user_id);
   `);
 
   console.log('[db] Tables ready');
