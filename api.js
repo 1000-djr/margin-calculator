@@ -719,7 +719,7 @@ router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
     console.log(`[ad-reports/bulk] user=${userId} items=${items.length} 컬럼:`, Object.keys(items[0]).join(' | '));
   }
 
-  const CHUNK = 100;
+  const CHUNK = 50;
   let inserted = 0, skipped = 0, failed = 0;
 
   try {
