@@ -308,7 +308,127 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     };
   });
 
-  return { summary, by_period };
+  // ── 상품별 집계 ──────────────────────────────────────────────────────────────
+  const { rows: prodRows } = await pool.query(`
+    WITH
+    order_detail AS (
+      SELECT
+        o.option_id,
+        o.product_name,
+        o.option_name,
+        o.quantity,
+        o.payment_amount + o.shipping_fee                 AS gross_sale,
+        GREATEST(
+          o.payment_amount + o.shipping_fee
+          - COALESCE((${discountSubquery}
+            ), 0),
+          0
+        )                                                 AS net_sale,
+        COALESCE(
+          o.override_cost_price::NUMERIC,
+          (
+            SELECT bp.cost
+            FROM product_name_mapping pnm
+            JOIN b2b_products b2bp
+              ON b2bp.user_id = pnm.user_id
+             AND b2bp.name    = pnm.b2b_name
+             AND b2bp.unit    = pnm.b2b_unit
+            JOIN b2b_prices bp
+              ON bp.user_id        = pnm.user_id
+             AND bp.b2b_product_id = b2bp.id
+             AND (bp.start_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.start_date
+                       <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+             AND (bp.end_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.end_date
+                       >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+            WHERE pnm.user_id = o.user_id
+              AND (
+                (pnm.option_id IS NOT NULL AND pnm.option_id = o.option_id)
+                OR
+                (pnm.option_id IS NULL AND pnm.registered_name = o.product_name
+                 AND pnm.option_name = COALESCE(o.option_name, ''))
+              )
+            ORDER BY (pnm.option_id IS NOT NULL) DESC, bp.start_date DESC NULLS LAST
+            LIMIT 1
+          ),
+          0
+        )                                                 AS unit_cost
+      FROM orders o
+      WHERE o.user_id = $1
+        AND o.is_excluded = FALSE
+        AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        AND ($2::text IS NULL OR SUBSTRING(o.order_date,1,10) >= $2)
+        AND ($3::text IS NULL OR SUBSTRING(o.order_date,1,10) <= $3)
+    ),
+    product_orders AS (
+      SELECT
+        option_id,
+        product_name,
+        option_name,
+        SUM(quantity)::INTEGER                       AS qty,
+        SUM(gross_sale)::BIGINT                      AS revenue_before,
+        SUM(net_sale)::BIGINT                        AS revenue_after,
+        (SUM(net_sale) * 0.1166)::NUMERIC(14,2)      AS commission,
+        SUM(unit_cost * quantity)::NUMERIC(14,2)     AS total_cost
+      FROM order_detail
+      GROUP BY option_id, product_name, option_name
+    ),
+    product_ads AS (
+      SELECT
+        option_id,
+        SUM(ad_cost)::NUMERIC(14,2)        AS ad_cost_raw,
+        SUM(actual_ad_cost)::NUMERIC(14,2) AS actual_ad_cost
+      FROM ad_reports
+      WHERE user_id = $1
+        AND ($2::text IS NULL OR report_date >= $2)
+        AND ($3::text IS NULL OR report_date <= $3)
+      GROUP BY option_id
+    )
+    SELECT
+      COALESCE(po.option_id,      pa.option_id) AS option_id,
+      COALESCE(po.product_name,   '')           AS product_name,
+      COALESCE(po.option_name,    '')           AS option_name,
+      COALESCE(po.qty,            0)            AS qty,
+      COALESCE(po.revenue_before, 0)            AS revenue_before,
+      COALESCE(po.revenue_after,  0)            AS revenue_after,
+      COALESCE(po.commission,     0)            AS commission,
+      COALESCE(po.total_cost,     0)            AS total_cost,
+      COALESCE(pa.ad_cost_raw,    0)            AS ad_cost_raw,
+      COALESCE(pa.actual_ad_cost, 0)            AS actual_ad_cost
+    FROM product_orders po
+    FULL OUTER JOIN product_ads pa ON pa.option_id = po.option_id
+    ORDER BY COALESCE(po.product_name, ''), COALESCE(po.option_name, '')
+  `, params);
+
+  const by_product = prodRows.map(r => {
+    const comm   = parseFloat(r.commission)     || 0;
+    const adRaw  = parseFloat(r.ad_cost_raw)    || 0;
+    const actAd  = parseFloat(r.actual_ad_cost) || 0;
+    const rev    = parseInt(r.revenue_after)    || 0;
+    const cost   = parseFloat(r.total_cost)     || 0;
+    const qty    = parseInt(r.qty)              || 0;
+    const tax    = -(comm / 11) - (adRaw / 11);
+    const net    = Math.round(rev - comm - cost - actAd - tax);
+    return {
+      option_id:      r.option_id,
+      product_name:   r.product_name,
+      option_name:    r.option_name,
+      qty,
+      revenue_before: parseInt(r.revenue_before) || 0,
+      revenue_after:  rev,
+      commission:     Math.round(comm),
+      total_cost:     Math.round(cost),
+      actual_ad_cost: Math.round(actAd),
+      ad_cost_raw:    Math.round(adRaw),
+      net_profit:     net,
+      margin_rate:    rev > 0 ? parseFloat((net / rev * 100).toFixed(2)) : 0,
+    };
+  });
+
+  return { summary, by_period, by_product };
 }
 
 module.exports = { calculateProfit };

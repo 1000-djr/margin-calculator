@@ -6460,9 +6460,7 @@ async function renderProfit() {
   let filtered = allInRange; // allInRange 자체가 이미 미인식 제외된 목록
   console.log(`[profit] 필터 후: 전체=${allInRange.length}건 / 미인식제외=${excludedInRange}건 / 집계대상=${filtered.length}건`);
 
-  const feeRate = getPlatformRate();
-
-  // 상품별 집계 — option_id 기준 그룹핑 (없으면 상품명+옵션명 fallback)
+  // 원가매칭 섹션용 옵션 그룹핑 (상품 수익은 서버 by_product 사용)
   const optionMap = new Map();
   filtered.forEach(o => {
     const oid = String(o['옵션ID'] || '').trim();
@@ -6470,29 +6468,15 @@ async function renderProfit() {
     if (!optionMap.has(key)) {
       optionMap.set(key, {
         productName: o['등록상품명'],
-        optionName: o['등록옵션명'],
-        optionId: oid,
-        optionIds: new Set(),
-        qty: 0, payment: 0, shipping: 0, couponDiscount: 0, lastOrderDate: '',
-        overrideCostTotal: 0,  // override_cost_price * qty 합계 (override 있는 주문만)
-        normalQty: 0,          // override 없는 주문의 수량 합계 (PNM/수동매칭용)
+        optionName:  o['등록옵션명'],
+        optionId:    oid,
+        optionIds:   new Set(),
+        qty:         0,
       });
     }
     const g = optionMap.get(key);
     if (oid) g.optionIds.add(oid);
-    const orderQty = parseFloat(o['구매수(수량)']) || 1;
-    g.qty += orderQty;
-    g.payment += parseFloat(o['결제액']) || 0;
-    g.shipping += parseFloat(o['배송비']) || 0;
-    g.couponDiscount += localCouponDiscount(o);
-    const overridePrice = o['override_cost_price'];
-    if (overridePrice != null && !isNaN(parseFloat(overridePrice))) {
-      g.overrideCostTotal += parseFloat(overridePrice) * orderQty;
-    } else {
-      g.normalQty += orderQty;
-    }
-    const od = String(o['주문일'] || '').replace(/\./g, '-').slice(0, 10);
-    if (od > g.lastOrderDate) g.lastOrderDate = od;
+    g.qty += parseFloat(o['구매수(수량)']) || 1;
   });
 
   // 매칭 현황: PNM 자동매칭 우선, 없으면 optionMatchings 수동, 없으면 미매칭
@@ -6610,67 +6594,49 @@ async function renderProfit() {
     matchContent.innerHTML = matchHtml;
   }
 
-  // 상품별 수익 테이블
+  // 상품별 수익 테이블 — 서버 by_product 데이터 사용 (클라이언트 계산 제거)
   const productTbody = document.getElementById('profitProductTbody');
   profitProductData = []; // 다운로드용 초기화
   if (productTbody) {
-    if (!optionMap.size) {
+    const byProduct = analytics?.by_product || [];
+    if (!byProduct.length) {
       productTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
-      const productRows = [...optionMap.values()];
+      const productRows = [...byProduct];
       if (profitProductSort === 'asc')
-        productRows.sort((a, b) => a.productName.localeCompare(b.productName, 'ko'));
+        productRows.sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '', 'ko'));
       else if (profitProductSort === 'desc')
-        productRows.sort((a, b) => b.productName.localeCompare(a.productName, 'ko'));
-      productTbody.innerHTML = productRows.map(g => {
-        const realRevenue = (g.payment + g.shipping) - g.couponDiscount;
-        const fee = realRevenue * feeRate;
-        const repDate = g.lastOrderDate || document.getElementById('profitDateFrom')?.value || new Date().toISOString().slice(0,10);
-        const resolved = resolveUnitCost(g.productName, g.optionName, g.optionId, repDate);
-        // 원가: override_cost_price(주문별) + PNM/수동 단가 × normalQty 합산 (서버 COALESCE와 동일)
-        const normalCost = resolved.unitCost !== null ? resolved.unitCost * g.normalQty : null;
-        const cost = (g.overrideCostTotal > 0 || normalCost !== null)
-          ? (g.overrideCostTotal + (normalCost || 0))
-          : null;
-        const adIds = [...(g.optionIds.size ? g.optionIds : (g.optionId ? [g.optionId] : []))];
-        const adCostRaw  = adIds.reduce((sum, id) => sum + localAdCost(id), 0);       // ad_cost (VAT용)
-        const realAdCost = adIds.reduce((sum, id) => sum + localActualAdCost(id), 0); // actual_ad_cost (서버와 동일)
-        const taxTyp = resolved.taxType;
-        let vat = 0;
-        if (taxTyp === 'exempt') {
-          vat = -(fee / 11) - (adCostRaw / 11);
-        } else {
-          vat = (realRevenue / 11) - ((cost || 0) / 11) - (fee / 11) - (adCostRaw / 11);
-        }
-        const netProfit = cost !== null ? realRevenue - fee - cost - realAdCost - vat : null;
-        const marginRate = (netProfit !== null && realRevenue > 0) ? (netProfit / realRevenue * 100) : null;
-        const isUnmatched = cost === null; // override or PNM/수동 매칭 없는 경우만 미매칭
+        productRows.sort((a, b) => (b.product_name || '').localeCompare(a.product_name || '', 'ko'));
+
+      productTbody.innerHTML = productRows.map(p => {
+        const tax = -(p.commission / 11) - (p.ad_cost_raw / 11);
+        const hasCost = p.total_cost > 0;
 
         // 다운로드용 캐시 누적
         profitProductData.push({
-          등록상품명: g.productName,
-          옵션명: g.optionName,
-          수량: g.qty,
-          실매출: Math.round(realRevenue),
-          수수료: Math.round(fee),
-          원가: cost !== null ? Math.round(cost) : '',
-          '광고비(실)': Math.round(realAdCost),
-          부가세: Math.round(vat),
-          순이익: netProfit !== null ? Math.round(netProfit) : '',
-          마진율: marginRate !== null ? parseFloat(marginRate.toFixed(2)) : '',
+          등록상품명:   p.product_name,
+          옵션명:       p.option_name,
+          수량:         p.qty,
+          실매출:       p.revenue_after,
+          수수료:       p.commission,
+          원가:         p.total_cost,
+          '광고비(실)': p.actual_ad_cost,
+          부가세:       Math.round(tax),
+          순이익:       p.net_profit,
+          마진율:       p.margin_rate,
         });
 
-        return `<tr class="${isUnmatched ? 'unmatched-row' : ''}">
-          <td>${g.productName}</td>
-          <td>${g.optionName}</td>
-          <td style="font-family:var(--mono)">${g.qty}</td>
-          <td style="font-family:var(--mono)">${Math.round(realRevenue).toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono);color:var(--red)">${Math.round(fee).toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono)">${cost !== null ? Math.round(cost).toLocaleString('ko-KR') + '원' : resolved.source === 'auto_no_price' ? `<span style="color:var(--yellow)" title="B2B 매입가 탭에 해당 날짜 이력을 먼저 입력해주세요">⚠️ B2B 이력 없음</span>` : '<span style="color:var(--yellow)">미매칭</span>'}</td>
-          <td style="font-family:var(--mono);color:var(--red)">${Math.round(realAdCost).toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono)">${Math.round(vat).toLocaleString('ko-KR')}원</td>
-          <td style="font-family:var(--mono);font-weight:600;color:${netProfit === null ? 'var(--text-dim)' : netProfit >= 0 ? 'var(--green)' : 'var(--red)'}">${netProfit !== null ? Math.round(netProfit).toLocaleString('ko-KR') + '원' : '-'}</td>
-          <td style="font-family:var(--mono)">${marginRate !== null ? marginRate.toFixed(1) + '%' : '-'}</td>
+        return `<tr>
+          <td>${p.product_name}</td>
+          <td>${p.option_name || ''}</td>
+          <td style="font-family:var(--mono)">${p.qty.toLocaleString('ko-KR')}</td>
+          <td style="font-family:var(--mono)">${p.revenue_after.toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);color:var(--red)">${p.commission.toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${hasCost ? p.total_cost.toLocaleString('ko-KR') + '원' : '<span style="color:var(--yellow)">미매칭</span>'}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${p.actual_ad_cost.toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${Math.round(tax).toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);font-weight:600;color:${p.net_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${p.net_profit.toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono)">${p.margin_rate.toFixed(1)}%</td>
         </tr>`;
       }).join('');
     }
