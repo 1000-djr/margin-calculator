@@ -1478,7 +1478,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
 
   </div>
-</div>
 
 <!-- ══ 반품/출고중지 API 동기화 모달 ══════════════════════════════════ -->
 <div id="returnSyncBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center" onclick="closeReturnSyncModal(event)">
@@ -6974,8 +6973,8 @@ async function renderReturns() {
         <td style="text-align:right;font-family:var(--mono)">${row.return_cost ? Math.round(row.return_cost).toLocaleString('ko-KR') : '-'}</td>
         <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text-dim)" title="${memo}">${row.process_memo||''}</td>
         <td style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},'${row.return_type||'other'}',${row.return_cost||0},${JSON.stringify(row.process_memo||'')})" style="font-size:11px;padding:3px 8px">처리</button>
-          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:4px">삭제</button>
+          <button class="btn btn-sm" onclick="openReturnProcessModal(${row.id},${JSON.stringify(row.return_type||'other').replace(/"/g,'&quot;')},${row.return_cost||0},${JSON.stringify(row.process_memo||'').replace(/"/g,'&quot;')})" style="font-size:11px;padding:3px 8px">처리</button>
+          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'').replace(/"/g,'&quot;')},${JSON.stringify(row.order_number||'').replace(/"/g,'&quot;')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:4px">삭제</button>
         </td>
       </tr>`;
     }).join('');
@@ -7016,7 +7015,7 @@ async function renderCancelShipments() {
         actionCell = `
           <button class="btn btn-sm" onclick="processCancelComplete(${row.id})" style="font-size:11px;padding:3px 8px;background:#22c55418;color:#16a34a;border:1px solid #22c55440">출고중지완료</button>
           <button class="btn btn-sm" onclick="processCancelTransfer(${row.id})" style="font-size:11px;padding:3px 8px;background:#f9731618;color:#ea580c;border:1px solid #f9731640;margin-left:3px">이미출고</button>
-          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'')},${JSON.stringify(row.order_number||'')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:3px">삭제</button>`;
+          <button class="btn btn-sm" onclick="openReturnDeleteConfirm(${row.id},${JSON.stringify(row.receipt_number||'').replace(/"/g,'&quot;')},${JSON.stringify(row.order_number||'').replace(/"/g,'&quot;')})" style="font-size:11px;padding:3px 8px;background:#ef444418;color:#ef4444;border:1px solid #ef444440;margin-left:3px">삭제</button>`;
       }
       return `<tr>
         <td><input type="checkbox" data-id="${row.id}" onclick="toggleCancelSelect(this)"></td>
