@@ -4,140 +4,261 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin — 마진계산기</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
 <style>
-/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+/* ── Reset & Base ────────────────────────────────────────────────────────── */
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;
-     background:#f5f5f7;color:#1d1d1f;min-height:100vh}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','SF Pro Display',
+              'Pretendard',sans-serif;
+  background:#F5F5F7;color:#1D1D1F;min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
 input,select,button,textarea{font-family:inherit}
-.mono,td.num,[class*="value"]{font-feature-settings:"tnum"}
+.mono{font-feature-settings:"tnum"}
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
-header{background:#fff;border-bottom:1px solid #e5e5ea;
-       padding:0 32px;height:52px;display:flex;align-items:center;
-       justify-content:space-between;position:sticky;top:0;z-index:100}
-.logo{font-size:15px;font-weight:600;color:#1d1d1f;display:flex;align-items:center;gap:8px}
-.logo span{font-size:11px;font-weight:500;background:#ff3b30;color:#fff;
-           padding:2px 7px;border-radius:4px;letter-spacing:.3px}
+header{
+  background:#FFFFFF;border-bottom:1px solid #D2D2D7;
+  padding:0 32px;height:52px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:100;
+}
+.logo{font-size:15px;font-weight:600;color:#1D1D1F;display:flex;align-items:center;gap:10px}
+.logo-badge{
+  font-size:11px;font-weight:600;background:#FF3B30;color:#fff;
+  padding:2px 8px;border-radius:5px;letter-spacing:.4px;text-transform:uppercase;
+}
 .header-right{display:flex;align-items:center;gap:16px}
-.back-btn{font-size:13px;color:#0071e3;text-decoration:none;font-weight:500}
+.back-btn{font-size:13px;color:#0071E3;text-decoration:none;font-weight:500}
 .back-btn:hover{text-decoration:underline}
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
-main{max-width:1100px;margin:0 auto;padding:32px 24px}
+main{max-width:1160px;margin:0 auto;padding:32px 24px 64px}
 
 /* ── Stats Cards ─────────────────────────────────────────────────────────── */
-.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-bottom:28px}
-.stat-card{background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
-.stat-card .label{font-size:11px;color:#8e8e93;margin-bottom:4px}
-.stat-card .value{font-size:18px;font-weight:600;color:#1d1d1f;font-feature-settings:"tnum"}
-.stat-card .value.green{color:#34c759}
-.stat-card .value.red{color:#ff3b30}
+.stats-row{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+  gap:12px;margin-bottom:24px;
+}
+.stat-card{
+  background:#FFFFFF;border-radius:12px;padding:16px 18px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  border:1px solid rgba(0,0,0,0.04);
+}
+.stat-card .label{font-size:11px;color:#6E6E73;margin-bottom:6px;font-weight:500}
+.stat-card .value{font-size:20px;font-weight:600;color:#1D1D1F;font-feature-settings:"tnum"}
+.stat-card .value.green{color:#34C759}
+.stat-card .value.red{color:#FF3B30}
+.stat-card .value.orange{color:#FF9500}
 
 /* ── Section Title ───────────────────────────────────────────────────────── */
-.section-title{font-size:17px;font-weight:600;margin-bottom:14px;color:#1d1d1f}
+.section-title{font-size:17px;font-weight:600;margin-bottom:14px;color:#1D1D1F;letter-spacing:-.3px}
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
-.table-wrap{background:#fff;border-radius:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow-x:auto;margin-bottom:32px}
+.table-wrap{
+  background:#FFFFFF;border-radius:12px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  border:1px solid rgba(0,0,0,0.04);
+  overflow-x:auto;margin-bottom:32px;
+}
 table{width:100%;border-collapse:collapse;font-size:13px}
-thead{background:#f5f5f7}
-thead th{padding:12px 16px;text-align:left;font-weight:500;color:#8e8e93;
-         font-size:12px;border-bottom:1px solid #e5e5ea;white-space:nowrap}
-tbody tr{border-bottom:1px solid #f2f2f7;cursor:pointer;transition:background .12s}
+thead{background:#F5F5F7}
+thead th{
+  padding:11px 16px;text-align:left;font-weight:500;color:#6E6E73;
+  font-size:11.5px;border-bottom:1px solid #D2D2D7;white-space:nowrap;
+  letter-spacing:.02em;
+}
+tbody tr{border-bottom:1px solid #F5F5F7;cursor:pointer;transition:background .1s}
 tbody tr:last-child{border-bottom:none}
-tbody tr:hover{background:#f5f5f7}
+tbody tr:hover{background:#F5F5F7}
 tbody td{padding:13px 16px;vertical-align:middle}
 
 /* ── Avatar ──────────────────────────────────────────────────────────────── */
-.avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px}
-.avatar-placeholder{width:30px;height:30px;border-radius:50%;background:#e5e5ea;
-                    display:inline-flex;align-items:center;justify-content:center;
-                    font-size:12px;color:#8e8e93;margin-right:8px;vertical-align:middle}
-.user-name{font-weight:500}
-.user-email{font-size:11px;color:#8e8e93;margin-top:2px}
+.avatar{width:28px;height:28px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:7px}
+.avatar-placeholder{
+  width:28px;height:28px;border-radius:50%;background:#E5E5EA;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:600;color:#6E6E73;margin-right:7px;vertical-align:middle;
+}
+.user-name{font-weight:500;color:#1D1D1F}
+.user-email{font-size:11px;color:#6E6E73;margin-top:2px}
 
 /* ── Status Badge ────────────────────────────────────────────────────────── */
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;
-       font-size:11px;font-weight:500;white-space:nowrap}
-.badge.active  {background:#d1fae5;color:#065f46}
-.badge.pending {background:#fef3c7;color:#92400e}
-.badge.blocked {background:#fee2e2;color:#991b1b}
-.badge.admin   {background:#ede9fe;color:#5b21b6}
+.badge{
+  display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;
+  font-size:11px;font-weight:600;white-space:nowrap;
+}
+.badge.active  {background:#D1FAE5;color:#065F46}
+.badge.pending {background:#FEF3C7;color:#92400E}
+.badge.blocked {background:#FEE2E2;color:#991B1B}
+.badge.admin   {background:#EDE9FE;color:#5B21B6}
 
 /* ── Action Buttons ──────────────────────────────────────────────────────── */
-.btn-group{display:flex;gap:6px;flex-wrap:wrap}
-.btn{border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:500;
-     cursor:pointer;transition:opacity .15s;white-space:nowrap}
-.btn:hover{opacity:.8}
-.btn:disabled{opacity:.4;cursor:default}
-.btn-approve{background:#34c759;color:#fff}
-.btn-block  {background:#ff3b30;color:#fff}
-.btn-pending{background:#ff9f0a;color:#fff}
-.btn-admin  {background:#5856d6;color:#fff}
-.btn-unadmin{background:#e5e5ea;color:#1d1d1f}
+.btn-group{display:flex;gap:5px;flex-wrap:wrap}
+.btn{
+  border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:500;
+  cursor:pointer;transition:opacity .15s, transform .1s;white-space:nowrap;
+}
+.btn:hover{opacity:.82}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.38;cursor:default}
+.btn-approve{background:#34C759;color:#fff}
+.btn-block  {background:#FF3B30;color:#fff}
+.btn-pending{background:#FF9500;color:#fff}
+.btn-admin  {background:#5856D6;color:#fff}
+.btn-unadmin{background:#E5E5EA;color:#1D1D1F}
+.btn-impersonate{background:#F97316;color:#fff;padding:2px 7px;font-size:11px;border-radius:6px}
 
-/* ── Detail Modal ────────────────────────────────────────────────────────── */
-.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);
-                display:flex;align-items:center;justify-content:center;z-index:200;
-                opacity:0;pointer-events:none;transition:opacity .2s}
+/* ── Filter Bar ──────────────────────────────────────────────────────────── */
+.filter-bar{
+  background:#FFFFFF;border-radius:12px;padding:16px 20px;margin-bottom:20px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid rgba(0,0,0,0.04);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.filter-bar label{font-size:12px;font-weight:500;color:#6E6E73;white-space:nowrap}
+.filter-bar input[type=date]{
+  padding:7px 10px;border:1.5px solid #D2D2D7;border-radius:8px;
+  font-size:13px;color:#1D1D1F;background:#FFFFFF;outline:none;cursor:pointer;
+  transition:border-color .15s;
+}
+.filter-bar input[type=date]:focus{border-color:#0071E3}
+.quick-btns{display:flex;gap:6px}
+.qbtn{
+  border:1.5px solid #D2D2D7;background:#FFFFFF;padding:6px 12px;border-radius:8px;
+  font-size:12px;font-weight:500;cursor:pointer;color:#1D1D1F;transition:all .15s;
+}
+.qbtn:hover{background:#F5F5F7}
+.qbtn.active{background:#1D1D1F;color:#fff;border-color:#1D1D1F}
+.btn-search{
+  background:#0071E3;color:#fff;border:none;padding:7px 18px;border-radius:8px;
+  font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s;
+}
+.btn-search:hover{opacity:.85}
+.filter-note{font-size:11px;color:#6E6E73;margin-left:auto}
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(0,0,0,.28);
+  display:flex;align-items:center;justify-content:center;z-index:200;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
 .modal-backdrop.open{opacity:1;pointer-events:auto}
-.modal{background:#fff;border-radius:18px;padding:28px 28px 24px;
-       max-width:560px;width:92%;max-height:85vh;overflow-y:auto;
-       transform:translateY(16px);transition:transform .2s;
-       box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.modal{
+  background:#FFFFFF;border-radius:18px;padding:28px 28px 24px;
+  max-width:560px;width:92%;max-height:88vh;overflow-y:auto;
+  transform:translateY(14px);transition:transform .22s;
+  box-shadow:0 16px 48px rgba(0,0,0,.14);
+}
 .modal-backdrop.open .modal{transform:translateY(0)}
 .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-.modal-title{font-size:16px;font-weight:600}
-.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#8e8e93;
-             width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%}
-.modal-close:hover{background:#f2f2f7}
-.detail-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f2f2f7;font-size:13px}
+.modal-title{font-size:16px;font-weight:600;color:#1D1D1F}
+.modal-close{
+  background:none;border:none;font-size:18px;cursor:pointer;color:#6E6E73;
+  width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;transition:background .12s;
+}
+.modal-close:hover{background:#F5F5F7}
+
+.modal input[type=date]{
+  width:100%;padding:10px 12px;border:1.5px solid #D2D2D7;border-radius:10px;
+  font-size:14px;outline:none;margin-bottom:16px;color:#1D1D1F;background:#FFFFFF;
+  transition:border-color .15s;
+}
+.modal input[type=date]:focus{border-color:#0071E3}
+
+.modal-btn-row{display:flex;gap:8px}
+.modal-btn-cancel{
+  flex:1;background:#F5F5F7;color:#1D1D1F;border:none;border-radius:10px;
+  padding:11px;font-size:14px;font-weight:500;cursor:pointer;transition:background .12s;
+}
+.modal-btn-cancel:hover{background:#E5E5EA}
+.modal-btn-confirm{
+  flex:2;background:#34C759;color:#fff;border:none;border-radius:10px;
+  padding:11px;font-size:14px;font-weight:500;cursor:pointer;transition:opacity .15s;
+}
+.modal-btn-confirm:hover{opacity:.85}
+
+.detail-row{
+  display:flex;justify-content:space-between;padding:10px 0;
+  border-bottom:1px solid #F5F5F7;font-size:13px;
+}
 .detail-row:last-child{border-bottom:none}
-.detail-row .key{color:#8e8e93;font-weight:500}
+.detail-row .key{color:#6E6E73;font-weight:500}
 .detail-row .val{font-weight:500;text-align:right}
 .monthly-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
-.monthly-table th{background:#f5f5f7;padding:7px 10px;text-align:left;color:#8e8e93;font-weight:500}
-.monthly-table td{padding:7px 10px;border-bottom:1px solid #f5f5f7}
-.section-sub{font-size:13px;font-weight:600;margin:16px 0 6px}
+.monthly-table th{
+  background:#F5F5F7;padding:7px 10px;text-align:left;
+  color:#6E6E73;font-weight:500;
+}
+.monthly-table td{padding:7px 10px;border-bottom:1px solid #F5F5F7}
+.section-sub{font-size:13px;font-weight:600;margin:16px 0 6px;color:#1D1D1F}
 
-/* ── Date Filter ─────────────────────────────────────────────────────────── */
-.filter-bar{background:#fff;border-radius:14px;padding:16px 20px;margin-bottom:20px;
-            box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;align-items:center;
-            gap:12px;flex-wrap:wrap}
-.filter-bar label{font-size:12px;font-weight:500;color:#8e8e93;white-space:nowrap}
-.filter-bar input[type=date]{padding:7px 10px;border:1px solid #e5e5ea;border-radius:8px;
-                              font-size:13px;color:#1d1d1f;outline:none;cursor:pointer}
-.filter-bar input[type=date]:focus{border-color:#0071e3}
-.quick-btns{display:flex;gap:6px}
-.qbtn{border:1px solid #e5e5ea;background:#fff;padding:6px 12px;border-radius:8px;
-      font-size:12px;font-weight:500;cursor:pointer;color:#1d1d1f;transition:all .15s}
-.qbtn:hover,.qbtn.active{background:#1d1d1f;color:#fff;border-color:#1d1d1f}
-.btn-search{background:#0071e3;color:#fff;border:none;padding:7px 18px;border-radius:8px;
-            font-size:13px;font-weight:500;cursor:pointer;transition:opacity .15s}
-.btn-search:hover{opacity:.85}
-.filter-note{font-size:11px;color:#8e8e93;margin-left:auto}
+/* ── Diagnosis Section ───────────────────────────────────────────────────── */
+.diag-section{
+  max-width:1160px;margin:0 auto;padding:0 24px 64px;
+}
+.diag-card{
+  background:#FFFFFF;border-radius:12px;padding:24px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid rgba(0,0,0,0.04);
+}
+.diag-title{font-size:17px;font-weight:600;color:#1D1D1F;margin-bottom:6px;letter-spacing:-.3px}
+.diag-desc{font-size:13px;color:#6E6E73;margin-bottom:16px}
+.diag-inputs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.diag-inputs input{
+  flex:1;min-width:200px;background:#FFFFFF;color:#1D1D1F;
+  border:1.5px solid #D2D2D7;border-radius:8px;padding:9px 12px;font-size:13px;
+  outline:none;transition:border-color .15s;
+}
+.diag-inputs input:focus{border-color:#0071E3}
+.diag-inputs input::placeholder{color:#AEAEB2}
+.btn-diag-search{
+  background:#0071E3;color:#fff;border:none;border-radius:8px;
+  padding:9px 20px;font-size:13px;font-weight:500;cursor:pointer;
+  white-space:nowrap;transition:opacity .15s;
+}
+.btn-diag-search:hover{opacity:.85}
+.diag-result{
+  background:#F5F5F7;border:1px solid #D2D2D7;border-radius:10px;
+  padding:16px;min-height:64px;font-size:13px;color:#1D1D1F;
+}
+.diag-result table{width:100%;border-collapse:collapse;font-size:13px}
+.diag-result thead th{
+  text-align:left;padding:6px 10px;font-size:11.5px;font-weight:500;
+  color:#6E6E73;border-bottom:1px solid #D2D2D7;background:transparent;
+}
+.diag-result tbody td{padding:6px 10px;border-bottom:1px solid #E5E5EA}
+.diag-result tbody tr:last-child td{border-bottom:none}
+.diag-result-title{margin:10px 0 6px;font-weight:600;font-size:13px;color:#1D1D1F}
+.diag-result-title:first-child{margin-top:0}
+.diag-result-empty{color:#6E6E73;margin:3px 0}
 
-/* ── Empty State ─────────────────────────────────────────────────────────── */
-.empty{text-align:center;padding:48px;color:#8e8e93;font-size:14px}
-
-/* ── Loading ─────────────────────────────────────────────────────────────── */
-.spinner{display:inline-block;width:18px;height:18px;border:2px solid #e5e5ea;
-         border-top-color:#0071e3;border-radius:50%;animation:spin .6s linear infinite}
+/* ── Empty / Spinner / Toast ─────────────────────────────────────────────── */
+.empty{text-align:center;padding:48px;color:#6E6E73;font-size:14px}
+.spinner{
+  display:inline-block;width:18px;height:18px;
+  border:2px solid #D2D2D7;border-top-color:#0071E3;
+  border-radius:50%;animation:spin .6s linear infinite;
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── Toast ───────────────────────────────────────────────────────────────── */
-#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(60px);
-       background:#1d1d1f;color:#fff;padding:10px 20px;border-radius:980px;
-       font-size:13px;font-weight:500;transition:transform .25s;pointer-events:none;z-index:300}
+#toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(60px);
+  background:#1D1D1F;color:#fff;padding:10px 22px;
+  border-radius:980px;font-size:13px;font-weight:500;
+  transition:transform .25s;pointer-events:none;z-index:300;
+}
 #toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── Row highlight states ────────────────────────────────────────────────── */
+tr.row-expired td{background:#FFF1F0 !important}
+tr.row-soon td{background:#FFFBEA !important}
 </style>
 </head>
 <body>
 
 <header>
   <div class="logo">
-    <span>ADMIN</span>
+    <span class="logo-badge">Admin</span>
     마진계산기 관리자
   </div>
   <div class="header-right">
@@ -148,28 +269,28 @@ tbody td{padding:13px 16px;vertical-align:middle}
 <main>
   <!-- 요약 카드 -->
   <div class="stats-row" id="statsRow">
-    <div class="stat-card"><div class="label">전체 유저</div><div class="value" id="statTotal">—</div></div>
-    <div class="stat-card"><div class="label">승인된 유저</div><div class="value green" id="statActive">—</div></div>
-    <div class="stat-card"><div class="label">대기 중</div><div class="value" id="statPending" style="color:#ff9f0a">—</div></div>
-    <div class="stat-card"><div class="label">차단됨</div><div class="value red" id="statBlocked">—</div></div>
-    <div class="stat-card"><div class="label">전체 매출(쿠폰전)</div><div class="value" id="statRevenueBefore">—</div></div>
-    <div class="stat-card"><div class="label">전체 매출(쿠폰후)</div><div class="value" id="statRevenueAfter">—</div></div>
-    <div class="stat-card"><div class="label">전체 원가</div><div class="value red" id="statCost">—</div></div>
-    <div class="stat-card"><div class="label">전체 광고비(실)</div><div class="value red" id="statAdCost">—</div></div>
-    <div class="stat-card"><div class="label">전체 순이익</div><div class="value green" id="statMargin">—</div></div>
+    <div class="stat-card"><div class="label">전체 유저</div><div class="value mono" id="statTotal">—</div></div>
+    <div class="stat-card"><div class="label">승인된 유저</div><div class="value green mono" id="statActive">—</div></div>
+    <div class="stat-card"><div class="label">대기 중</div><div class="value orange mono" id="statPending">—</div></div>
+    <div class="stat-card"><div class="label">차단됨</div><div class="value red mono" id="statBlocked">—</div></div>
+    <div class="stat-card"><div class="label">전체 매출(쿠폰전)</div><div class="value mono" id="statRevenueBefore">—</div></div>
+    <div class="stat-card"><div class="label">전체 매출(쿠폰후)</div><div class="value mono" id="statRevenueAfter">—</div></div>
+    <div class="stat-card"><div class="label">전체 원가</div><div class="value red mono" id="statCost">—</div></div>
+    <div class="stat-card"><div class="label">전체 광고비(실)</div><div class="value red mono" id="statAdCost">—</div></div>
+    <div class="stat-card"><div class="label">전체 순이익</div><div class="value green mono" id="statMargin">—</div></div>
   </div>
 
   <!-- 날짜 필터 -->
   <div class="filter-bar">
     <label>기간</label>
     <input type="date" id="filterStart" oninput="clearQuick()">
-    <span style="font-size:13px;color:#8e8e93">~</span>
+    <span style="font-size:13px;color:#6E6E73">~</span>
     <input type="date" id="filterEnd" oninput="clearQuick()">
     <div class="quick-btns">
       <button class="qbtn" id="qbtn-yesterday" onclick="setQuick('yesterday')">어제</button>
       <button class="qbtn" id="qbtn-7days"     onclick="setQuick('7days')">최근 7일</button>
-      <button class="qbtn" id="qbtn-month"      onclick="setQuick('month')">이번 달</button>
-      <button class="qbtn" id="qbtn-all"        onclick="setQuick('all')">전체</button>
+      <button class="qbtn" id="qbtn-month"     onclick="setQuick('month')">이번 달</button>
+      <button class="qbtn" id="qbtn-all"       onclick="setQuick('all')">전체</button>
     </div>
     <button class="btn-search" onclick="loadUsers()">조회</button>
     <span class="filter-note" id="filterNote"></span>
@@ -209,13 +330,12 @@ tbody td{padding:13px 16px;vertical-align:middle}
       <div class="modal-title">승인 — <span id="approveModalName"></span></div>
       <button class="modal-close" onclick="closeApproveModal()">✕</button>
     </div>
-    <div style="font-size:13px;color:#8e8e93;margin-bottom:14px">만료일을 비워두면 무제한으로 승인됩니다.</div>
-    <label style="font-size:12px;font-weight:500;color:#1d1d1f;display:block;margin-bottom:6px">만료일 (선택)</label>
-    <input id="approveExpiresInput" type="date"
-      style="width:100%;padding:10px 12px;border:1px solid #e5e5ea;border-radius:10px;font-size:14px;outline:none;margin-bottom:16px">
-    <div style="display:flex;gap:8px">
-      <button class="btn" style="flex:1;background:#e5e5ea;color:#1d1d1f" onclick="closeApproveModal()">취소</button>
-      <button class="btn btn-approve" style="flex:2" onclick="submitApprove()">승인하기</button>
+    <p style="font-size:13px;color:#6E6E73;margin-bottom:14px">만료일을 비워두면 무제한으로 승인됩니다.</p>
+    <label style="font-size:12px;font-weight:500;color:#1D1D1F;display:block;margin-bottom:6px">만료일 (선택)</label>
+    <input id="approveExpiresInput" type="date">
+    <div class="modal-btn-row">
+      <button class="modal-btn-cancel" onclick="closeApproveModal()">취소</button>
+      <button class="modal-btn-confirm" onclick="submitApprove()">승인하기</button>
     </div>
   </div>
 </div>
@@ -227,13 +347,12 @@ tbody td{padding:13px 16px;vertical-align:middle}
       <div class="modal-title">만료일 수정 — <span id="expiresModalName"></span></div>
       <button class="modal-close" onclick="closeExpiresModal()">✕</button>
     </div>
-    <div style="font-size:13px;color:#8e8e93;margin-bottom:14px">비워두면 무제한으로 변경됩니다.</div>
-    <label style="font-size:12px;font-weight:500;color:#1d1d1f;display:block;margin-bottom:6px">만료일</label>
-    <input id="expiresInput" type="date"
-      style="width:100%;padding:10px 12px;border:1px solid #e5e5ea;border-radius:10px;font-size:14px;outline:none;margin-bottom:16px">
-    <div style="display:flex;gap:8px">
-      <button class="btn" style="flex:1;background:#e5e5ea;color:#1d1d1f" onclick="closeExpiresModal()">취소</button>
-      <button class="btn btn-approve" style="flex:2" onclick="submitExpires()">저장</button>
+    <p style="font-size:13px;color:#6E6E73;margin-bottom:14px">비워두면 무제한으로 변경됩니다.</p>
+    <label style="font-size:12px;font-weight:500;color:#1D1D1F;display:block;margin-bottom:6px">만료일</label>
+    <input id="expiresInput" type="date">
+    <div class="modal-btn-row">
+      <button class="modal-btn-cancel" onclick="closeExpiresModal()">취소</button>
+      <button class="modal-btn-confirm" onclick="submitExpires()">저장</button>
     </div>
   </div>
 </div>
@@ -252,18 +371,19 @@ tbody td{padding:13px 16px;vertical-align:middle}
 <div id="toast"></div>
 
 <!-- ── 데이터 오염 진단 ───────────────────────────────────────────────────── -->
-<div style="max-width:900px;margin:32px auto 0;padding:0 16px">
-  <h2 style="color:#ff9f0a;margin-bottom:12px">🔍 계정 간 데이터 오염 진단</h2>
-  <p style="color:#888;margin-bottom:12px;font-size:13px">특정 상품명 또는 옵션ID가 어느 계정의 DB에 저장돼 있는지 확인합니다.</p>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
-    <input id="crossProductName" type="text" placeholder="상품명 검색 (부분일치)"
-      style="flex:1;min-width:200px;background:#1a1a1a;color:#fff;border:1px solid #333;border-radius:6px;padding:8px 12px;font-size:14px">
-    <input id="crossOptionId" type="text" placeholder="옵션ID (정확히)"
-      style="flex:1;min-width:160px;background:#1a1a1a;color:#fff;border:1px solid #333;border-radius:6px;padding:8px 12px;font-size:14px">
-    <button onclick="runCrossCheck()"
-      style="background:#ff9f0a;color:#000;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">조회</button>
+<div class="diag-section">
+  <div class="diag-card">
+    <div class="diag-title">🔍 계정 간 데이터 오염 진단</div>
+    <div class="diag-desc">특정 상품명 또는 옵션ID가 어느 계정의 DB에 저장돼 있는지 확인합니다.</div>
+    <div class="diag-inputs">
+      <input id="crossProductName" type="text" placeholder="상품명 검색 (부분일치)">
+      <input id="crossOptionId"    type="text" placeholder="옵션ID (정확히)">
+      <button class="btn-diag-search" onclick="runCrossCheck()">조회</button>
+    </div>
+    <div id="crossCheckResult" class="diag-result">
+      <span style="color:#6E6E73">상품명 또는 옵션ID를 입력 후 조회하세요.</span>
+    </div>
   </div>
-  <div id="crossCheckResult" style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;min-height:60px;font-size:13px"></div>
 </div>
 
 <script>
@@ -278,44 +398,42 @@ function showToast(msg,dur=2200){
   setTimeout(()=>t.classList.remove('show'),dur);
 }
 
-// ── 날짜 유틸 (브라우저 로컬 시간 기준 — UTC 변환 없음) ─────────────────────
+// ── 날짜 유틸 ─────────────────────────────────────────────────────────────────
 function toDateStr(d){
-  const yyyy = d.getFullYear();
-  const mm   = String(d.getMonth()+1).padStart(2,'0');
-  const dd   = String(d.getDate()).padStart(2,'0');
+  const yyyy=d.getFullYear();
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const dd=String(d.getDate()).padStart(2,'0');
   return yyyy+'-'+mm+'-'+dd;
 }
-let _activeQuick = 'all';
+let _activeQuick='all';
 
 function setQuick(key){
-  _activeQuick = key;
+  _activeQuick=key;
   document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
-  const btn = document.getElementById('qbtn-'+key);
-  if(btn) btn.classList.add('active');
-
-  const today = new Date();
-  const todayStr = toDateStr(today);
-
+  const btn=document.getElementById('qbtn-'+key);
+  if(btn)btn.classList.add('active');
+  const today=new Date();
+  const todayStr=toDateStr(today);
   if(key==='yesterday'){
-    const y = new Date(today); y.setDate(today.getDate()-1);
-    const yStr = toDateStr(y);
-    document.getElementById('filterStart').value = yStr;
-    document.getElementById('filterEnd').value   = yStr;
-  } else if(key==='7days'){
-    const s = new Date(today); s.setDate(today.getDate()-6);
-    document.getElementById('filterStart').value = toDateStr(s);
-    document.getElementById('filterEnd').value   = todayStr;
-  } else if(key==='month'){
-    const s = new Date(today.getFullYear(), today.getMonth(), 1);
-    document.getElementById('filterStart').value = toDateStr(s);
-    document.getElementById('filterEnd').value   = todayStr;
-  } else {
-    document.getElementById('filterStart').value = '';
-    document.getElementById('filterEnd').value   = '';
+    const y=new Date(today);y.setDate(today.getDate()-1);
+    const yStr=toDateStr(y);
+    document.getElementById('filterStart').value=yStr;
+    document.getElementById('filterEnd').value=yStr;
+  }else if(key==='7days'){
+    const s=new Date(today);s.setDate(today.getDate()-6);
+    document.getElementById('filterStart').value=toDateStr(s);
+    document.getElementById('filterEnd').value=todayStr;
+  }else if(key==='month'){
+    const s=new Date(today.getFullYear(),today.getMonth(),1);
+    document.getElementById('filterStart').value=toDateStr(s);
+    document.getElementById('filterEnd').value=todayStr;
+  }else{
+    document.getElementById('filterStart').value='';
+    document.getElementById('filterEnd').value='';
   }
 }
 function clearQuick(){
-  _activeQuick = null;
+  _activeQuick=null;
   document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('active'));
 }
 
@@ -323,23 +441,18 @@ function clearQuick(){
 async function loadUsers(){
   document.getElementById('userTbody').innerHTML=
     `<tr><td colspan="13" class="empty"><div class="spinner"></div></td></tr>`;
-
-  const start = document.getElementById('filterStart').value || '';
-  const end   = document.getElementById('filterEnd').value   || '';
-  const params = new URLSearchParams();
-  if(start) params.set('start_date', start);
-  if(end)   params.set('end_date',   end);
-
-  const note = start || end
-    ? `${start||'시작'} ~ ${end||'종료'} 기간 집계`
-    : '전체 기간 집계';
-  document.getElementById('filterNote').textContent = note;
-
+  const start=document.getElementById('filterStart').value||'';
+  const end=document.getElementById('filterEnd').value||'';
+  const params=new URLSearchParams();
+  if(start)params.set('start_date',start);
+  if(end)params.set('end_date',end);
+  const note=start||end?`${start||'시작'} ~ ${end||'종료'} 기간 집계`:'전체 기간 집계';
+  document.getElementById('filterNote').textContent=note;
   try{
-    const r=await fetch('/admin/users?' + params.toString());
+    const r=await fetch('/admin/users?'+params.toString());
     if(!r.ok){
       if(r.status===401||r.status===403){
-        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:\'Pretendard\',-apple-system,sans-serif;color:#ff3b30;font-size:15px">접근 권한이 없습니다.</div>';
+        document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;color:#FF3B30;font-size:15px">접근 권한이 없습니다.</div>';
         return;
       }
       throw new Error(await r.text());
@@ -353,51 +466,49 @@ async function loadUsers(){
   }
 }
 
-// ── 유틸: 만료 상태 판정 ──────────────────────────────────────────────────────
+// ── 만료 상태 ─────────────────────────────────────────────────────────────────
 function expiryState(expiresAt){
-  if(!expiresAt) return 'unlimited';
+  if(!expiresAt)return'unlimited';
   const diff=(new Date(expiresAt)-new Date())/86400000;
-  if(diff<0)  return 'expired';
-  if(diff<=7) return 'soon';
-  return 'ok';
+  if(diff<0)return'expired';
+  if(diff<=7)return'soon';
+  return'ok';
 }
 function fmtExpiry(expiresAt){
-  if(!expiresAt) return '<span style="color:#8e8e93">무제한</span>';
-  const state=expiryState(expiresAt), date=expiresAt.slice(0,10);
-  if(state==='expired') return `<span style="color:#ff3b30;font-weight:600">만료 ${date}</span>`;
-  if(state==='soon')    return `<span style="color:#ff9f0a;font-weight:600">${date} ⚠️</span>`;
-  return `<span>${date}</span>`;
+  if(!expiresAt)return'<span style="color:#6E6E73">무제한</span>';
+  const state=expiryState(expiresAt),date=expiresAt.slice(0,10);
+  if(state==='expired')return`<span style="color:#FF3B30;font-weight:600">만료 ${date}</span>`;
+  if(state==='soon')return`<span style="color:#FF9500;font-weight:600">${date} ⚠️</span>`;
+  return`<span>${date}</span>`;
 }
-function rowBg(u){
-  if(u.status==='blocked') return '';
+function rowClass(u){
+  if(u.status==='blocked')return'';
   const s=expiryState(u.expires_at);
-  if(s==='expired') return 'background:#fff1f0';
-  if(s==='soon')    return 'background:#fffbea';
-  return '';
+  if(s==='expired')return'row-expired';
+  if(s==='soon')return'row-soon';
+  return'';
 }
 
-// ── 수익분석 완전 동일 수식 ───────────────────────────────────────────────────
-// 순이익 = 실매출 - 수수료 - 원가 - 실광고비 - 부가세(면세)
-// 부가세(면세) = -(수수료/11) - (광고비/11)
+// ── 수익 계산 (profit.js 동일 수식) ──────────────────────────────────────────
 function calcDerived(u){
-  const revBefore  = Number(u.revenue_before)  || 0;
-  const revAfter   = Number(u.revenue_after)   || 0;
-  const commission = Number(u.commission)      || 0;
-  const cost       = Number(u.total_cost)      || 0;
-  const actualAd   = Number(u.actual_ad_cost)  || 0;
-  const adRaw      = Number(u.ad_cost_raw)     || 0;
-  const tax        = -(commission / 11) - (adRaw / 11); // 면세 부가세(음수)
-  const profit     = revAfter - commission - cost - actualAd - tax;
-  const rate       = revAfter > 0 ? (profit / revAfter * 100) : 0;
-  return { revBefore, revAfter, commission, cost, actualAd, tax, profit, rate };
+  const revBefore=Number(u.revenue_before)||0;
+  const revAfter=Number(u.revenue_after)||0;
+  const commission=Number(u.commission)||0;
+  const cost=Number(u.total_cost)||0;
+  const actualAd=Number(u.actual_ad_cost)||0;
+  const adRaw=Number(u.ad_cost_raw)||0;
+  const tax=-(commission/11)-(adRaw/11);
+  const profit=revAfter-commission-cost-actualAd-tax;
+  const rate=revAfter>0?(profit/revAfter*100):0;
+  return{revBefore,revAfter,commission,cost,actualAd,tax,profit,rate};
 }
-
 function fmtW(n){return fmt(Math.round(n))+'원';}
 function fmtRate(r){
-  const c=r>=0?'#34c759':'#ff3b30';
-  return `<span style="color:${c};font-weight:600">${r>=0?'+':''}${r.toFixed(1)}%</span>`;
+  const c=r>=0?'#34C759':'#FF3B30';
+  return`<span style="color:${c};font-weight:600;font-feature-settings:'tnum'">${r>=0?'+':''}${r.toFixed(1)}%</span>`;
 }
 
+// ── 렌더링 ───────────────────────────────────────────────────────────────────
 function renderStats(users){
   document.getElementById('statTotal').textContent=users.length;
   document.getElementById('statActive').textContent=users.filter(u=>u.status==='active').length;
@@ -405,8 +516,8 @@ function renderStats(users){
   document.getElementById('statBlocked').textContent=users.filter(u=>u.status==='blocked').length;
   const t=users.reduce((s,u)=>{
     const d=calcDerived(u);
-    s.before+=d.revBefore; s.after+=d.revAfter;
-    s.cost+=d.cost;        s.ad+=d.actualAd; s.profit+=d.profit;
+    s.before+=d.revBefore;s.after+=d.revAfter;
+    s.cost+=d.cost;s.ad+=d.actualAd;s.profit+=d.profit;
     return s;
   },{before:0,after:0,cost:0,ad:0,profit:0});
   document.getElementById('statRevenueBefore').textContent=fmtW(t.before);
@@ -421,37 +532,41 @@ function renderTable(users){
   if(!users.length){tbody.innerHTML='<tr><td colspan="13" class="empty">유저가 없습니다.</td></tr>';return;}
   tbody.innerHTML=users.map(u=>{
     const d=calcDerived(u);
-    return `
-    <tr onclick="openDetail(${u.id})" style="${rowBg(u)}">
+    const rc=rowClass(u);
+    return`
+    <tr class="${rc}" onclick="openDetail(${u.id})">
       <td onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;gap:6px">
-          ${u.picture?`<img class="avatar" src="${u.picture}" onerror="this.style.display='none'">`:
-            `<span class="avatar-placeholder">${(u.name||'?')[0]}</span>`}
-          <span class="user-name" style="cursor:pointer" onclick="openDetail(${u.id})">${u.name||'—'}</span>
-          ${!u.is_admin?`<button class="btn" onclick="impersonate(${u.id})" style="padding:2px 7px;font-size:11px;background:#f97316;color:#fff;border:none;border-radius:5px;cursor:pointer;margin-left:2px" title="대리접속">접속</button>`:''}
+          ${u.picture
+            ?`<img class="avatar" src="${u.picture}" onerror="this.style.display='none'">`
+            :`<span class="avatar-placeholder">${(u.name||'?')[0]}</span>`}
+          <div>
+            <span class="user-name" style="cursor:pointer" onclick="openDetail(${u.id})">${u.name||'—'}</span>
+            ${!u.is_admin?`<div style="margin-top:2px"><button class="btn btn-impersonate" onclick="impersonate(${u.id})" title="대리접속">대리접속</button></div>`:''}
+          </div>
         </div>
       </td>
-      <td><span style="font-size:12px;color:#8e8e93">${u.email||'—'}</span></td>
-      <td>${fmtDate(u.created_at)}</td>
+      <td><span style="font-size:12px;color:#6E6E73">${u.email||'—'}</span></td>
+      <td style="color:#6E6E73;font-size:12px">${fmtDate(u.created_at)}</td>
       <td>
         ${badgeHtml(u.status)}
         ${u.is_admin?'<span class="badge admin" style="margin-left:4px">어드민</span>':''}
       </td>
-      <td>${fmtW(d.revBefore)}</td>
-      <td>${fmtW(d.revAfter)}</td>
-      <td style="color:#ff3b30">${fmtW(d.cost)}</td>
-      <td style="color:#ff3b30">${fmtW(d.actualAd)}</td>
-      <td style="color:${d.profit>=0?'#34c759':'#ff3b30'};font-weight:600">${fmtW(d.profit)}</td>
+      <td class="mono">${fmtW(d.revBefore)}</td>
+      <td class="mono">${fmtW(d.revAfter)}</td>
+      <td class="mono" style="color:#FF3B30">${fmtW(d.cost)}</td>
+      <td class="mono" style="color:#FF3B30">${fmtW(d.actualAd)}</td>
+      <td class="mono" style="color:${d.profit>=0?'#34C759':'#FF3B30'};font-weight:600">${fmtW(d.profit)}</td>
       <td>${fmtRate(d.rate)}</td>
       <td onclick="event.stopPropagation()">
         ${fmtExpiry(u.expires_at)}
-        <button class="btn btn-unadmin" style="margin-left:4px;padding:4px 8px;font-size:11px"
+        <button class="btn btn-unadmin" style="margin-left:4px;padding:3px 8px;font-size:11px"
           onclick="openExpiresModal(${u.id})">수정</button>
       </td>
       <td onclick="event.stopPropagation()">
         <div class="btn-group">
           ${u.status!=='active'?`<button class="btn btn-approve" onclick="openApproveModal(${u.id})">승인</button>`:''}
-          ${u.status==='active'?`<button class="btn btn-approve" onclick="openApproveModal(${u.id})" style="background:#6e6e73">재승인</button>`:''}
+          ${u.status==='active'?`<button class="btn" onclick="openApproveModal(${u.id})" style="background:#6E6E73;color:#fff">재승인</button>`:''}
           ${u.status!=='blocked'?`<button class="btn btn-block" onclick="setStatus(${u.id},'blocked')">차단</button>`:''}
           ${u.status==='blocked'?`<button class="btn btn-pending" onclick="setStatus(${u.id},'pending')">차단해제</button>`:''}
         </div>
@@ -467,28 +582,26 @@ function renderTable(users){
 
 function badgeHtml(status){
   const map={active:'승인',pending:'대기',blocked:'차단'};
-  return `<span class="badge ${status}">${map[status]||status}</span>`;
+  return`<span class="badge ${status}">${map[status]||status}</span>`;
 }
 
-// ── 승인 모달 (만료일 선택) ───────────────────────────────────────────────────
-let _approveTargetId = null;
+// ── 승인 모달 ────────────────────────────────────────────────────────────────
+let _approveTargetId=null;
 function openApproveModal(id){
-  _approveTargetId = id;
-  const u = allUsers.find(x=>x.id===id);
-  document.getElementById('approveModalName').textContent = u?.name || u?.email || '';
-  // 기존 만료일 있으면 pre-fill
-  const expInput = document.getElementById('approveExpiresInput');
-  expInput.value = u?.expires_at ? u.expires_at.slice(0,10) : '';
+  _approveTargetId=id;
+  const u=allUsers.find(x=>x.id===id);
+  document.getElementById('approveModalName').textContent=u?.name||u?.email||'';
+  document.getElementById('approveExpiresInput').value=u?.expires_at?u.expires_at.slice(0,10):'';
   document.getElementById('approveModalBackdrop').classList.add('open');
 }
 function closeApproveModal(){
   document.getElementById('approveModalBackdrop').classList.remove('open');
-  _approveTargetId = null;
+  _approveTargetId=null;
 }
 async function submitApprove(){
-  if(!_approveTargetId) return;
-  const val = document.getElementById('approveExpiresInput').value;
-  const expiresAt = val ? val + 'T23:59:59Z' : null;
+  if(!_approveTargetId)return;
+  const val=document.getElementById('approveExpiresInput').value;
+  const expiresAt=val?val+'T23:59:59Z':null;
   try{
     const r=await fetch(`/admin/users/${_approveTargetId}/approve`,{
       method:'PUT',headers:{'Content-Type':'application/json'},
@@ -500,28 +613,27 @@ async function submitApprove(){
     if(u){u.status=updated.status;u.expires_at=updated.expires_at;}
     closeApproveModal();
     renderTable(allUsers);renderStats(allUsers);
-    showToast('승인 완료' + (expiresAt ? ` (만료: ${val})` : ' (무제한)'));
+    showToast('승인 완료'+(expiresAt?` (만료: ${val})`:'  (무제한)'));
   }catch(e){showToast('오류: '+e.message);}
 }
 
 // ── 만료일 수정 모달 ──────────────────────────────────────────────────────────
-let _expiresTargetId = null;
+let _expiresTargetId=null;
 function openExpiresModal(id){
-  _expiresTargetId = id;
-  const u = allUsers.find(x=>x.id===id);
-  document.getElementById('expiresModalName').textContent = u?.name || u?.email || '';
-  const expInput = document.getElementById('expiresInput');
-  expInput.value = u?.expires_at ? u.expires_at.slice(0,10) : '';
+  _expiresTargetId=id;
+  const u=allUsers.find(x=>x.id===id);
+  document.getElementById('expiresModalName').textContent=u?.name||u?.email||'';
+  document.getElementById('expiresInput').value=u?.expires_at?u.expires_at.slice(0,10):'';
   document.getElementById('expiresModalBackdrop').classList.add('open');
 }
 function closeExpiresModal(){
   document.getElementById('expiresModalBackdrop').classList.remove('open');
-  _expiresTargetId = null;
+  _expiresTargetId=null;
 }
 async function submitExpires(){
-  if(!_expiresTargetId) return;
-  const val = document.getElementById('expiresInput').value;
-  const expiresAt = val ? val + 'T23:59:59Z' : null;
+  if(!_expiresTargetId)return;
+  const val=document.getElementById('expiresInput').value;
+  const expiresAt=val?val+'T23:59:59Z':null;
   try{
     const r=await fetch(`/admin/users/${_expiresTargetId}/expires`,{
       method:'PUT',headers:{'Content-Type':'application/json'},
@@ -530,14 +642,14 @@ async function submitExpires(){
     if(!r.ok)throw new Error(await r.text());
     const updated=await r.json();
     const u=allUsers.find(x=>x.id===_expiresTargetId);
-    if(u) u.expires_at=updated.expires_at;
+    if(u)u.expires_at=updated.expires_at;
     closeExpiresModal();
     renderTable(allUsers);
-    showToast(expiresAt ? `만료일을 ${val}로 설정했습니다.` : '무제한으로 변경했습니다.');
+    showToast(expiresAt?`만료일을 ${val}로 설정했습니다.`:'무제한으로 변경했습니다.');
   }catch(e){showToast('오류: '+e.message);}
 }
 
-// ── 상태 변경 (차단/해제) ─────────────────────────────────────────────────────
+// ── 상태 변경 ────────────────────────────────────────────────────────────────
 async function setStatus(id,status){
   try{
     const r=await fetch(`/admin/users/${id}/status`,{
@@ -580,7 +692,7 @@ async function openDetail(id){
     const data=await r.json();
     renderDetail(data);
   }catch(e){
-    document.getElementById('detailBody').innerHTML=`<p style="color:#ff3b30;font-size:13px">오류: ${e.message}</p>`;
+    document.getElementById('detailBody').innerHTML=`<p style="color:#FF3B30;font-size:13px">오류: ${e.message}</p>`;
   }
 }
 
@@ -589,18 +701,18 @@ function renderDetail({user,monthly_stats,ad_stats}){
   const monthly=monthly_stats.map(m=>`
     <tr>
       <td>${(m.month||'').slice(0,7)}</td>
-      <td>${fmt(m.orders)}</td>
-      <td>${fmt(m.revenue)}원</td>
+      <td class="mono">${fmt(m.orders)}</td>
+      <td class="mono">${fmt(m.revenue)}원</td>
     </tr>
-  `).join('') || '<tr><td colspan="3" style="text-align:center;color:#8e8e93;padding:12px">데이터 없음</td></tr>';
+  `).join('')||'<tr><td colspan="3" style="text-align:center;color:#6E6E73;padding:12px">데이터 없음</td></tr>';
 
   document.getElementById('detailBody').innerHTML=`
     <div class="detail-row"><span class="key">이메일</span><span class="val">${user.email||'—'}</span></div>
     <div class="detail-row"><span class="key">가입일</span><span class="val">${fmtDate(user.created_at)}</span></div>
     <div class="detail-row"><span class="key">상태</span><span class="val">${badgeHtml(user.status)}${user.is_admin?' <span class="badge admin">어드민</span>':''}</span></div>
-    <div class="detail-row"><span class="key">총 광고비</span><span class="val">${fmt(ad_stats?.total_ad_cost||0)}원</span></div>
-    <div class="detail-row"><span class="key">실 광고비</span><span class="val">${fmt(ad_stats?.total_actual_ad_cost||0)}원</span></div>
-    <div class="detail-row"><span class="key">총 클릭수</span><span class="val">${fmt(ad_stats?.total_clicks||0)}</span></div>
+    <div class="detail-row"><span class="key">총 광고비</span><span class="val mono">${fmt(ad_stats?.total_ad_cost||0)}원</span></div>
+    <div class="detail-row"><span class="key">실 광고비</span><span class="val mono">${fmt(ad_stats?.total_actual_ad_cost||0)}원</span></div>
+    <div class="detail-row"><span class="key">총 클릭수</span><span class="val mono">${fmt(ad_stats?.total_clicks||0)}</span></div>
     <div class="section-sub">월별 매출</div>
     <table class="monthly-table">
       <thead><tr><th>월</th><th>주문수</th><th>매출</th></tr></thead>
@@ -617,47 +729,48 @@ function closeDetailBtn(){
 }
 
 // ── 대리접속 ──────────────────────────────────────────────────────────────────
-async function impersonate(userId) {
-  if (!confirm('해당 계정으로 대리접속하시겠습니까?')) return;
-  try {
-    const res = await fetch(`/api/admin/impersonate/${userId}`, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error || '대리접속 실패'); return; }
-    window.location.href = '/';
-  } catch(e) { alert(e.message); }
+async function impersonate(userId){
+  if(!confirm('해당 계정으로 대리접속하시겠습니까?'))return;
+  try{
+    const res=await fetch(`/api/admin/impersonate/${userId}`,{method:'POST'});
+    const data=await res.json();
+    if(!res.ok){alert(data.error||'대리접속 실패');return;}
+    window.location.href='/';
+  }catch(e){alert(e.message);}
 }
 
-// ── 데이터 오염 진단
-async function runCrossCheck() {
-  const productName = document.getElementById('crossProductName').value.trim();
-  const optionId    = document.getElementById('crossOptionId').value.trim();
-  if (!productName && !optionId) { alert('상품명 또는 옵션ID를 입력하세요.'); return; }
-  const resultEl = document.getElementById('crossCheckResult');
-  resultEl.innerHTML = '<p style="color:#888">조회 중...</p>';
-  const params = new URLSearchParams();
-  if (productName) params.set('product_name', productName);
-  if (optionId)    params.set('option_id', optionId);
-  try {
-    const res  = await fetch(`/api/admin/cross-user-check?${params}`);
-    const data = await res.json();
-    if (!res.ok) { resultEl.innerHTML = `<p style="color:red">${data.error}</p>`; return; }
-    const r = data.results;
-    let html = '';
-    const makeTable = (title, rows, cols, keys) => {
-      if (!rows || !rows.length) return `<p style="margin:4px 0;color:#888">${title}: 없음</p>`;
-      return `<p style="margin:8px 0 4px;font-weight:600">${title} (${rows.length}개 계정)</p>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <thead><tr>${cols.map(c=>`<th style="text-align:left;border-bottom:1px solid #333;padding:4px 8px">${c}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map(row=>`<tr>${keys.map(k=>`<td style="padding:4px 8px">${row[k]??'-'}</td>`).join('')}</tr>`).join('')}</tbody>
+// ── 데이터 오염 진단 ──────────────────────────────────────────────────────────
+async function runCrossCheck(){
+  const productName=document.getElementById('crossProductName').value.trim();
+  const optionId=document.getElementById('crossOptionId').value.trim();
+  if(!productName&&!optionId){alert('상품명 또는 옵션ID를 입력하세요.');return;}
+  const resultEl=document.getElementById('crossCheckResult');
+  resultEl.innerHTML='<span style="color:#6E6E73">조회 중...</span>';
+  const params=new URLSearchParams();
+  if(productName)params.set('product_name',productName);
+  if(optionId)params.set('option_id',optionId);
+  try{
+    const res=await fetch(`/api/admin/cross-user-check?${params}`);
+    const data=await res.json();
+    if(!res.ok){resultEl.innerHTML=`<p style="color:#FF3B30">${data.error}</p>`;return;}
+    const r=data.results;
+    let html='';
+    const makeTable=(title,rows,cols,keys)=>{
+      if(!rows||!rows.length)
+        return`<p class="diag-result-empty">${title}: 없음</p>`;
+      return`<p class="diag-result-title">${title} <span style="color:#6E6E73;font-weight:400">(${rows.length}개 계정)</span></p>
+      <table>
+        <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(row=>`<tr>${keys.map(k=>`<td>${row[k]??'—'}</td>`).join('')}</tr>`).join('')}</tbody>
       </table>`;
     };
-    if (r.orders_by_user)               html += makeTable('📦 주문 테이블', r.orders_by_user, ['user_id','이메일','이름','건수','첫주문','마지막주문'], ['user_id','email','name','cnt','first_order','last_order']);
-    if (r.ad_reports_by_user)           html += makeTable('📢 광고보고서 테이블', r.ad_reports_by_user, ['user_id','이메일','이름','건수','첫날짜','마지막날짜'], ['user_id','email','name','cnt','first_date','last_date']);
-    if (r.product_name_mapping_by_user) html += makeTable('🔗 상품명 매핑', r.product_name_mapping_by_user, ['user_id','이메일','이름','등록상품명','옵션ID','B2B명'], ['user_id','email','name','registered_name','option_id','b2b_name']);
-    if (r.orders_option_by_user)        html += makeTable('📦 주문(옵션ID)', r.orders_option_by_user, ['user_id','이메일','이름','건수','상품명','옵션명'], ['user_id','email','name','cnt','product_name','option_name']);
-    if (r.ad_reports_option_by_user)    html += makeTable('📢 광고보고서(옵션ID)', r.ad_reports_option_by_user, ['user_id','이메일','이름','건수','상품명'], ['user_id','email','name','cnt','product_name']);
-    resultEl.innerHTML = html || '<p style="color:#888">결과 없음</p>';
-  } catch(e) { resultEl.innerHTML = `<p style="color:red">${e.message}</p>`; }
+    if(r.orders_by_user)              html+=makeTable('📦 주문 테이블',r.orders_by_user,['user_id','이메일','이름','건수','첫주문','마지막주문'],['user_id','email','name','cnt','first_order','last_order']);
+    if(r.ad_reports_by_user)          html+=makeTable('📢 광고보고서 테이블',r.ad_reports_by_user,['user_id','이메일','이름','건수','첫날짜','마지막날짜'],['user_id','email','name','cnt','first_date','last_date']);
+    if(r.product_name_mapping_by_user)html+=makeTable('🔗 상품명 매핑',r.product_name_mapping_by_user,['user_id','이메일','이름','등록상품명','옵션ID','B2B명'],['user_id','email','name','registered_name','option_id','b2b_name']);
+    if(r.orders_option_by_user)       html+=makeTable('📦 주문(옵션ID)',r.orders_option_by_user,['user_id','이메일','이름','건수','상품명','옵션명'],['user_id','email','name','cnt','product_name','option_name']);
+    if(r.ad_reports_option_by_user)   html+=makeTable('📢 광고보고서(옵션ID)',r.ad_reports_option_by_user,['user_id','이메일','이름','건수','상품명'],['user_id','email','name','cnt','product_name']);
+    resultEl.innerHTML=html||'<span style="color:#6E6E73">결과 없음</span>';
+  }catch(e){resultEl.innerHTML=`<p style="color:#FF3B30">${e.message}</p>`;}
 }
 
 // ── 초기화 ────────────────────────────────────────────────────────────────────
