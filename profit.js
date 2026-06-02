@@ -127,10 +127,13 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     WITH
     ${ORDER_DETAIL_CTE},
     excluded_cnt AS (
-      SELECT COUNT(*)::INTEGER AS cnt
+      SELECT
+        COUNT(*) FILTER (WHERE is_excluded = TRUE)::INTEGER AS cnt,
+        COUNT(*) FILTER (WHERE exclusion_type = 'fake_order')::INTEGER AS fake_order_count,
+        COUNT(*) FILTER (WHERE exclusion_type = 'return')::INTEGER AS return_count,
+        COUNT(*) FILTER (WHERE exclusion_type = 'other')::INTEGER AS other_count
       FROM orders
       WHERE user_id = $1
-        AND is_excluded = TRUE
         AND ($2::text IS NULL OR SUBSTRING(order_date,1,10) >= $2)
         AND ($3::text IS NULL OR SUBSTRING(order_date,1,10) <= $3)
     ),
@@ -154,7 +157,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     )
     SELECT
       oa.total_orders,
-      ec.cnt         AS excluded_count,
+      ec.cnt              AS excluded_count,
+      ec.fake_order_count,
+      ec.return_count,
+      ec.other_count,
       oa.revenue_before,
       oa.revenue_after,
       oa.commission,
@@ -198,8 +204,11 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
   }
 
   const summary = {
-    total_orders:   s.total_orders   || 0,
-    excluded_count: s.excluded_count || 0,
+    total_orders:     s.total_orders     || 0,
+    excluded_count:   s.excluded_count   || 0,
+    fake_order_count: s.fake_order_count || 0,
+    return_count:     s.return_count     || 0,
+    other_count:      s.other_count      || 0,
     revenue_before: parseInt(s.revenue_before) || 0,
     revenue_after:  revAfter,
     commission:     Math.round(commission),

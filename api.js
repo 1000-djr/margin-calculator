@@ -510,16 +510,31 @@ router.get('/orders/summary', requireAuth, async (req, res) => {
 
 router.get('/orders/stats', requireAuth, async (req, res) => {
   try {
+    const { start_date, end_date, search } = req.query;
+    const params = [req.user.id];
+    let where = 'user_id=$1';
+    let p = 2;
+    if (start_date) { where += ` AND SUBSTRING(order_date,1,10) >= $${p++}`; params.push(start_date); }
+    if (end_date)   { where += ` AND SUBSTRING(order_date,1,10) <= $${p++}`; params.push(end_date); }
+    if (search) {
+      where += ` AND (product_name ILIKE $${p} OR display_name ILIKE $${p} OR option_name ILIKE $${p})`;
+      params.push('%' + search + '%'); p++;
+    }
     const { rows } = await pool.query(`
       SELECT
-        COUNT(*)::INTEGER                                             AS total_orders,
-        COUNT(*) FILTER (WHERE is_excluded = false OR is_excluded IS NULL)::INTEGER AS active_orders,
-        COUNT(*) FILTER (WHERE is_excluded = true)::INTEGER          AS excluded_orders,
-        MIN(order_date)                                              AS oldest_order,
-        MAX(order_date)                                              AS newest_order,
-        MAX(created_at) AT TIME ZONE 'Asia/Seoul'                   AS last_uploaded_at
-      FROM orders WHERE user_id = $1
-    `, [req.user.id]);
+        COUNT(*)::INTEGER                                                                    AS total_orders,
+        COUNT(*) FILTER (WHERE is_excluded = false OR is_excluded IS NULL)::INTEGER         AS active_orders,
+        COUNT(*) FILTER (WHERE is_excluded = true)::INTEGER                                 AS excluded_orders,
+        COUNT(*) FILTER (WHERE exclusion_type = 'fake_order')::INTEGER                      AS fake_order_count,
+        COUNT(*) FILTER (WHERE exclusion_type = 'return')::INTEGER                          AS return_count,
+        COUNT(*) FILTER (WHERE exclusion_type = 'other')::INTEGER                           AS other_count,
+        COALESCE(SUM(payment_amount) FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::BIGINT AS total_payment,
+        COALESCE(SUM(shipping_fee)   FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::BIGINT AS total_shipping,
+        MIN(order_date)                                                                      AS oldest_order,
+        MAX(order_date)                                                                      AS newest_order,
+        MAX(created_at) AT TIME ZONE 'Asia/Seoul'                                           AS last_uploaded_at
+      FROM orders WHERE ${where}
+    `, params);
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

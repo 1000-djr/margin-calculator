@@ -1955,17 +1955,14 @@ async function loadUserData() {
         return Array.isArray(d) ? d : null;
       } catch(e) { console.warn('[loadUserData] 네트워크 오류', url, e); return null; }
     }
-    const [scData, oData, arData, cData, cmData, fdData] = await Promise.all([
+    const [scData, arData, cData, cmData, fdData] = await Promise.all([
       safeFetch('/api/shortcuts'),
-      safeFetch('/api/orders'),
       safeFetch('/api/ad-reports'),
       safeFetch('/api/coupons'),
       safeFetch('/api/cost-mappings'),
       safeFetch('/api/fixed-discounts'),
     ]);
     if (scData) { shortcuts = scData; localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts)); }
-    if (oData)  { orders = oData;     localStorage.setItem('ordersData',   JSON.stringify(orders));    }
-    else { console.log('[orders] DB 로드 실패 → localStorage 유지 (', orders.length, '건)'); }
     if (arData) { adReports = arData; localStorage.setItem('adReportsData', JSON.stringify(adReports)); }
     if (cData)  { coupons = cData;    localStorage.setItem('couponsData',   JSON.stringify(coupons));   }
     if (Array.isArray(fdData)) { fixedDiscounts = fdData; }
@@ -2059,7 +2056,8 @@ let editingHistoryIdx = -1; // -1: 신규, >=0: 수정 중인 이력 인덱스
 let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts')  || '[]');
 
 // ── 새 탭 데이터 ──────────────────────────────────────────────────────────────
-let orders = JSON.parse(localStorage.getItem('ordersData') || '[]');
+let orders = [];
+let _renderedPageOrders = []; // 현재 렌더된 페이지 주문 (bulk 작업용)
 let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let fixedDiscounts = [];
@@ -3687,14 +3685,7 @@ async function doOrdersUpload(toAdd) {
       setTimeout(hideProgress, 800);
     }
 
-    // DB 업로드 완료 후 서버에서 최신 데이터 다시 로드
-    try {
-      const r = await fetch('/api/orders');
-      if (r.ok) {
-        orders = await r.json();
-        try { localStorage.setItem('ordersData', JSON.stringify(orders)); } catch(e) { /* quota 초과 무시 */ }
-      }
-    } catch(e) { console.warn('[orders] 재로드 실패:', e.message); }
+    // DB 업로드 완료 — renderOrders가 페이지네이션 API로 최신 데이터 조회
 
     if (failed > 0) {
       alert(`⚠️ 일부 저장 실패: ${failed}건\n${inserted}건은 정상 저장됐습니다.`);
@@ -3702,9 +3693,7 @@ async function doOrdersUpload(toAdd) {
       console.log(`[orders] DB 저장 완료: ${inserted}건 삽입 / 전체 ${total}건`);
     }
   } else {
-    // 비로그인 — 로컬 전용
-    orders = [...orders, ...toAdd];
-    try { localStorage.setItem('ordersData', JSON.stringify(orders)); } catch(e) { /* quota 초과 무시 */ }
+    // 비로그인 — 로컬 전용 (orders 배열 미사용, 렌더만)
   }
 
   const newOptionIds = [...new Set(toAdd.map(o => o['옵션ID']).filter(Boolean))];
@@ -3713,7 +3702,7 @@ async function doOrdersUpload(toAdd) {
   ordersPage = 1;
   renderOrders();
   loadOrdersSummary();
-  alert(`${inserted}건 신규 저장 / ${total - inserted - failed}건 중복 스킵 / 총 ${orders.length}건`);
+  alert(`${inserted}건 신규 저장 / ${total - inserted - failed}건 중복 스킵`);
 }
 
 // ── 필터링 업로드 ──────────────────────────────────────────────────────────────
@@ -3916,12 +3905,7 @@ function setOrdersFilter(mode) {
 }
 
 async function setOrderExclusionType(orderNumber, exclusionType) {
-  const idx = orders.findIndex(o => o['주문번호'] === orderNumber);
-  if (idx === -1) return;
   const isExcluded = exclusionType !== 'normal';
-  orders[idx].is_excluded    = isExcluded;
-  orders[idx].exclusion_type = exclusionType;
-  localStorage.setItem('ordersData', JSON.stringify(orders));
   if (currentUser) {
     try {
       await fetch(`/api/orders/${encodeURIComponent(orderNumber)}/exclude`, {
@@ -3935,10 +3919,9 @@ async function setOrderExclusionType(orderNumber, exclusionType) {
 }
 
 async function toggleOrderExclude(orderNumber) {
-  const idx = orders.findIndex(o => o['주문번호'] === orderNumber);
-  if (idx === -1) return;
-  // 인식 ↔ 가구매 토글 (기본 동작)
-  const cur = orders[idx].exclusion_type || 'normal';
+  // 인식 ↔ 가구매 토글: _renderedPageOrders에서 현재 상태 조회
+  const o = _renderedPageOrders.find(x => x['주문번호'] === orderNumber);
+  const cur = o?.exclusion_type || 'normal';
   const next = cur === 'normal' ? 'fake_order' : 'normal';
   await setOrderExclusionType(orderNumber, next);
 }
@@ -3994,18 +3977,7 @@ async function confirmBulkExclude() {
   if (confirmBtn) confirmBtn.disabled = true;
   if (cancelBtn)  cancelBtn.disabled  = true;
 
-  // 로컬 배열 즉시 업데이트 — Set으로 O(1) 조회 (orders가 대량이어도 UI 블록 없음)
   const numSet = new Set(numbers);
-  orders.forEach(o => {
-    if (numSet.has(o['주문번호'])) {
-      o.is_excluded    = isExcluded;
-      o.exclusion_type = bulkExcludeType;
-    }
-  });
-  // localStorage 쓰기: 주문 2000건 이하일 때만 (대량이면 직렬화 자체가 UI 블록)
-  if (orders.length <= 2000) {
-    try { localStorage.setItem('ordersData', JSON.stringify(orders)); } catch(e) {}
-  }
 
   let totalUpdated = 0;
   let failedChunks = 0;
@@ -4043,8 +4015,8 @@ async function confirmBulkExclude() {
       }
     }
   } else {
-    // 비로그인: 로컬 데이터 기준 카운트
-    totalUpdated = numbers.filter(num => numSet.has(num) && orders.some(x => x['주문번호'] === num)).length;
+    // 비로그인: 처리 불가
+    totalUpdated = 0;
   }
 
   // 진행 UI 복원
@@ -4073,30 +4045,24 @@ async function renderOrders() {
   const to     = document.getElementById('ordersDateTo')?.value   || '';
   const search = (document.getElementById('ordersSearchName')?.value || '').toLowerCase().trim();
 
-  // ── 요약 카드: 로컬 전체 데이터 기반 (날짜+검색 필터만) ──────────────────────
-  const dateFiltered = orders.filter(o => {
-    if (search && !o['등록상품명'].toLowerCase().includes(search)) return false;
-    const d = parseOrderDate(o['주문일']);
-    if (from && d && d < new Date(from)) return false;
-    if (to   && d && d > new Date(to + 'T23:59:59')) return false;
-    return true;
-  });
-  const excludedCount  = dateFiltered.filter(o => o.is_excluded).length;
-  const fakeOrderCount = dateFiltered.filter(o => o.exclusion_type === 'fake_order').length;
-  const returnCount    = dateFiltered.filter(o => o.exclusion_type === 'return').length;
-  const otherCount     = dateFiltered.filter(o => o.exclusion_type === 'other').length;
-  const totalAmt  = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['결제액']) || 0), 0);
-  const totalShip = dateFiltered.filter(o => !o.is_excluded).reduce((s, o) => s + (parseFloat(o['배송비']) || 0), 0);
+  // ── 요약 카드: /api/orders/stats API 기반 ──────────────────────────────────
   const summaryEl = document.getElementById('ordersSummary');
-  if (summaryEl) {
-    summaryEl.innerHTML = `
-      <div class="summary-card"><div class="summary-card-label">총 주문수(인식)</div><div class="summary-card-value">${(dateFiltered.length - excludedCount).toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">가구매</div><div class="summary-card-value" style="color:#f97316">${fakeOrderCount.toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">반품</div><div class="summary-card-value" style="color:#ef4444">${returnCount.toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">기타 미인식</div><div class="summary-card-value" style="color:#9ca3af">${otherCount.toLocaleString('ko-KR')}건</div></div>
-      <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${totalAmt.toLocaleString('ko-KR')}원</div></div>
-      <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${totalShip.toLocaleString('ko-KR')}원</div></div>
-    `;
+  if (summaryEl && currentUser) {
+    try {
+      const statsQs = new URLSearchParams();
+      if (from)   statsQs.set('start_date', from);
+      if (to)     statsQs.set('end_date', to);
+      if (search) statsQs.set('search', search);
+      const stats = await fetch(`/api/orders/stats?${statsQs.toString()}`).then(r => r.json());
+      summaryEl.innerHTML = `
+        <div class="summary-card"><div class="summary-card-label">총 주문수(인식)</div><div class="summary-card-value">${(stats.active_orders || 0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">가구매</div><div class="summary-card-value" style="color:#f97316">${(stats.fake_order_count || 0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">반품</div><div class="summary-card-value" style="color:#ef4444">${(stats.return_count || 0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">기타 미인식</div><div class="summary-card-value" style="color:#9ca3af">${(stats.other_count || 0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${(stats.total_payment || 0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${(stats.total_shipping || 0).toLocaleString('ko-KR')}원</div></div>
+      `;
+    } catch(e) { console.warn('[renderOrders] stats 조회 실패:', e.message); }
   }
 
   // ── 테이블: API에서 페이지 단위로 fetch ──────────────────────────────────────
@@ -4133,40 +4099,21 @@ async function renderOrders() {
       pageOrders   = data.orders || [];
       totalFiltered = data.total  || 0;
     } catch (e) {
-      console.error('[renderOrders] API fetch 실패, 로컬 폴백', e.message);
-      // 폴백: 로컬 orders 배열 직접 사용
-      let loc = dateFiltered;
-      if (ordersExcludeFilter === 'included')   loc = dateFiltered.filter(o => !o.is_excluded);
-      else if (ordersExcludeFilter === 'excluded')   loc = dateFiltered.filter(o => o.is_excluded);
-      else if (['fake_order','return','other'].includes(ordersExcludeFilter))
-        loc = dateFiltered.filter(o => o.exclusion_type === ordersExcludeFilter);
-      const sorted = [...loc].sort((a, b) => {
-        const cmp = (a[ordersSortCol]||'').localeCompare(b[ordersSortCol]||'', 'ko');
-        return ordersSortDir === 'asc' ? cmp : -cmp;
-      });
-      totalFiltered = sorted.length;
-      const ps = (ordersPage - 1) * ordersPageSize;
-      pageOrders = sorted.slice(ps, ps + ordersPageSize);
+      console.error('[renderOrders] API fetch 실패:', e.message);
+      pageOrders = [];
+      totalFiltered = 0;
     }
   } else {
-    // 비로그인: 로컬 배열 직접 사용
-    let loc = dateFiltered;
-    if (ordersExcludeFilter === 'included')   loc = dateFiltered.filter(o => !o.is_excluded);
-    else if (ordersExcludeFilter === 'excluded')   loc = dateFiltered.filter(o => o.is_excluded);
-    else if (['fake_order','return','other'].includes(ordersExcludeFilter))
-      loc = dateFiltered.filter(o => o.exclusion_type === ordersExcludeFilter);
-    const sorted = [...loc].sort((a, b) => {
-      const cmp = (a[ordersSortCol]||'').localeCompare(b[ordersSortCol]||'', 'ko');
-      return ordersSortDir === 'asc' ? cmp : -cmp;
-    });
-    totalFiltered = sorted.length;
-    const ps = (ordersPage - 1) * ordersPageSize;
-    pageOrders = sorted.slice(ps, ps + ordersPageSize);
+    // 비로그인: 데이터 없음
+    pageOrders = [];
+    totalFiltered = 0;
   }
 
   // 페이지 범위 보정
   const totalPages = Math.max(1, Math.ceil(totalFiltered / ordersPageSize));
   if (ordersPage > totalPages) ordersPage = totalPages;
+
+  _renderedPageOrders = pageOrders; // bulk 작업용 캐시
 
   // ── 헤더 렌더 ─────────────────────────────────────────────────────────────
   const allNums    = pageOrders.map(o => o['주문번호']);
@@ -4302,17 +4249,8 @@ async function downloadOrdersExcel() {
       }
     } catch(e) { alert('데이터 로드 실패: ' + e.message); return; }
   } else {
-    // 로컬 필터링
-    data = orders.filter(o => {
-      if (search && !o['등록상품명'].toLowerCase().includes(search)) return false;
-      const d = parseOrderDate(o['주문일']);
-      if (from && d && d < new Date(from)) return false;
-      if (to   && d && d > new Date(to + 'T23:59:59')) return false;
-      if (ordersExcludeFilter === 'included'  && o.is_excluded) return false;
-      if (ordersExcludeFilter === 'excluded'  && !o.is_excluded) return false;
-      if (['fake_order','return','other'].includes(ordersExcludeFilter) && o.exclusion_type !== ordersExcludeFilter) return false;
-      return true;
-    });
+    // 비로그인: 다운로드 불가
+    data = [];
   }
 
   if (!data.length) { alert('다운로드할 데이터가 없습니다.'); return; }
@@ -4408,10 +4346,6 @@ async function deleteOrder(dbId, orderNumber) {
   const label = orderNumber ? `주문번호: ${orderNumber}` : `DB ID: ${dbId}`;
   if (!confirm(`이 주문건을 삭제할까요?\n(${label})`)) return;
 
-  // 로컬에서 제거
-  orders = orders.filter(o => String(o['번호']) !== String(dbId) && o['주문번호'] !== orderNumber);
-  localStorage.setItem('ordersData', JSON.stringify(orders));
-
   // DB에서 삭제
   if (currentUser && dbId) {
     try {
@@ -4468,18 +4402,9 @@ async function bulkUpdateOrders(exclusionType) {
   const isExcluded = exclusionType !== 'normal';
   const nums = [...selectedOrderNums];
 
-  // 로컬 업데이트
-  orders.forEach(o => {
-    if (nums.includes(o['주문번호'])) {
-      o.is_excluded    = isExcluded;
-      o.exclusion_type = exclusionType;
-    }
-  });
-  localStorage.setItem('ordersData', JSON.stringify(orders));
-
-  // DB 업데이트 (ids 기반)
+  // DB 업데이트 (_renderedPageOrders에서 DB id 조회)
   if (currentUser) {
-    const ids = orders.filter(o => nums.includes(o['주문번호'])).map(o => o['번호']).filter(Boolean);
+    const ids = _renderedPageOrders.filter(o => nums.includes(o['주문번호'])).map(o => o['번호']).filter(Boolean);
     if (ids.length) {
       try {
         await fetch('/api/orders/bulk-update', {
@@ -4499,15 +4424,13 @@ async function bulkDeleteOrders() {
   if (!confirm(`선택한 ${selectedOrderNums.size}건을 삭제할까요?`)) return;
   const nums = [...selectedOrderNums];
   for (const num of nums) {
-    const o = orders.find(x => x['주문번호'] === num);
+    const o = _renderedPageOrders.find(x => x['주문번호'] === num);
     if (!o) continue;
     const dbId = o['번호'];
-    orders = orders.filter(x => x['주문번호'] !== num);
     if (currentUser && dbId) {
       try { await fetch(`/api/orders/${dbId}`, { method: 'DELETE' }); } catch(e) {}
     }
   }
-  localStorage.setItem('ordersData', JSON.stringify(orders));
   selectedOrderNums.clear();
   ordersPage = 1;
   renderOrders();
@@ -4558,12 +4481,13 @@ async function confirmPeriodDelete() {
   if (from > to)        { alert('시작일이 종료일보다 늦을 수 없습니다'); return; }
 
   if (_periodDeleteTarget === 'orders') {
-    const count = orders.filter(o => {
-      const d = parseOrderDate(o['주문일']);
-      if (!d) return false;
-      const ds = d.toISOString().slice(0, 10);
-      return ds >= from && ds <= to;
-    }).length;
+    // 건수는 stats API로 조회
+    let count = 0;
+    try {
+      const sq = new URLSearchParams({ start_date: from, end_date: to });
+      const st = await fetch(`/api/orders/stats?${sq.toString()}`).then(r => r.json());
+      count = st.total_orders || 0;
+    } catch(e) {}
     const ok = await showConfirmModal({
       icon: '🗑️',
       title: '주문 기간 삭제',
@@ -4573,13 +4497,6 @@ async function confirmPeriodDelete() {
     });
     if (!ok) return;
     closePeriodDeleteModal();
-    orders = orders.filter(o => {
-      const d = parseOrderDate(o['주문일']);
-      if (!d) return true;
-      const ds = d.toISOString().slice(0, 10);
-      return ds < from || ds > to;
-    });
-    localStorage.setItem('ordersData', JSON.stringify(orders));
     if (currentUser) {
       try {
         await fetch('/api/orders/by-period', {
@@ -4627,8 +4544,6 @@ async function confirmPeriodDelete() {
 
 async function deleteAllOrders() {
   if (!confirm('주문서 데이터를 전체 삭제할까요?')) return;
-  orders = [];
-  localStorage.setItem('ordersData', JSON.stringify(orders));
   if (currentUser) {
     try { await fetch('/api/orders', { method: 'DELETE' }); } catch(e) {}
   }
@@ -5306,10 +5221,10 @@ function renderAdMappingList() {
   // 광고보고서에서 유니크 광고집행 옵션ID 목록
   const adOptionIds = [...new Set(adReports.map(r => r[AD_OPTION_COL] || r['광고집행옵션ID'] || '').filter(Boolean))].sort();
 
-  // 주문서에서 유니크 노출상품ID 목록 (드롭다운용)
+  // 주문서에서 유니크 노출상품ID 목록 (현재 페이지 기준)
   const productOptions = [...new Map(
-    orders.map(o => o['노출상품ID']).filter(Boolean).map(pid => {
-      const o = orders.find(x => x['노출상품ID'] === pid);
+    _renderedPageOrders.map(o => o['노출상품ID']).filter(Boolean).map(pid => {
+      const o = _renderedPageOrders.find(x => x['노출상품ID'] === pid);
       const name = o?.['노출상품명(옵션명)']?.split(',')[0]?.trim() || o?.['등록상품명'] || pid;
       return [pid, name];
     })
@@ -5364,8 +5279,8 @@ async function saveAdOptionMapping(adOptionId) {
   const productId = sel?.value || '';
   if (!productId) { alert('노출상품ID를 선택하세요'); return; }
 
-  // 상품명 조회
-  const order = orders.find(o => o['노출상품ID'] === productId);
+  // 상품명 조회 (현재 렌더된 페이지 기준)
+  const order = _renderedPageOrders.find(o => o['노출상품ID'] === productId);
   const productName = order?.['노출상품명(옵션명)']?.split(',')[0]?.trim() || order?.['등록상품명'] || '';
 
   adOptionMappings[adOptionId] = { productId, productName };
@@ -6057,7 +5972,7 @@ function getCouponAppliedOrders(coupon) {
   const startAt = coupon.start_at ? new Date(coupon.start_at) : null;
   const endAt   = coupon.end_at   ? new Date(coupon.end_at)   : null;
   const optIds  = Array.isArray(coupon.option_ids) ? coupon.option_ids : [];
-  return orders.filter(o => {
+  return _renderedPageOrders.filter(o => {
     const d = parseOrderDate(o['주문일']);
     if (!d) return false;
     if (startAt && d < startAt) return false;
@@ -6784,9 +6699,9 @@ async function renderProfit() {
           <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(tax).toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">ROAS</div><div class="summary-card-value ${roasGood ? 'green' : 'red'}">${roas}</div></div>
           ${(() => {
-            const fake   = orders.filter(o => o.exclusion_type === 'fake_order').length;
-            const ret    = orders.filter(o => o.exclusion_type === 'return').length;
-            const other  = orders.filter(o => o.exclusion_type === 'other').length;
+            const fake   = s.fake_order_count || 0;
+            const ret    = s.return_count || 0;
+            const other  = s.other_count || 0;
             const parts  = [];
             if (fake)  parts.push(`<div class="summary-card"><div class="summary-card-label">가구매 제외</div><div class="summary-card-value" style="color:#f97316">${fake.toLocaleString('ko-KR')}건</div></div>`);
             if (ret)   parts.push(`<div class="summary-card"><div class="summary-card-label">반품 제외</div><div class="summary-card-value" style="color:#ef4444">${ret.toLocaleString('ko-KR')}건</div></div>`);
@@ -6973,7 +6888,7 @@ async function saveOptionMatching(optionId, productName, optionName) {
   if (!raw) { alert('B2B 상품을 선택하세요'); return; }
 
   if (!productName) {
-    const order = orders.find(o => o['옵션ID'] === optionId);
+    const order = _renderedPageOrders.find(o => o['옵션ID'] === optionId);
     productName = order ? order['등록상품명'] : '';
     optionName  = order ? (order['등록옵션명'] || '') : '';
   }
@@ -7101,7 +7016,7 @@ async function saveMatchReview(oid) {
   optionMatchings[oid] = { supplierName, cost, taxType };
   localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
   if (currentUser) {
-    const order = orders.find(o => o['옵션ID'] === oid);
+    const order = _renderedPageOrders.find(o => o['옵션ID'] === oid);
     const productName = order ? order['등록상품명'] : '';
     try { await fetch('/api/cost-mappings/' + encodeURIComponent(oid), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ supplierName, cost, taxType, productName }) }); } catch(e) {}
   }
@@ -8262,19 +8177,7 @@ async function toggleFakeRecordDetail(recordId) {
     };
     const taxType = rec.tax_type || '면세';
 
-    const orderRows = orders.length
-      ? orders.map(o => {
-          const detail = calcFakeOrderCostDetail(o, vendor, taxType);
-          const netSale = (parseFloat(o.net_sale_after_coupon) || 0).toLocaleString('ko-KR');
-          const cost    = detail.total.toLocaleString('ko-KR');
-          return `<tr style="background:var(--surface2)">
-            <td style="font-family:var(--mono);font-size:11px;padding:6px 10px">${o.order_number}</td>
-            <td style="font-size:11px;padding:6px 10px">${o.product_name || ''}${o.option_name ? ' / ' + o.option_name : ''}</td>
-            <td style="font-family:var(--mono);font-size:11px;padding:6px 10px;text-align:right">${netSale}원</td>
-            <td style="font-family:var(--mono);font-size:11px;padding:6px 10px;text-align:right;color:#f97316">${cost}원</td>
-          </tr>`;
-        }).join('')
-      : `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:10px;font-size:12px">주문 정보 없음</td></tr>`;
+    const orderRows = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:10px;font-size:12px">주문 정보 없음</td></tr>`;
 
     const detailHtml = `
       <tr id="fakeRecordDetail-${recordId}">
@@ -8519,11 +8422,7 @@ async function runCoupangSync() {
       resultEl.innerHTML = html;
       // 마지막 동기화 시간 즉시 업데이트
       updateLastSyncLabel(data.last_sync_at);
-      // 주문 목록 갱신
-      try {
-        const r = await fetch('/api/orders');
-        if (r.ok) { orders = await r.json(); localStorage.setItem('ordersData', JSON.stringify(orders)); }
-      } catch(e) {}
+      // 주문 목록 갱신 (페이지네이션 API로 자동 반영)
       await renderOrders();
     } else {
       resultEl.innerHTML = `<span style="color:#ef4444">❌ ${escHtml(data.error || '동기화 실패')}</span>`;
