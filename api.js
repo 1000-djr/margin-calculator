@@ -511,30 +511,72 @@ router.get('/orders/summary', requireAuth, async (req, res) => {
 router.get('/orders/stats', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date, search } = req.query;
+
+    // 사용자 할인 모드 조회
+    const { rows: modeRows } = await pool.query('SELECT discount_mode FROM users WHERE id=$1', [req.user.id]);
+    const discountMode = modeRows[0]?.discount_mode || 'coupon';
+
+    const discountSubquery = discountMode === 'fixed'
+      ? `SELECT fd.discount_amount
+         FROM fixed_discounts fd
+         WHERE fd.user_id = o.user_id
+           AND fd.option_id = o.option_id
+           AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+           AND fd.start_date <= (
+             CASE WHEN o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
+                  THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+                  ELSE (TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')::TIMESTAMP + INTERVAL '23 hours 59 minutes 59 seconds') AT TIME ZONE 'Asia/Seoul'
+             END
+           )
+           AND (fd.end_date IS NULL
+             OR fd.end_date >= (
+               CASE WHEN o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
+                    THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+                    ELSE TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')::TIMESTAMP AT TIME ZONE 'Asia/Seoul'
+               END
+             )
+           )
+         ORDER BY fd.start_date DESC LIMIT 1`
+      : `SELECT c.discount_amount
+         FROM coupons c
+         WHERE c.user_id = o.user_id
+           AND c.option_ids @> jsonb_build_array(o.option_id)
+           AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+           AND (c.start_at IS NULL
+             OR SUBSTRING(o.order_date,1,10) >= TO_CHAR(c.start_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+           AND (c.end_at IS NULL
+             OR SUBSTRING(o.order_date,1,10) <= TO_CHAR(c.end_at AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD'))
+         ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST LIMIT 1`;
+
     const params = [req.user.id];
-    let where = 'user_id=$1';
+    let where = 'o.user_id=$1';
     let p = 2;
-    if (start_date) { where += ` AND SUBSTRING(order_date,1,10) >= $${p++}`; params.push(start_date); }
-    if (end_date)   { where += ` AND SUBSTRING(order_date,1,10) <= $${p++}`; params.push(end_date); }
+    if (start_date) { where += ` AND SUBSTRING(o.order_date,1,10) >= $${p++}`; params.push(start_date); }
+    if (end_date)   { where += ` AND SUBSTRING(o.order_date,1,10) <= $${p++}`; params.push(end_date); }
     if (search) {
-      where += ` AND (product_name ILIKE $${p} OR display_name ILIKE $${p} OR option_name ILIKE $${p})`;
+      where += ` AND (o.product_name ILIKE $${p} OR o.display_name ILIKE $${p} OR o.option_name ILIKE $${p})`;
       params.push('%' + search + '%'); p++;
     }
     const { rows } = await pool.query(`
       SELECT
-        COUNT(*)::INTEGER                                                                    AS total_orders,
-        COUNT(*) FILTER (WHERE is_excluded = false OR is_excluded IS NULL)::INTEGER         AS active_orders,
-        COUNT(*) FILTER (WHERE is_excluded = true)::INTEGER                                 AS excluded_orders,
-        COUNT(*) FILTER (WHERE exclusion_type = 'fake_order')::INTEGER                      AS fake_order_count,
-        COUNT(*) FILTER (WHERE exclusion_type = 'return')::INTEGER                          AS return_count,
-        COUNT(*) FILTER (WHERE exclusion_type = 'other')::INTEGER                           AS other_count,
-        COUNT(*) FILTER (WHERE exclusion_type = 'cancel')::INTEGER                         AS cancel_count,
-        COALESCE(SUM(payment_amount) FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::NUMERIC AS total_payment,
-        COALESCE(SUM(shipping_fee)   FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::NUMERIC AS total_shipping,
-        MIN(order_date)                                                                      AS oldest_order,
-        MAX(order_date)                                                                      AS newest_order,
-        MAX(created_at) AT TIME ZONE 'Asia/Seoul'                                           AS last_uploaded_at
-      FROM orders WHERE ${where}
+        COUNT(*)::INTEGER                                                                         AS total_orders,
+        COUNT(*) FILTER (WHERE o.is_excluded = false OR o.is_excluded IS NULL)::INTEGER          AS active_orders,
+        COUNT(*) FILTER (WHERE o.is_excluded = true)::INTEGER                                    AS excluded_orders,
+        COUNT(*) FILTER (WHERE o.exclusion_type = 'fake_order')::INTEGER                         AS fake_order_count,
+        COUNT(*) FILTER (WHERE o.exclusion_type = 'return')::INTEGER                             AS return_count,
+        COUNT(*) FILTER (WHERE o.exclusion_type = 'other')::INTEGER                              AS other_count,
+        COUNT(*) FILTER (WHERE o.exclusion_type = 'cancel')::INTEGER                             AS cancel_count,
+        COALESCE(SUM(o.payment_amount) FILTER (WHERE o.is_excluded = false OR o.is_excluded IS NULL), 0)::NUMERIC AS total_payment,
+        COALESCE(SUM(o.shipping_fee)   FILTER (WHERE o.is_excluded = false OR o.is_excluded IS NULL), 0)::NUMERIC AS total_shipping,
+        COALESCE(SUM(
+          CASE WHEN (o.is_excluded = false OR o.is_excluded IS NULL)
+          THEN GREATEST(o.payment_amount + COALESCE(o.shipping_fee,0) - COALESCE((${discountSubquery}), 0), 0)
+          ELSE 0 END
+        ), 0)::NUMERIC                                                                            AS coupon_applied_revenue,
+        MIN(o.order_date)                                                                         AS oldest_order,
+        MAX(o.order_date)                                                                         AS newest_order,
+        MAX(o.created_at) AT TIME ZONE 'Asia/Seoul'                                              AS last_uploaded_at
+      FROM orders o WHERE ${where}
     `, params);
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }

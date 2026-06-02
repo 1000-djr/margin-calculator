@@ -4078,6 +4078,7 @@ async function renderOrders() {
         <div class="summary-card"><div class="summary-card-label">출고중지</div><div class="summary-card-value" style="color:#0071E3">${Number(stats.cancel_count || 0).toLocaleString('ko-KR')}건</div></div>
         <div class="summary-card"><div class="summary-card-label">기타 미인식</div><div class="summary-card-value" style="color:#9ca3af">${Number(stats.other_count || 0).toLocaleString('ko-KR')}건</div></div>
         <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${Number(stats.total_payment || 0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">쿠폰적용매출(인식)</div><div class="summary-card-value green">${Number(stats.coupon_applied_revenue || 0).toLocaleString('ko-KR')}원</div></div>
         <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${Number(stats.total_shipping || 0).toLocaleString('ko-KR')}원</div></div>
       `;
     } catch(e) { console.warn('[renderOrders] stats 조회 실패:', e.message); }
