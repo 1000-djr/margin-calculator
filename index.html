@@ -5094,8 +5094,10 @@ function renderAds() {
       <td style="color:var(--red)">${Math.round(d.adCost * 1.1).toLocaleString('ko-KR')}원</td>
       <td>${Math.round(d.impr).toLocaleString('ko-KR')}</td>
       <td>${Math.round(d.clk).toLocaleString('ko-KR')}</td>
+      <td>${Math.round(d.clk > 0 ? d.adCost / d.clk : 0).toLocaleString('ko-KR')}원</td>
       <td>${Math.round(d.ord).toLocaleString('ko-KR')}</td>
       <td>${Math.round(d.rev).toLocaleString('ko-KR')}원</td>
+      <td style="font-weight:600;color:${d.adCost > 0 && (d.rev / d.adCost) >= 1 ? 'var(--green)' : 'var(--red)'}">${(d.adCost > 0 ? (d.rev / d.adCost * 100) : 0).toFixed(0)}%</td>
     </tr>`;
   }).join('');
 
@@ -5108,7 +5110,7 @@ function renderAds() {
       <table class="data-table">
         <thead>
           <tr style="background:var(--surface2)">
-            <th>날짜</th><th>총 광고비</th><th>실광고비(×1.1)</th><th>노출수</th><th>클릭수</th><th>총주문수(1일)</th><th>총전환매출(1일)</th>
+            <th>날짜</th><th>총 광고비</th><th>실광고비(×1.1)</th><th>노출수</th><th>클릭수</th><th>평균CPC</th><th>총주문수(1일)</th><th>총전환매출(1일)</th><th>ROAS(1일)</th>
           </tr>
         </thead>
         <tbody>${dateTableRows}</tbody>
