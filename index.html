@@ -1099,6 +1099,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn btn-sm"        id="ordersFilterFakeOrder" onclick="setOrdersFilter('fake_order')" style="color:#f97316">가구매</button>
         <button class="btn btn-sm"        id="ordersFilterReturn"    onclick="setOrdersFilter('return')"     style="color:#ef4444">반품</button>
         <button class="btn btn-sm"        id="ordersFilterOther"     onclick="setOrdersFilter('other')"      style="color:#6b7280">기타</button>
+        <button class="btn btn-sm"        id="ordersFilterCancel"    onclick="setOrdersFilter('cancel')"     style="color:#0071E3">출고중지</button>
       </div>
       <div class="filter-row">
         <div class="field"><label>주문일 시작</label><input type="date" id="ordersDateFrom"></div>
@@ -1130,6 +1131,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <button onclick="bulkUpdateOrders('fake_order')" class="btn btn-sm" style="background:#f97316;color:#fff;border:none">가구매</button>
       <button onclick="bulkUpdateOrders('return')"     class="btn btn-sm" style="background:#ef4444;color:#fff;border:none">반품</button>
       <button onclick="bulkUpdateOrders('other')"      class="btn btn-sm" style="background:#9ca3af;color:#fff;border:none">기타</button>
+      <button onclick="bulkUpdateOrders('cancel')"     class="btn btn-sm" style="background:#0071E3;color:#fff;border:none">출고중지</button>
       <button onclick="bulkDeleteOrders()"             class="btn btn-sm" style="background:#7f1d1d;color:#fff;border:none">🗑 삭제</button>
       <button onclick="clearOrderSelection()"          class="btn btn-sm" style="background:transparent;color:#94a3b8;border:1px solid #475569">취소</button>
     </div>
@@ -3900,7 +3902,7 @@ function setOrdersFilter(mode) {
   ordersPage = 1;
   const btnMap = {
     all: 'All', included: 'Included', excluded: 'Excluded',
-    fake_order: 'FakeOrder', return: 'Return', other: 'Other',
+    fake_order: 'FakeOrder', return: 'Return', other: 'Other', cancel: 'Cancel',
   };
   Object.keys(btnMap).forEach(m => {
     const btn = document.getElementById('ordersFilter' + btnMap[m]);
