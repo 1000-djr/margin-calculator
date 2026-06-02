@@ -528,8 +528,9 @@ router.get('/orders/stats', requireAuth, async (req, res) => {
         COUNT(*) FILTER (WHERE exclusion_type = 'fake_order')::INTEGER                      AS fake_order_count,
         COUNT(*) FILTER (WHERE exclusion_type = 'return')::INTEGER                          AS return_count,
         COUNT(*) FILTER (WHERE exclusion_type = 'other')::INTEGER                           AS other_count,
-        COALESCE(SUM(payment_amount) FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::BIGINT AS total_payment,
-        COALESCE(SUM(shipping_fee)   FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::BIGINT AS total_shipping,
+        COUNT(*) FILTER (WHERE exclusion_type = 'cancel')::INTEGER                         AS cancel_count,
+        COALESCE(SUM(payment_amount) FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::NUMERIC AS total_payment,
+        COALESCE(SUM(shipping_fee)   FILTER (WHERE is_excluded = false OR is_excluded IS NULL), 0)::NUMERIC AS total_shipping,
         MIN(order_date)                                                                      AS oldest_order,
         MAX(order_date)                                                                      AS newest_order,
         MAX(created_at) AT TIME ZONE 'Asia/Seoul'                                           AS last_uploaded_at
