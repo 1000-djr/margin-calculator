@@ -465,15 +465,15 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
              COALESCE(po.option_name, '')
   `, params);
 
-  function cleanAdProductName(raw) {
-    if (!raw || !raw.includes(',')) return raw;
+  function splitAdProductName(raw) {
+    if (!raw || !raw.includes(',')) return { name: raw || '', option: '' };
+    if (raw.startsWith('광고비만 발생')) return { name: raw, option: '' };
     const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
-    const baseName = parts[0];
-    const rest = [...new Set(parts.slice(1))]; // 중복 제거 (1개,1개 → 1개 / 5kg,5kg → 5kg)
+    const rest  = [...new Set(parts.slice(1))]; // 중복 제거
     const count = rest.find(t => /^\d+\s*개$/.test(t)) || '';
-    const unit  = rest.find(t => t !== count) || '';
-    const tail  = [unit, count].filter(Boolean).join(' ');
-    return tail ? `${baseName} (${tail})` : baseName;
+    const unit  = rest.find(t => t !== count && /kg|g$|box|ml|l$|중품|특품|상품|대$|중$|소$/i.test(t)) || rest.find(t => t !== count) || '';
+    const option = [unit, count].filter(Boolean).join(' ');
+    return { name: parts[0], option };
   }
 
   const by_product = prodRows.map(r => {
@@ -485,10 +485,12 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     const qty    = parseInt(r.qty)              || 0;
     const tax    = -(comm / 11) - (adRaw / 11);
     const net    = Math.round(rev - comm - cost - actAd - tax);
+    const adOnly = r.ad_only === true || r.ad_only === 't';
+    const ad     = adOnly ? splitAdProductName(r.product_name) : null;
     return {
       option_id:      r.option_id,
-      product_name:   (r.ad_only === true || r.ad_only === 't') ? cleanAdProductName(r.product_name) : r.product_name,
-      option_name:    r.option_name,
+      product_name:   ad ? ad.name : r.product_name,
+      option_name:    ad ? ad.option : r.option_name,
       qty,
       revenue_before: parseInt(r.revenue_before) || 0,
       revenue_after:  rev,
@@ -498,7 +500,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       ad_cost_raw:    Math.round(adRaw),
       net_profit:     net,
       margin_rate:    rev > 0 ? parseFloat((net / rev * 100).toFixed(2)) : 0,
-      ad_only:        r.ad_only === true || r.ad_only === 't', // 광고비만 발생 (주문 없음)
+      ad_only:        adOnly, // 광고비만 발생 (주문 없음)
     };
   });
 
