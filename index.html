@@ -1928,6 +1928,10 @@ async function exitImpersonate() {
 
 async function loadUserData() {
   try {
+    // 신버전 b2b 매입가 이력을 최우선 로드 (구버전 처리 실패와 무관하게 보장)
+    const phData = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => []);
+    if (Array.isArray(phData)) { b2bPriceHistory = phData; localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory)); }
+
     // JSONB 블롭 (platforms, suppliers, b2bProducts, history)
     const legacyKeys = ['platforms', 'suppliers', 'b2bProducts', 'history'];
     const [pData, sData, b2bData, hData] = await Promise.all(
@@ -1941,6 +1945,7 @@ async function loadUserData() {
     if (b2bData && Array.isArray(b2bData)) {
       b2bProducts = b2bData;
       b2bProducts.forEach(p => {
+        if (!Array.isArray(p.prices)) p.prices = [];
         while (p.prices.length < suppliers.length) p.prices.push(0);
         while (p.prices.length > suppliers.length) p.prices.pop();
       });
@@ -1980,8 +1985,6 @@ async function loadUserData() {
       cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt', productName: m.product_name || '' }; });
       localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
     }
-    const phData = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => []);
-    if (Array.isArray(phData)) { b2bPriceHistory = phData; localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory)); }
     const aomData = await fetch('/api/ad-option-mappings').then(r => r.json()).catch(() => []);
     if (Array.isArray(aomData) && aomData.length) {
       adOptionMappings = {};
