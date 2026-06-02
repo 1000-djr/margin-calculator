@@ -251,6 +251,21 @@ tbody td{padding:13px 16px;vertical-align:middle}
 
 <div id="toast"></div>
 
+<!-- ── 데이터 오염 진단 ───────────────────────────────────────────────────── -->
+<div style="max-width:900px;margin:32px auto 0;padding:0 16px">
+  <h2 style="color:#ff9f0a;margin-bottom:12px">🔍 계정 간 데이터 오염 진단</h2>
+  <p style="color:#888;margin-bottom:12px;font-size:13px">특정 상품명 또는 옵션ID가 어느 계정의 DB에 저장돼 있는지 확인합니다.</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <input id="crossProductName" type="text" placeholder="상품명 검색 (부분일치)"
+      style="flex:1;min-width:200px;background:#1a1a1a;color:#fff;border:1px solid #333;border-radius:6px;padding:8px 12px;font-size:14px">
+    <input id="crossOptionId" type="text" placeholder="옵션ID (정확히)"
+      style="flex:1;min-width:160px;background:#1a1a1a;color:#fff;border:1px solid #333;border-radius:6px;padding:8px 12px;font-size:14px">
+    <button onclick="runCrossCheck()"
+      style="background:#ff9f0a;color:#000;border:none;border-radius:6px;padding:8px 20px;font-weight:700;cursor:pointer">조회</button>
+  </div>
+  <div id="crossCheckResult" style="background:#111;border:1px solid #333;border-radius:8px;padding:16px;min-height:60px;font-size:13px"></div>
+</div>
+
 <script>
 let allUsers = [];
 
@@ -610,6 +625,39 @@ async function impersonate(userId) {
     if (!res.ok) { alert(data.error || '대리접속 실패'); return; }
     window.location.href = '/';
   } catch(e) { alert(e.message); }
+}
+
+// ── 데이터 오염 진단
+async function runCrossCheck() {
+  const productName = document.getElementById('crossProductName').value.trim();
+  const optionId    = document.getElementById('crossOptionId').value.trim();
+  if (!productName && !optionId) { alert('상품명 또는 옵션ID를 입력하세요.'); return; }
+  const resultEl = document.getElementById('crossCheckResult');
+  resultEl.innerHTML = '<p style="color:#888">조회 중...</p>';
+  const params = new URLSearchParams();
+  if (productName) params.set('product_name', productName);
+  if (optionId)    params.set('option_id', optionId);
+  try {
+    const res  = await fetch(`/api/admin/cross-user-check?${params}`);
+    const data = await res.json();
+    if (!res.ok) { resultEl.innerHTML = `<p style="color:red">${data.error}</p>`; return; }
+    const r = data.results;
+    let html = '';
+    const makeTable = (title, rows, cols, keys) => {
+      if (!rows || !rows.length) return `<p style="margin:4px 0;color:#888">${title}: 없음</p>`;
+      return `<p style="margin:8px 0 4px;font-weight:600">${title} (${rows.length}개 계정)</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr>${cols.map(c=>`<th style="text-align:left;border-bottom:1px solid #333;padding:4px 8px">${c}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(row=>`<tr>${keys.map(k=>`<td style="padding:4px 8px">${row[k]??'-'}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>`;
+    };
+    if (r.orders_by_user)               html += makeTable('📦 주문 테이블', r.orders_by_user, ['user_id','이메일','이름','건수','첫주문','마지막주문'], ['user_id','email','name','cnt','first_order','last_order']);
+    if (r.ad_reports_by_user)           html += makeTable('📢 광고보고서 테이블', r.ad_reports_by_user, ['user_id','이메일','이름','건수','첫날짜','마지막날짜'], ['user_id','email','name','cnt','first_date','last_date']);
+    if (r.product_name_mapping_by_user) html += makeTable('🔗 상품명 매핑', r.product_name_mapping_by_user, ['user_id','이메일','이름','등록상품명','옵션ID','B2B명'], ['user_id','email','name','registered_name','option_id','b2b_name']);
+    if (r.orders_option_by_user)        html += makeTable('📦 주문(옵션ID)', r.orders_option_by_user, ['user_id','이메일','이름','건수','상품명','옵션명'], ['user_id','email','name','cnt','product_name','option_name']);
+    if (r.ad_reports_option_by_user)    html += makeTable('📢 광고보고서(옵션ID)', r.ad_reports_option_by_user, ['user_id','이메일','이름','건수','상품명'], ['user_id','email','name','cnt','product_name']);
+    resultEl.innerHTML = html || '<p style="color:#888">결과 없음</p>';
+  } catch(e) { resultEl.innerHTML = `<p style="color:red">${e.message}</p>`; }
 }
 
 // ── 초기화 ────────────────────────────────────────────────────────────────────

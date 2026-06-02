@@ -239,6 +239,70 @@ router.get('/admin/user-debug', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/admin/cross-user-check?product_name=경북 부사 꿀사과
+// 특정 상품명이 어느 계정에 있는지, 데이터가 섞였는지 진단
+router.get('/admin/cross-user-check', requireRealAdmin, async (req, res) => {
+  try {
+    const { product_name, option_id } = req.query;
+    if (!product_name && !option_id) return res.status(400).json({ error: 'product_name 또는 option_id 파라미터 필요' });
+
+    const results = {};
+
+    if (product_name) {
+      const like = `%${product_name}%`;
+
+      const { rows: orderRows } = await pool.query(`
+        SELECT u.id AS user_id, u.email, u.name, COUNT(*) AS cnt,
+               MIN(o.order_date) AS first_order, MAX(o.order_date) AS last_order
+        FROM orders o JOIN users u ON u.id = o.user_id
+        WHERE o.product_name ILIKE $1
+        GROUP BY u.id, u.email, u.name
+        ORDER BY cnt DESC
+      `, [like]);
+      results.orders_by_user = orderRows;
+
+      const { rows: adRows } = await pool.query(`
+        SELECT u.id AS user_id, u.email, u.name, COUNT(*) AS cnt,
+               MIN(a.report_date) AS first_date, MAX(a.report_date) AS last_date
+        FROM ad_reports a JOIN users u ON u.id = a.user_id
+        WHERE a.product_name ILIKE $1
+        GROUP BY u.id, u.email, u.name
+        ORDER BY cnt DESC
+      `, [like]);
+      results.ad_reports_by_user = adRows;
+
+      const { rows: pnmRows } = await pool.query(`
+        SELECT u.id AS user_id, u.email, u.name, pnm.registered_name, pnm.option_id, pnm.b2b_name
+        FROM product_name_mapping pnm JOIN users u ON u.id = pnm.user_id
+        WHERE pnm.registered_name ILIKE $1 OR pnm.b2b_name ILIKE $1
+      `, [like]);
+      results.product_name_mapping_by_user = pnmRows;
+    }
+
+    if (option_id) {
+      const { rows: ordOptRows } = await pool.query(`
+        SELECT u.id AS user_id, u.email, u.name, COUNT(*) AS cnt,
+               MAX(o.product_name) AS product_name, MAX(o.option_name) AS option_name
+        FROM orders o JOIN users u ON u.id = o.user_id
+        WHERE o.option_id = $1
+        GROUP BY u.id, u.email, u.name
+      `, [String(option_id)]);
+      results.orders_option_by_user = ordOptRows;
+
+      const { rows: adOptRows } = await pool.query(`
+        SELECT u.id AS user_id, u.email, u.name, COUNT(*) AS cnt,
+               MAX(a.product_name) AS product_name
+        FROM ad_reports a JOIN users u ON u.id = a.user_id
+        WHERE a.option_id = $1
+        GROUP BY u.id, u.email, u.name
+      `, [String(option_id)]);
+      results.ad_reports_option_by_user = adOptRows;
+    }
+
+    res.json({ results });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 유저 설정 ────────────────────────────────────────────────────────────────
 router.get('/user-settings', requireAuth, async (req, res) => {
   try {
