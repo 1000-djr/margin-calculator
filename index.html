@@ -547,10 +547,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div style="margin-bottom:12px">
       <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">미인식 사유</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="bulkTypeNormal"    onclick="setBulkExcludeType('normal')"     class="btn btn-sm"        style="border:2px solid #6b7280;color:#6b7280">인식취소</button>
-        <button id="bulkTypeFakeOrder" onclick="setBulkExcludeType('fake_order')" class="btn btn-sm active" style="border:2px solid #f97316;color:#f97316">가구매</button>
-        <button id="bulkTypeReturn"    onclick="setBulkExcludeType('return')"     class="btn btn-sm"        style="border:2px solid #ef4444;color:#ef4444">반품</button>
-        <button id="bulkTypeOther"     onclick="setBulkExcludeType('other')"      class="btn btn-sm"        style="border:2px solid #9ca3af;color:#9ca3af">기타</button>
+        <button id="bulkTypeNormal"    onclick="setBulkExcludeType('normal')"     class="btn btn-sm" style="border:1.5px solid #6B7280;color:#6B7280;background:transparent">인식취소</button>
+        <button id="bulkTypeFakeOrder" onclick="setBulkExcludeType('fake_order')" class="btn btn-sm" style="border:1.5px solid #FF9500;color:#FF9500;background:transparent">가구매</button>
+        <button id="bulkTypeReturn"    onclick="setBulkExcludeType('return')"     class="btn btn-sm" style="border:1.5px solid #FF3B30;color:#FF3B30;background:transparent">반품</button>
+        <button id="bulkTypeOther"     onclick="setBulkExcludeType('other')"      class="btn btn-sm" style="border:1.5px solid #8E8E93;color:#8E8E93;background:transparent">기타</button>
+        <button id="bulkTypeCancel"    onclick="setBulkExcludeType('cancel')"     class="btn btn-sm" style="border:1.5px solid #0071E3;color:#0071E3;background:transparent">출고중지</button>
       </div>
     </div>
     <textarea id="bulkExcludeTextarea" rows="6"
@@ -3888,6 +3889,7 @@ const EXCLUSION_TYPES = {
   fake_order: { label: '가구매', color: '#f97316',      bg: '#f97316' },
   return:     { label: '반품',   color: '#ef4444',      bg: '#ef4444' },
   other:      { label: '기타',   color: '#9ca3af',      bg: '#9ca3af' },
+  cancel:     { label: '출고중지', color: '#0071E3',    bg: '#0071E3' },
 };
 
 function setOrdersFilter(mode) {
@@ -3930,16 +3932,26 @@ let bulkExcludeType = 'fake_order';
 
 function setBulkExcludeType(type) {
   bulkExcludeType = type;
-  ['Normal','FakeOrder','Return','Other'].forEach(t => {
-    const id = 'bulkType' + t;
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('active', id === 'bulkType' + type.split('_').map((w,i) => i===0 ? w[0].toUpperCase()+w.slice(1) : w[0].toUpperCase()+w.slice(1)).join(''));
-  });
-  // simpler: just match by type value stored in onclick
-  ['normal','fake_order','return','other'].forEach(t => {
-    const map = { normal:'Normal', fake_order:'FakeOrder', return:'Return', other:'Other' };
+  const BULK_COLORS = {
+    normal:     '#6B7280',
+    fake_order: '#FF9500',
+    return:     '#FF3B30',
+    other:      '#8E8E93',
+    cancel:     '#0071E3',
+  };
+  Object.entries(BULK_COLORS).forEach(([t, color]) => {
+    const map = { normal:'Normal', fake_order:'FakeOrder', return:'Return', other:'Other', cancel:'Cancel' };
     const el = document.getElementById('bulkType' + map[t]);
-    if (el) el.classList.toggle('active', t === type);
+    if (!el) return;
+    if (t === type) {
+      el.style.background   = color;
+      el.style.color        = '#fff';
+      el.style.borderColor  = color;
+    } else {
+      el.style.background   = 'transparent';
+      el.style.color        = color;
+      el.style.borderColor  = color;
+    }
   });
 }
 
@@ -4147,6 +4159,7 @@ async function renderOrders() {
         <option value="fake_order" ${exType==='fake_order' ?'selected':''}>가구매</option>
         <option value="return"     ${exType==='return'     ?'selected':''}>반품</option>
         <option value="other"      ${exType==='other'      ?'selected':''}>기타</option>
+        <option value="cancel"     ${exType==='cancel'     ?'selected':''}>출고중지</option>
       </select>
     </td>`;
     const dbId = o['번호'] || '';
