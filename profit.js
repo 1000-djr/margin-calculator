@@ -465,6 +465,17 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
              COALESCE(po.option_name, '')
   `, params);
 
+  function cleanAdProductName(raw) {
+    if (!raw || !raw.includes(',')) return raw;
+    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    const baseName = parts[0];
+    const rest = [...new Set(parts.slice(1))]; // 중복 제거 (1개,1개 → 1개 / 5kg,5kg → 5kg)
+    const count = rest.find(t => /^\d+\s*개$/.test(t)) || '';
+    const unit  = rest.find(t => t !== count) || '';
+    const tail  = [unit, count].filter(Boolean).join(' ');
+    return tail ? `${baseName} (${tail})` : baseName;
+  }
+
   const by_product = prodRows.map(r => {
     const comm   = parseFloat(r.commission)     || 0;
     const adRaw  = parseFloat(r.ad_cost_raw)    || 0;
@@ -476,7 +487,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     const net    = Math.round(rev - comm - cost - actAd - tax);
     return {
       option_id:      r.option_id,
-      product_name:   r.product_name,
+      product_name:   (r.ad_only === true || r.ad_only === 't') ? cleanAdProductName(r.product_name) : r.product_name,
       option_name:    r.option_name,
       qty,
       revenue_before: parseInt(r.revenue_before) || 0,
