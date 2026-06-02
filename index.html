@@ -413,6 +413,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .summary-cards-5col { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
 @media (max-width: 1100px) { .summary-cards-5col { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px)  { .summary-cards-5col { grid-template-columns: repeat(2, 1fr); } }
+.summary-cards-4col { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+@media (max-width: 900px)  { .summary-cards-4col { grid-template-columns: repeat(2, 1fr); } }
 .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
 .summary-card-label { font-size: 11px; color: var(--text-dim); font-weight: 600; letter-spacing: 0.04em; margin-bottom: 6px; }
 .summary-card-value { font-size: 18px; font-weight: 700; color: var(--text); font-family: var(--mono); }
@@ -1127,7 +1129,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </select>
       </div>
     </div>
-    <div id="ordersSummary" class="summary-cards-5col"></div>
+    <div id="ordersSummary" class="summary-cards-4col"></div>
     <div id="ordersBulkBar" style="display:none;background:#1e293b;color:#fff;border-radius:10px;padding:10px 16px;margin-bottom:8px;display:none;align-items:center;gap:10px;flex-wrap:wrap">
       <span id="ordersBulkCount" style="font-size:13px;font-weight:600;flex:1">0건 선택됨</span>
       <button onclick="bulkUpdateOrders('normal')"     class="btn btn-sm" style="background:#22c55e;color:#fff;border:none">인식</button>
@@ -4076,13 +4078,13 @@ async function renderOrders() {
       const stats = await fetch(`/api/orders/stats?${statsQs.toString()}`).then(r => r.json());
       summaryEl.innerHTML = `
         <div class="summary-card"><div class="summary-card-label">총 주문수(인식)</div><div class="summary-card-value">${Number(stats.active_orders || 0).toLocaleString('ko-KR')}건</div></div>
+        <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${Number(stats.total_payment || 0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">쿠폰적용매출(인식)</div><div class="summary-card-value green">${Number(stats.coupon_applied_revenue || 0).toLocaleString('ko-KR')}원</div></div>
+        <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${Number(stats.total_shipping || 0).toLocaleString('ko-KR')}원</div></div>
         <div class="summary-card"><div class="summary-card-label">가구매</div><div class="summary-card-value" style="color:#f97316">${Number(stats.fake_order_count || 0).toLocaleString('ko-KR')}건</div></div>
         <div class="summary-card"><div class="summary-card-label">반품</div><div class="summary-card-value" style="color:#ef4444">${Number(stats.return_count || 0).toLocaleString('ko-KR')}건</div></div>
         <div class="summary-card"><div class="summary-card-label">출고중지</div><div class="summary-card-value" style="color:#0071E3">${Number(stats.cancel_count || 0).toLocaleString('ko-KR')}건</div></div>
         <div class="summary-card"><div class="summary-card-label">기타 미인식</div><div class="summary-card-value" style="color:#9ca3af">${Number(stats.other_count || 0).toLocaleString('ko-KR')}건</div></div>
-        <div class="summary-card"><div class="summary-card-label">총 결제액(인식)</div><div class="summary-card-value green">${Number(stats.total_payment || 0).toLocaleString('ko-KR')}원</div></div>
-        <div class="summary-card"><div class="summary-card-label">쿠폰적용매출(인식)</div><div class="summary-card-value green">${Number(stats.coupon_applied_revenue || 0).toLocaleString('ko-KR')}원</div></div>
-        <div class="summary-card"><div class="summary-card-label">총 배송비(인식)</div><div class="summary-card-value">${Number(stats.total_shipping || 0).toLocaleString('ko-KR')}원</div></div>
       `;
     } catch(e) { console.warn('[renderOrders] stats 조회 실패:', e.message); }
   }
