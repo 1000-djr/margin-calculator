@@ -476,6 +476,22 @@ async function initDB() {
     );
   `);
 
+  // 트래픽 슬롯 관리 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS traffic_slots (
+      id             SERIAL PRIMARY KEY,
+      user_id        INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      vendor_name    VARCHAR(200) NOT NULL,
+      option_id      VARCHAR(100) NOT NULL,
+      slot_count     INTEGER NOT NULL DEFAULT 1,
+      cost_per_slot  NUMERIC(12,2) NOT NULL DEFAULT 0,
+      vat_included   BOOLEAN NOT NULL DEFAULT FALSE,
+      start_date     TIMESTAMPTZ NOT NULL,
+      end_date       TIMESTAMPTZ NOT NULL,
+      created_at     TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
   // fixed_discounts: DATE → TIMESTAMPTZ 마이그레이션
   await pool.query(`
     DO $$

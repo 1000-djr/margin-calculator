@@ -174,6 +174,29 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
   const cost       = parseFloat(s.total_cost)     || 0;
   const tax        = -(commission / 11) - (adRaw / 11);
 
+  // ── 트래픽 비용 ─────────────────────────────────────────────────────────────
+  let trafficCost = 0;
+  try {
+    const { rows: tRows } = await pool.query(`
+      SELECT COALESCE(SUM(
+        GREATEST(0,
+          LEAST(end_date::date, COALESCE($3::date, '9999-12-31'::date))
+          - GREATEST(start_date::date, COALESCE($2::date, '0001-01-01'::date))
+          + 1
+        ) *
+        (slot_count * cost_per_slot * CASE WHEN vat_included THEN 1.0 ELSE 1.1 END)
+        / GREATEST(1, end_date::date - start_date::date + 1)
+      ), 0)::NUMERIC(14,2) AS traffic_cost
+      FROM traffic_slots
+      WHERE user_id = $1
+        AND start_date::date <= COALESCE($3::date, '9999-12-31'::date)
+        AND end_date::date   >= COALESCE($2::date, '0001-01-01'::date)
+    `, params);
+    trafficCost = Math.round(parseFloat(tRows[0]?.traffic_cost) || 0);
+  } catch(e) {
+    console.warn('[profit] traffic_slots 쿼리 스킵:', e.message);
+  }
+
   const summary = {
     total_orders:   s.total_orders   || 0,
     excluded_count: s.excluded_count || 0,
@@ -183,7 +206,8 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     total_cost:     Math.round(cost),
     actual_ad_cost: Math.round(actualAd),
     ad_cost_raw:    Math.round(adRaw),
-    net_profit:     Math.round(revAfter - commission - cost - actualAd - tax),
+    traffic_cost:   trafficCost,
+    net_profit:     Math.round(revAfter - commission - cost - actualAd - tax - trafficCost),
   };
 
   // ── 기간별 집계 ──────────────────────────────────────────────────────────────

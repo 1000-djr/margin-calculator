@@ -748,6 +748,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('orders', this)">📋 주문서</button>
     <button class="tab" onclick="switchTab('ads', this)">📢 광고</button>
     <button class="tab" onclick="switchTab('coupons', this)">🎟 쿠폰</button>
+    <button class="tab" onclick="switchTab('traffic', this)">🚦 트래픽관리</button>
     <button class="tab" onclick="switchTab('profit', this)">📊 수익분석</button>
     <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
   </div>
@@ -1331,6 +1332,71 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </tr></thead>
         <tbody id="couponTbody"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- ══ 트래픽관리 탭 ════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-traffic">
+
+    <!-- ── 상단 버튼 ─────────────────────────────────────────────── -->
+    <div class="btn-row" style="margin-bottom:12px">
+      <button class="btn" onclick="downloadTrafficTemplate()">📥 엑셀 양식 다운로드</button>
+      <button class="btn btn-primary" onclick="document.getElementById('trafficBulkFileInput').click()">📤 엑셀 대량 등록</button>
+      <input type="file" id="trafficBulkFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleTrafficBulkUpload(this)">
+    </div>
+
+    <!-- ── 등록 폼 ─────────────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title"><span class="dot"></span><span id="trafficFormTitle">트래픽 슬롯 등록</span></div>
+      <div class="field-row">
+        <div class="field"><label>업체명</label><input type="text" id="trafficVendorName" placeholder="예: ABC마케팅"></div>
+        <div class="field">
+          <label>옵션ID</label>
+          <input type="text" id="trafficOptionId" placeholder="예: 123456789" onblur="fetchTrafficOptionInfo()">
+          <div id="trafficOptionPreview" style="margin-top:4px;font-size:12px;color:var(--text-dim);min-height:16px"></div>
+        </div>
+        <div class="field"><label>슬롯수</label><input type="number" id="trafficSlotCount" placeholder="0" min="1"></div>
+        <div class="field"><label>슬롯당비용 (원)</label><input type="number" id="trafficCostPerSlot" placeholder="0" min="0"></div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>부가세</label>
+          <div style="display:flex;gap:6px;margin-top:6px">
+            <button id="trafficVatExcl" onclick="setTrafficVat(false)"
+              style="padding:5px 18px;border-radius:20px;border:1px solid var(--border);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;transition:all .15s">별도</button>
+            <button id="trafficVatIncl" onclick="setTrafficVat(true)"
+              style="padding:5px 18px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--text-sub);font-size:13px;cursor:pointer;transition:all .15s">포함</button>
+          </div>
+        </div>
+        <div class="field"><label>시작일시</label><input type="datetime-local" id="trafficStartDate" step="1"></div>
+        <div class="field"><label>종료일시</label><input type="datetime-local" id="trafficEndDate" step="1"></div>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-primary" id="trafficSaveBtn" onclick="saveTrafficSlot()">+ 저장</button>
+        <button class="btn" id="trafficCancelBtn" onclick="resetTrafficForm()" style="display:none">취소</button>
+      </div>
+    </div>
+
+    <!-- ── 목록 ──────────────────────────────────────────────────── -->
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>트래픽 슬롯 목록</span>
+      <div class="period-toggle">
+        <button class="period-btn" id="trafficFilterAll"    onclick="setTrafficFilter('all')">전체</button>
+        <button class="period-btn active" id="trafficFilterActive" onclick="setTrafficFilter('active')">진행중</button>
+        <button class="period-btn" id="trafficFilterEnded" onclick="setTrafficFilter('ended')">종료</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="data-table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>업체명</th><th>옵션ID</th><th>등록상품명</th><th>옵션명</th>
+            <th>슬롯수</th><th>슬롯당비용</th><th>부가세</th>
+            <th>시작일시</th><th>종료일시</th><th>일별비용</th><th></th>
+          </tr></thead>
+          <tbody id="trafficTbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -2028,7 +2094,7 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 // ── 탭 ↔ URL 해시 매핑 ────────────────────────────────────────────────────────
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
-  orders: 'orders', ads: 'ads', coupons: 'coupons', profit: 'analytics', returns: 'returns'
+  orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -2048,6 +2114,7 @@ function _activateTabUI(name) {
   if (name === 'orders') { renderOrders(); loadOrdersSummary(); }
   if (name === 'ads')      { renderAds(); loadAdsSummary(); }
   if (name === 'coupons')  { applyDiscountModeUI(); loadAndRenderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
+  if (name === 'traffic')  { loadTrafficSlots(); }
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
 }
@@ -6713,6 +6780,7 @@ async function renderProfit() {
           <div class="summary-card"><div class="summary-card-label">총쿠폰할인</div><div class="summary-card-value red">${totalCouponDiscount.toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">총광고비(실)</div><div class="summary-card-value red">${s.actual_ad_cost.toLocaleString('ko-KR')}원</div></div>
           ${s.fake_cost != null ? `<div class="summary-card"><div class="summary-card-label">가구매비용</div><div class="summary-card-value red">${Math.round(s.fake_cost).toLocaleString('ko-KR')}원</div></div>` : ''}
+          ${s.traffic_cost > 0 ? `<div class="summary-card"><div class="summary-card-label">트래픽비용</div><div class="summary-card-value red">${Math.round(s.traffic_cost).toLocaleString('ko-KR')}원</div></div>` : ''}
           <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(tax).toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">ROAS</div><div class="summary-card-value ${roasGood ? 'green' : 'red'}">${roas}</div></div>
           ${(() => {
@@ -8572,6 +8640,246 @@ async function deleteWholesaleSupplier(id) {
   }
   wholesaleSuppliers = wholesaleSuppliers.filter(x => String(x.id) !== String(id));
   renderWholesaleList();
+}
+
+// ── 트래픽관리 탭 ────────────────────────────────────────────────────────────
+
+let trafficSlots = [];
+let trafficFilter = 'active';
+let trafficVatIncluded = false;
+let trafficEditId = null;
+
+function setTrafficVat(included) {
+  trafficVatIncluded = included;
+  const exclBtn = document.getElementById('trafficVatExcl');
+  const inclBtn = document.getElementById('trafficVatIncl');
+  if (!exclBtn || !inclBtn) return;
+  exclBtn.style.background = !included ? 'var(--accent)'   : 'var(--surface2)';
+  exclBtn.style.color      = !included ? '#fff'            : 'var(--text-sub)';
+  inclBtn.style.background =  included ? 'var(--accent)'   : 'var(--surface2)';
+  inclBtn.style.color      =  included ? '#fff'            : 'var(--text-sub)';
+}
+
+function setTrafficFilter(filter) {
+  trafficFilter = filter;
+  ['All','Active','Ended'].forEach(f => {
+    const btn = document.getElementById('trafficFilter' + f);
+    if (btn) btn.classList.remove('active');
+  });
+  const map = { all: 'All', active: 'Active', ended: 'Ended' };
+  const active = document.getElementById('trafficFilter' + map[filter]);
+  if (active) active.classList.add('active');
+  renderTrafficTable();
+}
+
+async function fetchTrafficOptionInfo() {
+  const optionId = (document.getElementById('trafficOptionId')?.value || '').trim();
+  const preview  = document.getElementById('trafficOptionPreview');
+  if (!preview) return;
+  if (!optionId) { preview.textContent = ''; return; }
+  try {
+    const res = await fetch(`/api/fixed-discounts/option-info?option_id=${encodeURIComponent(optionId)}`);
+    if (!res.ok) { preview.textContent = ''; return; }
+    const d = await res.json();
+    preview.textContent = [d.product_name, d.option_name].filter(Boolean).join(' / ') || '상품 정보 없음';
+  } catch { preview.textContent = ''; }
+}
+
+async function loadTrafficSlots() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch('/api/traffic-slots');
+    if (res.ok) trafficSlots = await res.json();
+  } catch(e) { console.warn('트래픽 슬롯 로드 실패', e); }
+  renderTrafficTable();
+}
+
+function renderTrafficTable() {
+  const tbody = document.getElementById('trafficTbody');
+  if (!tbody) return;
+  const now = new Date();
+  let slots = trafficSlots;
+  if (trafficFilter === 'active') {
+    slots = slots.filter(s => new Date(s.end_date) >= now);
+  } else if (trafficFilter === 'ended') {
+    slots = slots.filter(s => new Date(s.end_date) < now);
+  }
+  if (!slots.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:24px">등록된 트래픽 슬롯이 없습니다</td></tr>`;
+    return;
+  }
+  const fmtDt = d => {
+    if (!d) return '-';
+    return new Date(d).toLocaleString('ko-KR', {
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit'
+    });
+  };
+  tbody.innerHTML = slots.map(s => {
+    const startDate   = new Date(s.start_date);
+    const endDate     = new Date(s.end_date);
+    const durationMs  = endDate - startDate;
+    const durationDays = Math.max(1, Math.ceil(durationMs / (1000 * 60 * 60 * 24)));
+    const vatMult     = s.vat_included ? 1.0 : 1.1;
+    const totalCost   = s.slot_count * s.cost_per_slot * vatMult;
+    const dailyCost   = Math.round(totalCost / durationDays);
+    const isActive    = endDate >= now;
+    return `<tr>
+      <td>${s.vendor_name}</td>
+      <td style="font-family:var(--mono)">${s.option_id}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.product_name || '-'}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.option_name || '-'}</td>
+      <td style="font-family:var(--mono)">${s.slot_count.toLocaleString('ko-KR')}</td>
+      <td style="font-family:var(--mono)">${parseFloat(s.cost_per_slot).toLocaleString('ko-KR')}원</td>
+      <td><span style="font-size:11px;background:${s.vat_included ? '#e8f4fd' : '#fff3e0'};color:${s.vat_included ? '#1565c0' : '#e65100'};padding:2px 7px;border-radius:10px">${s.vat_included ? '포함' : '별도'}</span></td>
+      <td style="font-family:var(--mono);font-size:12px">${fmtDt(s.start_date)}</td>
+      <td style="font-family:var(--mono);font-size:12px">${fmtDt(s.end_date)}</td>
+      <td style="font-family:var(--mono);font-weight:600;color:var(--red)">${dailyCost.toLocaleString('ko-KR')}원/일</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-ghost btn-xs" onclick="editTrafficSlot(${s.id})">수정</button>
+          <button class="btn btn-danger btn-xs" onclick="deleteTrafficSlot(${s.id})">삭제</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function editTrafficSlot(id) {
+  const s = trafficSlots.find(x => x.id === id);
+  if (!s) return;
+  trafficEditId = id;
+  document.getElementById('trafficVendorName').value  = s.vendor_name;
+  document.getElementById('trafficOptionId').value    = s.option_id;
+  document.getElementById('trafficOptionPreview').textContent =
+    [s.product_name, s.option_name].filter(Boolean).join(' / ');
+  document.getElementById('trafficSlotCount').value   = s.slot_count;
+  document.getElementById('trafficCostPerSlot').value = s.cost_per_slot;
+  setTrafficVat(s.vat_included);
+  const toLocal = d => {
+    if (!d) return '';
+    return new Date(d).toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' })
+      .replace(' ', 'T').slice(0, 16);
+  };
+  document.getElementById('trafficStartDate').value = toLocal(s.start_date);
+  document.getElementById('trafficEndDate').value   = toLocal(s.end_date);
+  document.getElementById('trafficFormTitle').textContent   = '트래픽 슬롯 수정';
+  document.getElementById('trafficSaveBtn').textContent     = '수정';
+  document.getElementById('trafficCancelBtn').style.display = '';
+  document.getElementById('tab-traffic').querySelector('.card').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetTrafficForm() {
+  trafficEditId = null;
+  ['trafficVendorName','trafficOptionId','trafficSlotCount','trafficCostPerSlot',
+   'trafficStartDate','trafficEndDate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const prev = document.getElementById('trafficOptionPreview');
+  if (prev) prev.textContent = '';
+  setTrafficVat(false);
+  document.getElementById('trafficFormTitle').textContent   = '트래픽 슬롯 등록';
+  document.getElementById('trafficSaveBtn').textContent     = '+ 저장';
+  document.getElementById('trafficCancelBtn').style.display = 'none';
+}
+
+async function saveTrafficSlot() {
+  const vendor_name    = (document.getElementById('trafficVendorName')?.value    || '').trim();
+  const option_id      = (document.getElementById('trafficOptionId')?.value       || '').trim();
+  const slot_count     = parseInt(document.getElementById('trafficSlotCount')?.value);
+  const cost_per_slot  = parseFloat(document.getElementById('trafficCostPerSlot')?.value);
+  const start_date     = document.getElementById('trafficStartDate')?.value || '';
+  const end_date       = document.getElementById('trafficEndDate')?.value   || '';
+
+  if (!vendor_name)                              return alert('업체명을 입력하세요');
+  if (!option_id)                                return alert('옵션ID를 입력하세요');
+  if (!slot_count || slot_count < 1)             return alert('슬롯수를 입력하세요');
+  if (isNaN(cost_per_slot) || cost_per_slot < 0) return alert('슬롯당비용을 입력하세요');
+  if (!start_date)                               return alert('시작일시를 입력하세요');
+  if (!end_date)                                 return alert('종료일시를 입력하세요');
+  if (start_date >= end_date)                    return alert('종료일시가 시작일시보다 늦어야 합니다');
+
+  const payload = { vendor_name, option_id, slot_count, cost_per_slot,
+                    vat_included: trafficVatIncluded, start_date, end_date };
+  try {
+    let res;
+    if (trafficEditId) {
+      res = await fetch(`/api/traffic-slots/${trafficEditId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+    } else {
+      res = await fetch('/api/traffic-slots', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+    }
+    const data = await res.json();
+    if (data.error) return alert('저장 실패: ' + data.error);
+    if (trafficEditId) {
+      trafficSlots = trafficSlots.map(s => s.id === trafficEditId ? data : s);
+    } else {
+      trafficSlots.unshift(data);
+    }
+    resetTrafficForm();
+    renderTrafficTable();
+  } catch(e) { alert('저장 실패: ' + e.message); }
+}
+
+async function deleteTrafficSlot(id) {
+  if (!confirm('이 트래픽 슬롯을 삭제할까요?')) return;
+  try {
+    await fetch(`/api/traffic-slots/${id}`, { method: 'DELETE' });
+    trafficSlots = trafficSlots.filter(s => s.id !== id);
+    renderTrafficTable();
+  } catch(e) { alert('삭제 실패: ' + e.message); }
+}
+
+function downloadTrafficTemplate() {
+  const headers = [
+    '업체명', '옵션ID', '슬롯수', '슬롯당비용',
+    '부가세(별도/포함)', '시작일시(YYYY-MM-DD HH:mm:ss)', '종료일시'
+  ];
+  const example = [
+    '예시업체', '123456789', 10, 5000,
+    '별도', '2024-01-01 00:00:00', '2024-01-31 23:59:59'
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '트래픽슬롯');
+  XLSX.writeFile(wb, 'traffic_slots_template.xlsx');
+}
+
+async function handleTrafficBulkUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const items = rows.map(r => ({
+        vendor_name:  String(r['업체명'] || '').trim(),
+        option_id:    String(r['옵션ID'] || '').trim(),
+        slot_count:   parseInt(r['슬롯수'])       || 0,
+        cost_per_slot: parseFloat(r['슬롯당비용']) || 0,
+        vat_included: String(r['부가세(별도/포함)'] || '').trim() === '포함',
+        start_date:   String(r['시작일시(YYYY-MM-DD HH:mm:ss)'] || '').trim(),
+        end_date:     String(r['종료일시'] || '').trim(),
+      })).filter(r => r.vendor_name && r.option_id && r.slot_count > 0);
+
+      if (!items.length) return alert('유효한 데이터가 없습니다');
+      const res  = await fetch('/api/traffic-slots/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(items)
+      });
+      const d = await res.json();
+      if (d.error) return alert('업로드 실패: ' + d.error);
+      alert(`${d.inserted}건 등록 완료${d.skipped ? ` (${d.skipped}건 건너뜀)` : ''}`);
+      await loadTrafficSlots();
+    } catch(err) { alert('파일 처리 오류: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

@@ -3073,4 +3073,121 @@ router.delete('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 트래픽 슬롯 ──────────────────────────────────────────────────────────────
+
+function trafficSlotRow(r) {
+  return {
+    id:            r.id,
+    vendor_name:   r.vendor_name,
+    option_id:     r.option_id,
+    product_name:  r.product_name  || null,
+    option_name:   r.option_name   || null,
+    slot_count:    parseInt(r.slot_count)      || 0,
+    cost_per_slot: parseFloat(r.cost_per_slot) || 0,
+    vat_included:  r.vat_included === true || r.vat_included === 't',
+    start_date:    r.start_date ? r.start_date.toISOString() : null,
+    end_date:      r.end_date   ? r.end_date.toISOString()   : null,
+    created_at:    r.created_at ? r.created_at.toISOString() : null,
+  };
+}
+
+router.get('/traffic-slots', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT ts.*,
+        (SELECT o.product_name FROM orders o
+          WHERE o.user_id = ts.user_id AND o.option_id = ts.option_id
+            AND o.product_name IS NOT NULL AND o.product_name <> ''
+          ORDER BY o.created_at DESC LIMIT 1) AS product_name,
+        (SELECT o.option_name FROM orders o
+          WHERE o.user_id = ts.user_id AND o.option_id = ts.option_id
+            AND o.option_name IS NOT NULL AND o.option_name <> ''
+          ORDER BY o.created_at DESC LIMIT 1) AS option_name
+      FROM traffic_slots ts
+      WHERE ts.user_id = $1
+      ORDER BY ts.created_at DESC
+    `, [req.user.id]);
+    res.json(rows.map(trafficSlotRow));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/traffic-slots/bulk', requireAuth, async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : [];
+  if (!items.length) return res.json({ inserted: 0, skipped: 0 });
+  let inserted = 0, skipped = 0;
+  for (const item of items) {
+    if (!item.vendor_name || !item.option_id) { skipped++; continue; }
+    try {
+      await pool.query(`
+        INSERT INTO traffic_slots
+          (user_id, vendor_name, option_id, slot_count, cost_per_slot, vat_included, start_date, end_date)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `, [req.user.id, item.vendor_name, item.option_id,
+          item.slot_count || 1, item.cost_per_slot || 0,
+          !!item.vat_included, item.start_date, item.end_date]);
+      inserted++;
+    } catch(e) { skipped++; }
+  }
+  res.json({ inserted, skipped });
+});
+
+router.post('/traffic-slots', requireAuth, async (req, res) => {
+  const { vendor_name, option_id, slot_count, cost_per_slot, vat_included, start_date, end_date } = req.body;
+  if (!vendor_name) return res.status(400).json({ error: 'vendor_name 필수' });
+  if (!option_id)   return res.status(400).json({ error: 'option_id 필수' });
+  try {
+    const { rows } = await pool.query(`
+      INSERT INTO traffic_slots
+        (user_id, vendor_name, option_id, slot_count, cost_per_slot, vat_included, start_date, end_date)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
+    `, [req.user.id, vendor_name, option_id,
+        slot_count || 1, cost_per_slot || 0, !!vat_included, start_date, end_date]);
+    const slot = rows[0];
+    const { rows: nameRows } = await pool.query(
+      `SELECT product_name, option_name FROM orders
+        WHERE user_id=$1 AND option_id=$2
+          AND product_name IS NOT NULL AND product_name <> ''
+        ORDER BY created_at DESC LIMIT 1`,
+      [req.user.id, option_id]
+    );
+    slot.product_name = nameRows[0]?.product_name || null;
+    slot.option_name  = nameRows[0]?.option_name  || null;
+    res.status(201).json(trafficSlotRow(slot));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/traffic-slots/:id', requireAuth, async (req, res) => {
+  const { vendor_name, option_id, slot_count, cost_per_slot, vat_included, start_date, end_date } = req.body;
+  if (!vendor_name) return res.status(400).json({ error: 'vendor_name 필수' });
+  if (!option_id)   return res.status(400).json({ error: 'option_id 필수' });
+  try {
+    const { rows } = await pool.query(`
+      UPDATE traffic_slots
+        SET vendor_name=$3, option_id=$4, slot_count=$5,
+            cost_per_slot=$6, vat_included=$7, start_date=$8, end_date=$9
+      WHERE id=$1 AND user_id=$2 RETURNING *
+    `, [req.params.id, req.user.id, vendor_name, option_id,
+        slot_count || 1, cost_per_slot || 0, !!vat_included, start_date, end_date]);
+    if (!rows.length) return res.status(404).json({ error: '없음' });
+    const slot = rows[0];
+    const { rows: nameRows } = await pool.query(
+      `SELECT product_name, option_name FROM orders
+        WHERE user_id=$1 AND option_id=$2
+          AND product_name IS NOT NULL AND product_name <> ''
+        ORDER BY created_at DESC LIMIT 1`,
+      [req.user.id, option_id]
+    );
+    slot.product_name = nameRows[0]?.product_name || null;
+    slot.option_name  = nameRows[0]?.option_name  || null;
+    res.json(trafficSlotRow(slot));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/traffic-slots/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM traffic_slots WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
