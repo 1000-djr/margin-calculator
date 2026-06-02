@@ -755,6 +755,8 @@ async function runCrossCheck(){
     if(!res.ok){resultEl.innerHTML=`<p style="color:#FF3B30">${data.error}</p>`;return;}
     const r=data.results;
     let html='';
+
+    // 일반 테이블 렌더러
     const makeTable=(title,rows,cols,keys)=>{
       if(!rows||!rows.length)
         return`<p class="diag-result-empty">${title}: 없음</p>`;
@@ -764,13 +766,59 @@ async function runCrossCheck(){
         <tbody>${rows.map(row=>`<tr>${keys.map(k=>`<td>${row[k]??'—'}</td>`).join('')}</tr>`).join('')}</tbody>
       </table>`;
     };
+
+    // 광고보고서 테이블 전용 렌더러 (삭제 버튼 포함)
+    const makeAdTable=(title,rows)=>{
+      if(!rows||!rows.length)
+        return`<p class="diag-result-empty">${title}: 없음</p>`;
+      const cols=['user_id','이메일','이름','건수','첫날짜','마지막날짜',''];
+      const rowsHtml=rows.map(row=>{
+        const uid=row['user_id'];
+        const email=row['email']??'—';
+        const name=row['name']??'—';
+        const firstDate=(row['first_date']??'').slice(0,10);
+        const lastDate=(row['last_date']??'').slice(0,10);
+        const delBtn=`<button
+          style="background:#FF3B30;color:#fff;border:none;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:12px"
+          onclick="deleteAdReports(${uid},'${email}','${productName}','${firstDate}','${lastDate}')">삭제</button>`;
+        return`<tr>
+          <td>${uid}</td><td>${email}</td><td>${name}</td>
+          <td>${row['cnt']??'—'}</td><td>${firstDate||'—'}</td><td>${lastDate||'—'}</td>
+          <td>${delBtn}</td>
+        </tr>`;
+      }).join('');
+      return`<p class="diag-result-title">${title} <span style="color:#6E6E73;font-weight:400">(${rows.length}개 계정)</span></p>
+      <table>
+        <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+    };
+
     if(r.orders_by_user)              html+=makeTable('📦 주문 테이블',r.orders_by_user,['user_id','이메일','이름','건수','첫주문','마지막주문'],['user_id','email','name','cnt','first_order','last_order']);
-    if(r.ad_reports_by_user)          html+=makeTable('📢 광고보고서 테이블',r.ad_reports_by_user,['user_id','이메일','이름','건수','첫날짜','마지막날짜'],['user_id','email','name','cnt','first_date','last_date']);
+    if(r.ad_reports_by_user)          html+=makeAdTable('📢 광고보고서 테이블',r.ad_reports_by_user);
     if(r.product_name_mapping_by_user)html+=makeTable('🔗 상품명 매핑',r.product_name_mapping_by_user,['user_id','이메일','이름','등록상품명','옵션ID','B2B명'],['user_id','email','name','registered_name','option_id','b2b_name']);
     if(r.orders_option_by_user)       html+=makeTable('📦 주문(옵션ID)',r.orders_option_by_user,['user_id','이메일','이름','건수','상품명','옵션명'],['user_id','email','name','cnt','product_name','option_name']);
     if(r.ad_reports_option_by_user)   html+=makeTable('📢 광고보고서(옵션ID)',r.ad_reports_option_by_user,['user_id','이메일','이름','건수','상품명'],['user_id','email','name','cnt','product_name']);
     resultEl.innerHTML=html||'<span style="color:#6E6E73">결과 없음</span>';
   }catch(e){resultEl.innerHTML=`<p style="color:#FF3B30">${e.message}</p>`;}
+}
+
+async function deleteAdReports(userId, email, productName, fromDate, toDate){
+  const msg=`user_id=${userId} (${email}) 의 광고보고서 데이터를 삭제하시겠습니까?\n상품명: ${productName||'(전체)'}\n기간: ${fromDate||'—'} ~ ${toDate||'—'}`;
+  if(!confirm(msg))return;
+  try{
+    const res=await fetch('/api/admin/fix-ad-reports',{
+      method:'DELETE',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user_id:userId,product_name:productName||undefined,from_date:fromDate||undefined,to_date:toDate||undefined})
+    });
+    const data=await res.json();
+    if(!res.ok){alert('삭제 실패: '+(data.error||res.status));return;}
+    showToast(`삭제 완료: ${data.deleted}건`);
+    document.getElementById('crossCheckResult').innerHTML=
+      `<p style="color:#34C759;font-weight:600">✓ 삭제 완료: ${data.deleted}건 — 재조회 중...</p>`;
+    setTimeout(()=>runCrossCheck(),600);
+  }catch(e){alert('오류: '+e.message);}
 }
 
 // ── 초기화 ────────────────────────────────────────────────────────────────────

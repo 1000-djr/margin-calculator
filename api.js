@@ -303,6 +303,36 @@ router.get('/admin/cross-user-check', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// 어드민 전용: 특정 유저의 광고보고서 데이터 삭제 (오염 데이터 정리용)
+router.delete('/admin/fix-ad-reports', requireRealAdmin, async (req, res) => {
+  try {
+    const { user_id, product_name, from_date, to_date } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id 필수' });
+
+    let query = 'DELETE FROM ad_reports WHERE user_id = $1';
+    const params = [parseInt(user_id)];
+    let p = 2;
+
+    if (product_name) {
+      query += ` AND product_name ILIKE $${p++}`;
+      params.push(`%${product_name}%`);
+    }
+    if (from_date) {
+      query += ` AND report_date >= $${p++}`;
+      params.push(from_date);
+    }
+    if (to_date) {
+      query += ` AND report_date <= $${p++}`;
+      params.push(to_date);
+    }
+
+    query += ' RETURNING id, user_id, report_date, product_name, option_id';
+    const { rows } = await pool.query(query, params);
+    console.log(`[admin/fix-ad-reports] 삭제 ${rows.length}건 by admin=${req.originalAdmin?.id || req.user.id}`);
+    res.json({ deleted: rows.length, rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 유저 설정 ────────────────────────────────────────────────────────────────
 router.get('/user-settings', requireAuth, async (req, res) => {
   try {
@@ -833,6 +863,7 @@ function safeStr(v)   { return (v == null || v === '') ? null : String(v); }
 router.post('/ad-reports/bulk', requireAuth, async (req, res) => {
   const items  = Array.isArray(req.body) ? req.body : [];
   const userId = parseInt(req.user.id, 10);
+  console.log('[ad-reports/bulk] 업로드 요청 user_id=', userId, 'session_id=', req.sessionID, 'ip=', req.ip);
   if (!items.length) return res.json({ inserted: 0, skipped: 0, failed: 0, total: 0 });
 
   if (items[0]) {
