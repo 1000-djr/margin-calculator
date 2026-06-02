@@ -154,6 +154,16 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       WHERE user_id = $1
         AND ($2::text IS NULL OR report_date >= $2)
         AND ($3::text IS NULL OR report_date <= $3)
+    ),
+    return_costs AS (
+      SELECT
+        COALESCE(SUM(return_shipping_fee), 0)::BIGINT       AS total_return_shipping,
+        COALESCE(SUM(return_cost),         0)::NUMERIC(14,2) AS total_return_cost
+      FROM returns
+      WHERE user_id = $1
+        AND record_type = 'return'
+        AND ($2::text IS NULL OR REPLACE(LEFT(COALESCE(received_at,''),10),'.', '-') >= $2)
+        AND ($3::text IS NULL OR REPLACE(LEFT(COALESCE(received_at,''),10),'.', '-') <= $3)
     )
     SELECT
       oa.total_orders,
@@ -166,19 +176,24 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       oa.commission,
       oa.total_cost,
       aa.actual_ad_cost,
-      aa.ad_cost_raw
+      aa.ad_cost_raw,
+      rc.total_return_shipping,
+      rc.total_return_cost
     FROM order_agg oa
-    CROSS JOIN ad_agg    aa
+    CROSS JOIN ad_agg       aa
     CROSS JOIN excluded_cnt ec
+    CROSS JOIN return_costs rc
   `, params);
 
-  const s          = sRows[0] || {};
-  const commission = parseFloat(s.commission)     || 0;
-  const adRaw      = parseFloat(s.ad_cost_raw)    || 0;
-  const actualAd   = parseFloat(s.actual_ad_cost) || 0;
-  const revAfter   = parseInt(s.revenue_after)    || 0;
-  const cost       = parseFloat(s.total_cost)     || 0;
-  const tax        = -(commission / 11) - (adRaw / 11);
+  const s              = sRows[0] || {};
+  const commission     = parseFloat(s.commission)          || 0;
+  const adRaw          = parseFloat(s.ad_cost_raw)         || 0;
+  const actualAd       = parseFloat(s.actual_ad_cost)      || 0;
+  const revAfter       = parseInt(s.revenue_after)         || 0;
+  const cost           = parseFloat(s.total_cost)          || 0;
+  const tax            = -(commission / 11) - (adRaw / 11);
+  const returnShipping = parseInt(s.total_return_shipping) || 0;
+  const returnCost     = parseFloat(s.total_return_cost)   || 0;
 
   // ── 트래픽 비용 ─────────────────────────────────────────────────────────────
   let trafficCost = 0;
@@ -215,8 +230,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     total_cost:     Math.round(cost),
     actual_ad_cost: Math.round(actualAd),
     ad_cost_raw:    Math.round(adRaw),
-    traffic_cost:   trafficCost,
-    net_profit:     Math.round(revAfter - commission - cost - actualAd - tax - trafficCost),
+    traffic_cost:          trafficCost,
+    total_return_shipping: returnShipping,
+    total_return_cost:     Math.round(returnCost),
+    net_profit:            Math.round(revAfter - commission - cost - actualAd - tax - trafficCost - returnShipping - returnCost),
   };
 
   // ── 기간별 집계 ──────────────────────────────────────────────────────────────

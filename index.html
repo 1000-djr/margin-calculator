@@ -6709,6 +6709,7 @@ async function renderProfit() {
           <div class="summary-card"><div class="summary-card-label">총광고비(실)</div><div class="summary-card-value red">${s.actual_ad_cost.toLocaleString('ko-KR')}원</div></div>
           ${s.fake_cost != null ? `<div class="summary-card"><div class="summary-card-label">가구매비용</div><div class="summary-card-value red">${Math.round(s.fake_cost).toLocaleString('ko-KR')}원</div></div>` : ''}
           ${s.traffic_cost > 0 ? `<div class="summary-card"><div class="summary-card-label">트래픽비용</div><div class="summary-card-value red">${Math.round(s.traffic_cost).toLocaleString('ko-KR')}원</div></div>` : ''}
+          ${((s.total_return_shipping || 0) + (s.total_return_cost || 0)) > 0 ? `<div class="summary-card"><div class="summary-card-label">총반품비용</div><div class="summary-card-value red">${((s.total_return_shipping || 0) + Math.round(s.total_return_cost || 0)).toLocaleString('ko-KR')}원</div></div>` : ''}
           <div class="summary-card"><div class="summary-card-label">총부가세</div><div class="summary-card-value">${Math.round(tax).toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">ROAS</div><div class="summary-card-value ${roasGood ? 'green' : 'red'}">${roas}</div></div>
           ${(() => {
