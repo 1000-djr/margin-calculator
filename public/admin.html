@@ -394,6 +394,7 @@ tr.row-soon td{background:#FFFBEA !important}
     <button onclick="checkEmptyDateAds()" style="background:#6E6E73;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:500;cursor:pointer">현황 조회</button>
     <input id="fillAdDate" type="date" style="background:#FFFFFF;color:#1D1D1F;border:1.5px solid #D2D2D7;border-radius:8px;padding:8px 12px;font-size:14px">
     <button onclick="fillAdDate()" style="background:#0071E3;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:600;cursor:pointer">날짜 채우기</button>
+    <button onclick="deleteEmptyDateAds()" style="background:#FF3B30;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:600;cursor:pointer">빈 날짜 삭제</button>
   </div>
   <div id="emptyDateResult" style="background:#F5F5F7;border:1px solid #D2D2D7;border-radius:8px;padding:16px;min-height:50px;font-size:13px"></div>
 </div>
@@ -867,6 +868,24 @@ async function fillAdDate() {
     const d = await res.json();
     if (!res.ok) { el.innerHTML = `<p style="color:#FF3B30">${d.error}</p>`; return; }
     el.innerHTML = `<p style="color:#34C759;font-weight:600">완료: ${d.updated}건을 ${d.target_date}로 채웠습니다.</p>`;
+  } catch(e) { el.innerHTML = `<p style="color:#FF3B30">${e.message}</p>`; }
+}
+
+async function deleteEmptyDateAds() {
+  const userId = document.getElementById('fillAdUserId').value.trim();
+  if (!userId) { alert('user_id를 입력하세요.'); return; }
+  if (!confirm(`user_id=${userId} 의 빈 날짜 광고데이터를 모두 삭제합니다.\n(다른 날짜 데이터는 영향 없음)\n계속할까요?`)) return;
+  const el = document.getElementById('emptyDateResult');
+  el.innerHTML = '<p style="color:#6E6E73">삭제 중...</p>';
+  try {
+    const res = await fetch('/api/admin/empty-date-ads', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId })
+    });
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = `<p style="color:#FF3B30">${d.error}</p>`; return; }
+    el.innerHTML = `<p style="color:#34C759;font-weight:600">삭제 완료: ${d.deleted}건</p>`;
   } catch(e) { el.innerHTML = `<p style="color:#FF3B30">${e.message}</p>`; }
 }
 

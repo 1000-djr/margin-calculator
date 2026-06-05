@@ -376,6 +376,21 @@ router.put('/admin/fill-ad-date', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// DELETE: 특정 유저의 빈 날짜(report_date 공란/null) 광고데이터 일괄 삭제
+router.delete('/admin/empty-date-ads', requireRealAdmin, async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'user_id 필수' });
+    const { rows } = await pool.query(`
+      DELETE FROM ad_reports
+      WHERE user_id = $1 AND (report_date IS NULL OR TRIM(report_date) = '')
+      RETURNING id
+    `, [parseInt(user_id)]);
+    console.log(`[admin/empty-date-ads DELETE] user=${user_id} 삭제=${rows.length}건 by admin=${req.originalAdmin?.id || req.user.id}`);
+    res.json({ deleted: rows.length });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET: 특정 유저/날짜의 광고데이터 중복 의심 행 진단 (option_id+keyword 기준 카운트)
 router.get('/admin/ad-dupe-check', requireRealAdmin, async (req, res) => {
   try {
