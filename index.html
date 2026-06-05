@@ -6716,6 +6716,7 @@ async function renderProfit() {
           <div class="summary-card"><div class="summary-card-label">쿠폰적용매출</div><div class="summary-card-value green">${s.revenue_after.toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">순이익</div><div class="summary-card-value ${s.net_profit >= 0 ? 'green' : 'red'}">${s.net_profit.toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">순수익률</div><div class="summary-card-value ${s.net_profit >= 0 ? 'green' : 'red'}">${s.revenue_after > 0 ? (s.net_profit / s.revenue_after * 100).toFixed(1) + '%' : '-'}</div></div>
+          <div class="summary-card"><div class="summary-card-label">광고비 비중</div><div class="summary-card-value">${s.revenue_after > 0 ? (s.ad_cost_raw / s.revenue_after * 100).toFixed(1) + '%' : '-'}</div></div>
         </div>
         <div class="summary-cards" style="margin-bottom:8px">
           <div class="summary-card"><div class="summary-card-label">총원가</div><div class="summary-card-value red">${s.total_cost.toLocaleString('ko-KR')}원</div></div>
