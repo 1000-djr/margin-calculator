@@ -376,6 +376,34 @@ router.put('/admin/fill-ad-date', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET: 특정 유저/날짜의 광고데이터 중복 의심 행 진단 (option_id+keyword 기준 카운트)
+router.get('/admin/ad-dupe-check', requireRealAdmin, async (req, res) => {
+  try {
+    const { user_id, date } = req.query;
+    if (!user_id || !date) return res.status(400).json({ error: 'user_id, date 필수' });
+    // 해당 날짜 전체 행수 + 광고비 합계
+    const { rows: total } = await pool.query(`
+      SELECT COUNT(*) AS row_count,
+             COALESCE(SUM(ad_cost),0) AS sum_ad_cost,
+             COALESCE(SUM(actual_ad_cost),0) AS sum_actual_ad_cost,
+             COUNT(DISTINCT option_id) AS distinct_options
+      FROM ad_reports
+      WHERE user_id=$1 AND report_date=$2
+    `, [parseInt(user_id), date]);
+    // option_id+keyword+ad_placement 조합별 중복 카운트 (2건 이상인 것만)
+    const { rows: dupes } = await pool.query(`
+      SELECT option_id, keyword, ad_placement, COUNT(*) AS cnt, SUM(ad_cost) AS sum_cost
+      FROM ad_reports
+      WHERE user_id=$1 AND report_date=$2
+      GROUP BY option_id, keyword, ad_placement
+      HAVING COUNT(*) > 1
+      ORDER BY cnt DESC
+      LIMIT 50
+    `, [parseInt(user_id), date]);
+    res.json({ ...total[0], dupe_groups: dupes.length, dupes });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 유저 설정 ────────────────────────────────────────────────────────────────
 router.get('/user-settings', requireAuth, async (req, res) => {
   try {
