@@ -333,6 +333,49 @@ router.delete('/admin/fix-ad-reports', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET: 특정 유저의 빈 날짜(report_date 공란/null) 광고데이터 현황 조회
+router.get('/admin/empty-date-ads', requireRealAdmin, async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'user_id 필수' });
+    const { rows } = await pool.query(`
+      SELECT COUNT(*) AS empty_count,
+             MIN(created_at) AS first_uploaded,
+             MAX(created_at) AS last_uploaded,
+             COUNT(DISTINCT campaign_name) AS campaign_count
+      FROM ad_reports
+      WHERE user_id = $1
+        AND (report_date IS NULL OR TRIM(report_date) = '')
+    `, [parseInt(user_id)]);
+    // 캠페인명 샘플도 같이
+    const { rows: samples } = await pool.query(`
+      SELECT DISTINCT campaign_name, product_name
+      FROM ad_reports
+      WHERE user_id = $1 AND (report_date IS NULL OR TRIM(report_date) = '')
+      LIMIT 10
+    `, [parseInt(user_id)]);
+    res.json({ ...rows[0], samples });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT: 특정 유저의 빈 날짜 광고데이터를 지정 날짜로 일괄 채움
+router.put('/admin/fill-ad-date', requireRealAdmin, async (req, res) => {
+  try {
+    const { user_id, target_date } = req.body;
+    if (!user_id || !target_date) return res.status(400).json({ error: 'user_id, target_date 필수' });
+    // target_date 형식 검증 (YYYY-MM-DD)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(target_date)) return res.status(400).json({ error: 'target_date는 YYYY-MM-DD 형식이어야 합니다' });
+    const { rows } = await pool.query(`
+      UPDATE ad_reports
+      SET report_date = $2
+      WHERE user_id = $1 AND (report_date IS NULL OR TRIM(report_date) = '')
+      RETURNING id
+    `, [parseInt(user_id), target_date]);
+    console.log(`[admin/fill-ad-date] user=${user_id} 날짜=${target_date} 채움=${rows.length}건 by admin=${req.originalAdmin?.id || req.user.id}`);
+    res.json({ updated: rows.length, target_date });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 유저 설정 ────────────────────────────────────────────────────────────────
 router.get('/user-settings', requireAuth, async (req, res) => {
   try {

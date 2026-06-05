@@ -386,6 +386,18 @@ tr.row-soon td{background:#FFFBEA !important}
   </div>
 </div>
 
+<div style="max-width:900px;margin:32px auto 0;padding:0 16px">
+  <h2 style="color:#0071E3;margin-bottom:12px">📅 빈 날짜 광고데이터 수정</h2>
+  <p style="color:#6E6E73;margin-bottom:12px;font-size:13px">업로드 시 날짜 열이 누락된 광고데이터(report_date 공란)를 찾아 지정한 날짜로 일괄 채웁니다. 수익분석 누락 문제 해결용.</p>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+    <input id="fillAdUserId" type="text" placeholder="user_id (예: 6)" style="width:140px;background:#FFFFFF;color:#1D1D1F;border:1.5px solid #D2D2D7;border-radius:8px;padding:8px 12px;font-size:14px">
+    <button onclick="checkEmptyDateAds()" style="background:#6E6E73;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:500;cursor:pointer">현황 조회</button>
+    <input id="fillAdDate" type="date" style="background:#FFFFFF;color:#1D1D1F;border:1.5px solid #D2D2D7;border-radius:8px;padding:8px 12px;font-size:14px">
+    <button onclick="fillAdDate()" style="background:#0071E3;color:#fff;border:none;border-radius:8px;padding:8px 20px;font-weight:600;cursor:pointer">날짜 채우기</button>
+  </div>
+  <div id="emptyDateResult" style="background:#F5F5F7;border:1px solid #D2D2D7;border-radius:8px;padding:16px;min-height:50px;font-size:13px"></div>
+</div>
+
 <script>
 let allUsers = [];
 
@@ -819,6 +831,43 @@ async function deleteAdReports(userId, email, productName, fromDate, toDate){
       `<p style="color:#34C759;font-weight:600">✓ 삭제 완료: ${data.deleted}건 — 재조회 중...</p>`;
     setTimeout(()=>runCrossCheck(),600);
   }catch(e){alert('오류: '+e.message);}
+}
+
+async function checkEmptyDateAds() {
+  const userId = document.getElementById('fillAdUserId').value.trim();
+  if (!userId) { alert('user_id를 입력하세요.'); return; }
+  const el = document.getElementById('emptyDateResult');
+  el.innerHTML = '<p style="color:#6E6E73">조회 중...</p>';
+  try {
+    const res = await fetch(`/api/admin/empty-date-ads?user_id=${userId}`);
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = `<p style="color:#FF3B30">${d.error}</p>`; return; }
+    const samples = (d.samples||[]).map(s => `<li>${s.campaign_name||'-'} / ${s.product_name||'-'}</li>`).join('');
+    el.innerHTML = `
+      <p><b>빈 날짜 데이터: ${Number(d.empty_count).toLocaleString()}건</b> (캠페인 ${d.campaign_count||0}종)</p>
+      <p style="color:#6E6E73">업로드 시각: ${d.first_uploaded ? new Date(d.first_uploaded).toLocaleString('ko-KR') : '-'} ~ ${d.last_uploaded ? new Date(d.last_uploaded).toLocaleString('ko-KR') : '-'}</p>
+      ${samples ? `<p style="margin-top:8px;color:#6E6E73">캠페인 샘플:</p><ul style="margin:4px 0 0 18px;color:#6E6E73">${samples}</ul>` : ''}
+    `;
+  } catch(e) { el.innerHTML = `<p style="color:#FF3B30">${e.message}</p>`; }
+}
+
+async function fillAdDate() {
+  const userId = document.getElementById('fillAdUserId').value.trim();
+  const date = document.getElementById('fillAdDate').value;
+  if (!userId || !date) { alert('user_id와 날짜를 모두 입력하세요.'); return; }
+  if (!confirm(`user_id=${userId} 의 빈 날짜 광고데이터를 모두 ${date} 로 채웁니다.\n계속할까요?`)) return;
+  const el = document.getElementById('emptyDateResult');
+  el.innerHTML = '<p style="color:#6E6E73">처리 중...</p>';
+  try {
+    const res = await fetch('/api/admin/fill-ad-date', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, target_date: date })
+    });
+    const d = await res.json();
+    if (!res.ok) { el.innerHTML = `<p style="color:#FF3B30">${d.error}</p>`; return; }
+    el.innerHTML = `<p style="color:#34C759;font-weight:600">완료: ${d.updated}건을 ${d.target_date}로 채웠습니다.</p>`;
+  } catch(e) { el.innerHTML = `<p style="color:#FF3B30">${e.message}</p>`; }
 }
 
 // ── 초기화 ────────────────────────────────────────────────────────────────────
