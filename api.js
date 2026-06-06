@@ -376,6 +376,63 @@ router.put('/admin/fill-ad-date', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET: 특정 유저의 주문 + 적용가능 할인 진단
+// /api/admin/discount-debug?email=xxx&date=2026-06-06
+router.get('/admin/discount-debug', requireRealAdmin, async (req, res) => {
+  try {
+    const { email, user_id, date } = req.query;
+    let uid = user_id;
+    if (!uid && email) {
+      const { rows } = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
+      if (!rows[0]) return res.status(404).json({ error: '해당 이메일 유저 없음' });
+      uid = rows[0].id;
+    }
+    if (!uid) return res.status(400).json({ error: 'email 또는 user_id 필수' });
+    uid = parseInt(uid);
+
+    // 해당 날짜 주문
+    const { rows: orders } = await pool.query(`
+      SELECT id, order_number, order_date, option_id, product_name, option_name,
+             payment_amount, shipping_fee, is_excluded, exclusion_type
+      FROM orders
+      WHERE user_id=$1 AND ($2::text IS NULL OR SUBSTRING(order_date,1,10)=$2)
+      ORDER BY order_date
+    `, [uid, date || null]);
+
+    // 이 주문들의 option_id 목록
+    const optionIds = [...new Set(orders.map(o => o.option_id).filter(Boolean))];
+
+    // 해당 옵션들에 등록된 상시할인가 전체
+    const { rows: fixedDiscounts } = optionIds.length ? await pool.query(`
+      SELECT option_id, discount_type, discount_amount, start_date, end_date
+      FROM fixed_discounts
+      WHERE user_id=$1 AND option_id = ANY($2)
+      ORDER BY option_id, discount_type, start_date
+    `, [uid, optionIds]) : { rows: [] };
+
+    // 해당 옵션들에 적용되는 쿠폰 (option_ids JSONB에 포함)
+    const { rows: coupons } = optionIds.length ? await pool.query(`
+      SELECT coupon_id, name, coupon_type, discount_amount, start_at, end_at, option_ids
+      FROM coupons
+      WHERE user_id=$1 AND option_ids ?| $2::text[]
+      ORDER BY coupon_type, discount_amount DESC
+    `, [uid, optionIds]) : { rows: [] };
+
+    // 유저의 discount_mode
+    const { rows: u } = await pool.query('SELECT discount_mode FROM users WHERE id=$1', [uid]);
+
+    res.json({
+      user_id: uid,
+      discount_mode: u[0]?.discount_mode || 'coupon',
+      order_count: orders.length,
+      orders,
+      option_ids: optionIds,
+      fixed_discounts: fixedDiscounts,
+      coupons
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE: 특정 유저의 빈 날짜(report_date 공란/null) 광고데이터 일괄 삭제
 router.delete('/admin/empty-date-ads', requireRealAdmin, async (req, res) => {
   try {
