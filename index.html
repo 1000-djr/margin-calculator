@@ -1956,18 +1956,6 @@ async function loadUserData() {
         while (p.prices.length < suppliers.length) p.prices.push(0);
         while (p.prices.length > suppliers.length) p.prices.pop();
       });
-      // b2bProducts 오염 항목(옵션ID가 상품으로 들어간 것) 정리
-      const beforeLen = b2bProducts.length;
-      b2bProducts = b2bProducts.filter(p => {
-        if (p.unit === '옵션') return false;
-        if (/^\d{8,}$/.test((p.name||'').trim())) return false;
-        return true;
-      });
-      if (b2bProducts.length !== beforeLen) {
-        console.log('[b2b정리] 오염 항목', beforeLen - b2bProducts.length, '건 제거');
-        localStorage.setItem('b2bProducts', JSON.stringify(b2bProducts));
-        saveToServer('b2bProducts', b2bProducts);
-      }
     }
     if (hData && Array.isArray(hData)) history = hData;
 
@@ -2090,6 +2078,7 @@ let editingCouponId = null;
 let editingFdId = null;
 let couponSortDir = null; // null | 'asc' | 'desc'
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
+let b2bDropdownItems = [];  // 드롭다운용: b2bPriceHistory를 상품별로 묶은 목록
 let editingB2BPriceId = null;
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersSortCol = '주문일'; // 기본 정렬 컬럼
@@ -2280,18 +2269,28 @@ function renderSupplierBtns() {
 }
 
 function populateB2BProductSelect() {
-  renderSupplierBtns();
   const sel = document.getElementById('b2bProductSelect');
   const prev = sel.value;
+  // b2bPriceHistory를 (상품명+단위) 기준으로 묶고, 공급처별 가격 맵 생성
+  // 현재 유효한 가격(end_date 공란)만 사용, 같은 상품+단위+공급처면 최신 start_date 우선
+  const grouped = {};
+  b2bPriceHistory.forEach(p => {
+    if (!p.product_name) return;
+    if (p.end_date && p.end_date.trim() !== '') return;
+    const key = p.product_name + '\t' + (p.unit || '');
+    if (!grouped[key]) grouped[key] = { name: p.product_name, unit: p.unit || '', suppliers: {} };
+    const prev = grouped[key].suppliers[p.supplier_name];
+    if (prev === undefined || (p.start_date || '') >= (prev.start_date || '')) {
+      grouped[key].suppliers[p.supplier_name] = { cost: p.cost, start_date: p.start_date || '' };
+    }
+  });
+  b2bDropdownItems = Object.values(grouped).sort((a, b) => (a.name + a.unit).localeCompare(b.name + b.unit, 'ko'));
+
   sel.innerHTML = '<option value="">상품 선택…</option>';
-  b2bProducts.forEach((p, i) => {
-    if (p.unit === '옵션') return;
-    if (/^\d{8,}$/.test((p.name||'').trim())) return;
-    const hasPrice = p.prices.some(v => v > 0);
-    if (!hasPrice) return;
+  b2bDropdownItems.forEach((item, i) => {
     const o = document.createElement('option');
     o.value = i;
-    o.textContent = `${p.name}${p.unit ? ' (' + p.unit + ')' : ''}`;
+    o.textContent = item.unit ? `${item.name} (${item.unit})` : item.name;
     sel.appendChild(o);
   });
   if (prev) sel.value = prev;
@@ -2300,51 +2299,49 @@ function populateB2BProductSelect() {
 
 function onB2BProductSelect() {
   const idx = document.getElementById('b2bProductSelect').value;
-  const btns = suppliers.map((_, i) => document.getElementById('supBtn' + i));
-  const spans = suppliers.map((_, i) => document.getElementById('supPrice' + i));
+  const noteEl = document.getElementById('costFromB2BNote');
+  const btnWrap = document.getElementById('b2bSupplierBtns');
 
   if (idx === '') {
-    btns.forEach((b, i) => { b.disabled = true; b.classList.remove('active'); spans[i].textContent = '-'; });
+    if (btnWrap) btnWrap.innerHTML = '';
     b2bCostValue = 0;
-    document.getElementById('costFromB2BNote').textContent = '상품과 공급처를 선택하면 매입가가 자동 입력됩니다';
+    b2bSelectedSupplierIdx = -1;
+    noteEl.textContent = '상품과 공급처를 선택하면 매입가가 자동 입력됩니다';
     calc1(); return;
   }
-
-  const p = b2bProducts[parseInt(idx)];
-  btns.forEach((btn, i) => {
-    const price = p.prices[i];
-    btn.classList.remove('active');
-    if (price > 0) {
-      btn.disabled = false;
-      spans[i].textContent = price.toLocaleString() + '원';
-    } else {
-      btn.disabled = true;
-      spans[i].textContent = '-';
-    }
-  });
-
-  // 상품명·단위 자동 반영
-  document.getElementById('calcProductName').value = p.name;
+  const item = b2bDropdownItems[parseInt(idx)];
+  if (!item) return;
+  const supplierNames = Object.keys(item.suppliers);
+  if (btnWrap) {
+    btnWrap.innerHTML = supplierNames.map((sn, i) =>
+      `<button type="button" class="sup-btn" id="supBtn${i}" onclick="onB2BSupplierSelect(${i})">${sn}<span id="supPrice${i}" style="display:block;font-size:11px;color:var(--text-dim)">${item.suppliers[sn].cost.toLocaleString()}원</span></button>`
+    ).join('');
+  }
+  document.getElementById('calcProductName').value = item.name;
   b2bCostValue = 0;
   b2bSelectedSupplierIdx = -1;
-  document.getElementById('costFromB2BNote').textContent = '공급처를 선택하면 매입가가 자동 입력됩니다';
+  noteEl.textContent = '공급처를 선택하면 매입가가 자동 입력됩니다';
   calc1();
 }
 
 function onB2BSupplierSelect(supplierIdx) {
   const productIdx = document.getElementById('b2bProductSelect').value;
   if (productIdx === '') return;
-  const p = b2bProducts[parseInt(productIdx)];
-  const price = p.prices[supplierIdx];
+  const item = b2bDropdownItems[parseInt(productIdx)];
+  if (!item) return;
+  const supplierNames = Object.keys(item.suppliers);
+  const sn = supplierNames[supplierIdx];
+  const price = item.suppliers[sn].cost;
   if (!price) return;
-
-  suppliers.forEach((_, i) => document.getElementById('supBtn' + i).classList.toggle('active', i === supplierIdx));
-
+  supplierNames.forEach((_, i) => {
+    const b = document.getElementById('supBtn' + i);
+    if (b) b.classList.toggle('active', i === supplierIdx);
+  });
   b2bCostValue = price;
-  b2bSelectedSupplierIdx = supplierIdx;
-  const label = suppliers[supplierIdx].name;
-  document.getElementById('costFromB2BNote').textContent =
-    `${label} · ${price.toLocaleString()}원 반영됨`;
+  // 전역 suppliers 배열에서 이름으로 인덱스 찾기 (saveCalc 호환)
+  b2bSelectedSupplierIdx = suppliers.findIndex(s => s.name === sn);
+  if (b2bSelectedSupplierIdx < 0) b2bSelectedSupplierIdx = 0;
+  document.getElementById('costFromB2BNote').textContent = `${sn} · ${price.toLocaleString()}원 반영됨`;
   calc1();
 }
 
@@ -2771,13 +2768,10 @@ function resetCalc() {
   document.getElementById('calcUnitType').selectedIndex = 0;
   // B2B 모드 초기화
   b2bCostValue = 0;
+  b2bSelectedSupplierIdx = -1;
   document.getElementById('b2bProductSelect').value = '';
-  suppliers.forEach((_, i) => {
-    const btn = document.getElementById('supBtn' + i);
-    const span = document.getElementById('supPrice' + i);
-    if (btn) { btn.classList.remove('active'); btn.disabled = true; }
-    if (span) span.textContent = '-';
-  });
+  const btnWrap = document.getElementById('b2bSupplierBtns');
+  if (btnWrap) btnWrap.innerHTML = '';
   document.getElementById('costFromB2BNote').textContent = '상품과 공급처를 선택하면 매입가가 자동 입력됩니다';
   calc1();
 }
