@@ -1326,6 +1326,7 @@ function fdRow(r) {
     discount_amount: parseFloat(r.discount_amount) || 0,
     start_date:      toKSTDatetime(r.start_date) || '',
     end_date:        toKSTDatetime(r.end_date),
+    discount_type:   r.discount_type || 'instant',
   };
 }
 
@@ -1393,43 +1394,44 @@ router.get('/fixed-discounts/option-info', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// 동일 option_id 진행중 이력 전체 종료 (트랜잭션 client 사용)
-async function autoCloseActiveDiscounts(client, userId, optionId, newStartDate) {
+// 동일 option_id + discount_type 진행중 이력 종료 (트랜잭션 client 사용)
+async function autoCloseActiveDiscounts(client, userId, optionId, newStartDate, discountType) {
   const oid = String(optionId);
+  const dtype = discountType === 'download' ? 'download' : 'instant';
   const result = await client.query(
     `UPDATE fixed_discounts
      SET end_date = $3::TIMESTAMPTZ - INTERVAL '1 second'
      WHERE user_id = $1
        AND option_id = $2
+       AND discount_type = $4
        AND (end_date IS NULL OR end_date >= $3::TIMESTAMPTZ)`,
-    [userId, oid, newStartDate]
+    [userId, oid, newStartDate, dtype]
   );
-  console.log(`[autoClose] user=${userId} option_id=${oid} start=${newStartDate} → closed ${result.rowCount}건`);
+  console.log(`[autoClose] user=${userId} option_id=${oid} type=${dtype} start=${newStartDate} → closed ${result.rowCount}건`);
   return result.rowCount;
 }
 
 router.post('/fixed-discounts', requireAuth, async (req, res) => {
-  const { option_id, discount_amount, start_date, end_date } = req.body;
+  const { option_id, discount_amount, start_date, end_date, discount_type } = req.body;
   if (!option_id)                               return res.status(400).json({ error: 'option_id 필수' });
   if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
   if (!start_date)                              return res.status(400).json({ error: '시작일 필수' });
-  const oid = String(option_id);
-  console.log(`[fixed-discounts POST] user=${req.user.id} option_id=${oid} start_date=${start_date}`);
+  const oid   = String(option_id);
+  const dtype = discount_type === 'download' ? 'download' : 'instant';
+  console.log(`[fixed-discounts POST] user=${req.user.id} option_id=${oid} type=${dtype} start_date=${start_date}`);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await autoCloseActiveDiscounts(client, req.user.id, oid, start_date);
-    // ON CONFLICT DO UPDATE: start_date가 동일한 기존 레코드(DATE→TIMESTAMPTZ 마이그레이션 후 같은 UTC값)가
-    // 있을 경우 INSERT 오류로 ROLLBACK되어 autoClose가 취소되는 버그 방지.
-    // 충돌 시 기존 레코드를 새 값으로 갱신한다.
+    await autoCloseActiveDiscounts(client, req.user.id, oid, start_date, dtype);
+    // ON CONFLICT DO UPDATE: start_date+discount_type 충돌 시 갱신 (ROLLBACK 방지)
     const { rows } = await client.query(
-      `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (user_id,option_id,start_date)
+      `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date,discount_type)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id,option_id,start_date,discount_type)
        DO UPDATE SET discount_amount = EXCLUDED.discount_amount,
                      end_date        = EXCLUDED.end_date
        RETURNING *`,
-      [req.user.id, oid, discount_amount, start_date, end_date || null]
+      [req.user.id, oid, discount_amount, start_date, end_date || null, dtype]
     );
     await client.query('COMMIT');
     console.log(`[fixed-discounts POST] COMMIT → id=${rows[0]?.id}`);
@@ -1461,29 +1463,30 @@ router.post('/fixed-discounts/bulk', requireAuth, async (req, res) => {
       }
       if (!validItems.length) continue;
 
-      // 배치 내 고유 option_id별 자동 종료 처리
-      const uniqueOids = [...new Set(validItems.map(it => it.option_id))];
-      for (const oid of uniqueOids) {
-        // 해당 option_id 중 가장 빠른 새 start_date 기준으로 종료
+      // 배치 내 고유 (option_id, discount_type)별 자동 종료 처리
+      const uniqueKeys = [...new Set(validItems.map(it => `${it.option_id}||${it.discount_type || 'instant'}`))];
+      for (const key of uniqueKeys) {
+        const [oid, dtype] = key.split('||');
         const earliest = validItems
-          .filter(it => it.option_id === oid)
+          .filter(it => it.option_id === oid && (it.discount_type || 'instant') === dtype)
           .map(it => it.start_date)
           .sort()[0];
-        await autoCloseActiveDiscounts(client, req.user.id, oid, earliest);
+        await autoCloseActiveDiscounts(client, req.user.id, oid, earliest, dtype);
       }
 
       const placeholders = [];
       const params = [];
       let p = 1;
       for (const item of validItems) {
-        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4})`);
-        params.push(req.user.id, item.option_id, item.discount_amount, item.start_date, item.end_date || null);
-        p += 5;
+        const dtype = item.discount_type === 'download' ? 'download' : 'instant';
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5})`);
+        params.push(req.user.id, item.option_id, item.discount_amount, item.start_date, item.end_date || null, dtype);
+        p += 6;
       }
       const result = await client.query(
-        `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date)
+        `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date,discount_type)
          VALUES ${placeholders.join(',')}
-         ON CONFLICT (user_id,option_id,start_date) DO NOTHING
+         ON CONFLICT (user_id,option_id,start_date,discount_type) DO NOTHING
          RETURNING *`,
         params
       );
@@ -1502,15 +1505,16 @@ router.post('/fixed-discounts/bulk', requireAuth, async (req, res) => {
 });
 
 router.put('/fixed-discounts/:id', requireAuth, async (req, res) => {
-  const { option_id, discount_amount, start_date, end_date } = req.body;
+  const { option_id, discount_amount, start_date, end_date, discount_type } = req.body;
   if (!option_id)                          return res.status(400).json({ error: 'option_id 필수' });
   if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
   if (!start_date)                         return res.status(400).json({ error: '시작일 필수' });
+  const dtype = discount_type === 'download' ? 'download' : 'instant';
   try {
     const { rows } = await pool.query(
-      `UPDATE fixed_discounts SET option_id=$3,discount_amount=$4,start_date=$5,end_date=$6
+      `UPDATE fixed_discounts SET option_id=$3,discount_amount=$4,start_date=$5,end_date=$6,discount_type=$7
        WHERE id=$1 AND user_id=$2 RETURNING *`,
-      [req.params.id, req.user.id, option_id, discount_amount, start_date, end_date || null]
+      [req.params.id, req.user.id, option_id, discount_amount, start_date, end_date || null, dtype]
     );
     if (!rows.length) return res.status(404).json({ error: '항목을 찾을 수 없습니다' });
     res.json(fdRow(rows[0]));

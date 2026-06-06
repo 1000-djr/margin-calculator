@@ -1265,6 +1265,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <input type="text" id="fdOptionId" placeholder="예: 123456789" onblur="fetchFdOptionInfo()">
           <div id="fdOptionPreview" style="margin-top:4px;font-size:12px;color:var(--text-dim);min-height:16px"></div>
         </div>
+        <div class="field"><label>할인 타입</label>
+          <select id="fdType">
+            <option value="instant">즉시할인</option>
+            <option value="download">다운로드</option>
+          </select>
+        </div>
         <div class="field"><label>할인금액 (원)</label><input type="number" id="fdAmount" placeholder="0" min="0"></div>
         <div class="field"><label>적용시작일시</label><input type="datetime-local" id="fdStartDate" step="1"></div>
         <div class="field"><label>적용종료일시 <span style="font-weight:400;color:var(--text-dim)">(미입력 시 진행중)</span></label><input type="datetime-local" id="fdEndDate" step="1"></div>
@@ -1285,7 +1291,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table">
         <thead><tr>
-          <th>옵션ID</th><th>상품명</th><th>옵션명</th><th>할인금액</th><th>적용시작일시</th><th>적용종료일시</th><th>상태</th><th></th>
+          <th>옵션ID</th><th>상품명</th><th>옵션명</th><th>타입</th><th>할인금액</th><th>적용시작일시</th><th>적용종료일시</th><th>상태</th><th></th>
         </tr></thead>
         <tbody id="fdTbody"></tbody>
       </table>
@@ -5379,10 +5385,10 @@ function openAdMappingForOid(oid) {
 
 // ── 상시할인가 관리 ───────────────────────────────────────────────────────────
 function downloadFdTemplate() {
-  const headers = ['옵션ID', '할인금액', '적용시작일시(YYYY-MM-DD HH:mm:ss)', '적용종료일시(YYYY-MM-DD HH:mm:ss, 미입력시 진행중)'];
-  const example = ['123456789', '4900', '2026-05-01 00:00:00', '2026-12-31 23:59:59'];
+  const headers = ['옵션ID', '할인타입(instant/download)', '할인금액', '적용시작일시(YYYY-MM-DD HH:mm:ss)', '적용종료일시(YYYY-MM-DD HH:mm:ss, 미입력시 진행중)'];
+  const example = ['123456789', 'instant', '4900', '2026-05-01 00:00:00', '2026-12-31 23:59:59'];
   const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-  ws['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 30 }, { wch: 38 }];
+  ws['!cols'] = [{ wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 30 }, { wch: 38 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '상시할인가등록양식');
   XLSX.writeFile(wb, '상시할인가_대량등록_양식.xlsx');
@@ -5406,6 +5412,7 @@ async function handleFdBulkUpload(input) {
       return -1;
     }
     const colOpt   = findCol(['옵션ID', '옵션 ID']);
+    const colType  = findCol(['할인타입(instant/download)', '할인타입', '타입', 'discount_type']);
     const colAmt   = findCol(['할인금액', '할인 금액']);
     const colStart = findCol(['적용시작일시(YYYY-MM-DD HH:mm:ss)', '적용시작일(YYYY-MM-DD)', '적용시작일시', '적용시작일', '시작일']);
     const colEnd   = findCol(['적용종료일시(YYYY-MM-DD HH:mm:ss, 미입력시 진행중)', '적용종료일(YYYY-MM-DD, 미입력시 진행중)', '적용종료일시', '적용종료일', '종료일']);
@@ -5443,6 +5450,8 @@ async function handleFdBulkUpload(input) {
       const row = rows[i];
       if (row.every(c => String(c).trim() === '')) continue;
       const option_id       = String(colOpt >= 0 ? row[colOpt] : '').trim();
+      const typeRaw         = String(colType >= 0 ? row[colType] : '').trim().toLowerCase();
+      const discount_type   = (typeRaw === 'download' || typeRaw === '다운로드') ? 'download' : 'instant';
       const amtRaw          = colAmt >= 0 ? row[colAmt] : '';
       const discount_amount = parseFloat(String(amtRaw).replace(/,/g, '')) || 0;
       const startRaw        = colStart >= 0 ? row[colStart] : '';
@@ -5454,7 +5463,7 @@ async function handleFdBulkUpload(input) {
       const start_date = parseFdDate(startRaw);
       if (!start_date) { errorRows.push(`${i+1}행 (${option_id}): 시작일 형식 오류`); continue; }
       const end_date = (endRaw || endRaw === 0) && String(endRaw).trim() ? parseFdDate(endRaw) : null;
-      validItems.push({ option_id, discount_amount, start_date, end_date });
+      validItems.push({ option_id, discount_type, discount_amount, start_date, end_date });
     }
 
     let inserted = 0, skipped = 0;
@@ -5544,7 +5553,7 @@ function renderFixedDiscounts() {
     const msg = fdStatusFilter === 'active' ? '진행중인 상시할인가 없음'
               : fdStatusFilter === 'ended'  ? '종료된 상시할인가 없음'
               : '등록된 상시할인가 없음';
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px">${msg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px">${msg}</td></tr>`;
     return;
   }
   tbody.innerHTML = filtered.map(fd => {
@@ -5559,10 +5568,14 @@ function renderFixedDiscounts() {
       : '';
     const pName = fd.product_name ? fd.product_name.replace(/</g,'&lt;') : '<span style="color:var(--text-dim)">-</span>';
     const oName = fd.option_name  ? fd.option_name.replace(/</g,'&lt;')  : '<span style="color:var(--text-dim)">-</span>';
+    const typeBadge = fd.discount_type === 'download'
+      ? `<span style="background:#0071e3;color:#fff;border-radius:4px;padding:2px 7px;font-size:11px">다운로드</span>`
+      : `<span style="background:var(--surface3);color:var(--text-sub);border-radius:4px;padding:2px 7px;font-size:11px">즉시할인</span>`;
     return `<tr>
       <td style="font-family:var(--mono)">${fd.option_id}</td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(fd.product_name||'').replace(/"/g,'&quot;')}">${pName}</td>
       <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${(fd.option_name||'').replace(/"/g,'&quot;')}">${oName}</td>
+      <td>${typeBadge}</td>
       <td style="font-family:var(--mono);text-align:right">${(fd.discount_amount||0).toLocaleString('ko-KR')}원</td>
       <td>${fd.start_date}</td>
       <td>${endStr}</td>
@@ -5592,7 +5605,8 @@ async function saveFixedDiscount() {
   if (!option_id)           return alert('옵션ID를 입력하세요');
   if (discount_amount <= 0) return alert('할인금액을 입력하세요');
   if (!start_date)          return alert('적용시작일시를 입력하세요');
-  const payload = { option_id, discount_amount, start_date, end_date };
+  const discount_type = document.getElementById('fdType')?.value || 'instant';
+  const payload = { option_id, discount_amount, start_date, end_date, discount_type };
   if (currentUser) {
     try {
       const method = currentEditingId ? 'PUT' : 'POST';
@@ -5622,6 +5636,8 @@ function editFixedDiscount(id) {
   if (!fd) return;
   editingFdId = fd.id;
   document.getElementById('fdOptionId').value  = fd.option_id;
+  const fdTypeEl = document.getElementById('fdType');
+  if (fdTypeEl) fdTypeEl.value = fd.discount_type === 'download' ? 'download' : 'instant';
   document.getElementById('fdAmount').value    = fd.discount_amount;
   document.getElementById('fdStartDate').value = fd.start_date ? fd.start_date.slice(0, 19).replace(' ', 'T') : '';
   document.getElementById('fdEndDate').value   = fd.end_date   ? fd.end_date.slice(0, 19).replace(' ', 'T')   : '';
@@ -5690,6 +5706,8 @@ function resetFdForm() {
   document.getElementById('fdAmount').value     = '';
   document.getElementById('fdStartDate').value  = '';
   document.getElementById('fdEndDate').value    = '';
+  const fdTypeReset = document.getElementById('fdType');
+  if (fdTypeReset) fdTypeReset.value = 'instant';
   const preview = document.getElementById('fdOptionPreview');
   if (preview) preview.textContent = '';
   document.getElementById('fdFormTitle').textContent   = '새 상시할인가 추가';

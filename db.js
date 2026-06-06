@@ -523,6 +523,20 @@ async function initDB() {
     END $$;
   `);
 
+  // 상시할인가 타입 구분: discount_type 컬럼 추가 + UNIQUE 인덱스를 타입 포함으로 교체
+  await pool.query(`
+    ALTER TABLE fixed_discounts ADD COLUMN IF NOT EXISTS discount_type VARCHAR(20) DEFAULT 'instant';
+    UPDATE fixed_discounts SET discount_type = 'instant' WHERE discount_type IS NULL;
+  `);
+  // UNIQUE 인덱스를 타입 포함으로 교체 (즉시할인+다운로드 동시 등록 허용)
+  try {
+    await pool.query(`DROP INDEX IF EXISTS fixed_discounts_unique`);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS fixed_discounts_unique
+        ON fixed_discounts(user_id, option_id, start_date, discount_type)
+    `);
+  } catch(e) { console.warn('[db] fixed_discounts_unique 재생성 스킵:', e.message); }
+
   // 성능 인덱스 추가 — 각 쿼리를 개별 실행 (pg는 멀티스테이트먼트를 신뢰할 수 없음)
   const perfIndexes = [
     'CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number)',
