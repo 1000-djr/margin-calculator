@@ -1956,6 +1956,18 @@ async function loadUserData() {
         while (p.prices.length < suppliers.length) p.prices.push(0);
         while (p.prices.length > suppliers.length) p.prices.pop();
       });
+      // b2bProducts 오염 항목(옵션ID가 상품으로 들어간 것) 정리
+      const beforeLen = b2bProducts.length;
+      b2bProducts = b2bProducts.filter(p => {
+        if (p.unit === '옵션') return false;
+        if (/^\d{8,}$/.test((p.name||'').trim())) return false;
+        return true;
+      });
+      if (b2bProducts.length !== beforeLen) {
+        console.log('[b2b정리] 오염 항목', beforeLen - b2bProducts.length, '건 제거');
+        localStorage.setItem('b2bProducts', JSON.stringify(b2bProducts));
+        saveToServer('b2bProducts', b2bProducts);
+      }
     }
     if (hData && Array.isArray(hData)) history = hData;
 
@@ -2273,6 +2285,8 @@ function populateB2BProductSelect() {
   const prev = sel.value;
   sel.innerHTML = '<option value="">상품 선택…</option>';
   b2bProducts.forEach((p, i) => {
+    if (p.unit === '옵션') return;
+    if (/^\d{8,}$/.test((p.name||'').trim())) return;
     const hasPrice = p.prices.some(v => v > 0);
     if (!hasPrice) return;
     const o = document.createElement('option');
