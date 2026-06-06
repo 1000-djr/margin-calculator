@@ -1822,7 +1822,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 <div class="match-modal-backdrop" id="matchModalBackdrop">
   <div class="match-modal">
     <div class="match-modal-title">📦 이전 매칭 공급가 확인</div>
-    <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">주문서에 등장한 옵션의 공급가를 확인해 주세요</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">주문서에 등장한 옵션의 공급가를 확인해 주세요</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" onclick="confirmAllMatchReview()" style="background:#34C759;color:#fff;border:none">✓ 전체 확인</button>
+    </div>
     <div id="matchModalItems"></div>
     <div style="margin-top:16px;display:flex;justify-content:flex-end">
       <button class="btn btn-primary" onclick="closeMatchModal()">확인 완료</button>
@@ -7029,6 +7032,8 @@ function showMatchingReviewModal(optionIds, newOrders) {
   const itemsEl = document.getElementById('matchModalItems');
   if (!backdrop || !itemsEl) return;
 
+  window._matchReviewOids = optionIds.slice();
+
   itemsEl.innerHTML = optionIds.map(oid => {
     const m = optionMatchings[oid];
     const order = newOrders.find(o => o['옵션ID'] === oid);
@@ -7114,6 +7119,16 @@ async function saveMatchReview(oid) {
     const formEl = document.getElementById('matchreview_form_' + oid);
     if (formEl) formEl.style.display = 'none';
   }
+}
+
+function confirmAllMatchReview() {
+  const oids = window._matchReviewOids || [];
+  oids.forEach(oid => {
+    // 이미 변경 폼이 열려있는 항목은 건드리지 않음(사용자가 수정 중일 수 있음). 그 외 전부 '맞음' 처리
+    const formEl = document.getElementById('matchreview_form_' + oid);
+    const isFormOpen = formEl && formEl.style.display === 'block';
+    if (!isFormOpen) confirmMatchReview(oid, true);
+  });
 }
 
 function closeMatchModal() {
