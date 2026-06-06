@@ -433,6 +433,39 @@ router.get('/admin/discount-debug', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET: 특정 주문 1건에 대해 각 상시할인가의 매칭 여부를 DB가 실제 판정
+// /api/admin/discount-match?user_id=25&order_id=23719
+router.get('/admin/discount-match', requireRealAdmin, async (req, res) => {
+  try {
+    const { user_id, order_id } = req.query;
+    if (!user_id || !order_id) return res.status(400).json({ error: 'user_id, order_id 필수' });
+    const { rows } = await pool.query(`
+      WITH ord AS (
+        SELECT id, order_date, option_id,
+          CASE WHEN order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
+               THEN TO_TIMESTAMP(SUBSTRING(order_date,1,19),'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+               ELSE (TO_DATE(SUBSTRING(order_date,1,10),'YYYY-MM-DD')::TIMESTAMP + INTERVAL '23 hours 59 minutes 59 seconds') AT TIME ZONE 'Asia/Seoul'
+          END AS ord_end_ts,
+          CASE WHEN order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
+               THEN TO_TIMESTAMP(SUBSTRING(order_date,1,19),'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+               ELSE TO_DATE(SUBSTRING(order_date,1,10),'YYYY-MM-DD')::TIMESTAMP AT TIME ZONE 'Asia/Seoul'
+          END AS ord_start_ts
+        FROM orders WHERE id=$2 AND user_id=$1
+      )
+      SELECT fd.discount_type, fd.discount_amount, fd.start_date, fd.end_date,
+             ord.order_date, ord.ord_start_ts, ord.ord_end_ts,
+             (fd.start_date <= ord.ord_end_ts) AS start_ok,
+             (fd.end_date IS NULL OR fd.end_date >= ord.ord_start_ts) AS end_ok,
+             (fd.start_date <= ord.ord_end_ts AND (fd.end_date IS NULL OR fd.end_date >= ord.ord_start_ts)) AS matched
+      FROM fixed_discounts fd
+      CROSS JOIN ord
+      WHERE fd.user_id=$1 AND fd.option_id = ord.option_id
+      ORDER BY fd.discount_type, fd.start_date
+    `, [parseInt(user_id), parseInt(order_id)]);
+    res.json({ rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE: 특정 유저의 빈 날짜(report_date 공란/null) 광고데이터 일괄 삭제
 router.delete('/admin/empty-date-ads', requireRealAdmin, async (req, res) => {
   try {
