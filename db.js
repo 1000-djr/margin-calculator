@@ -413,6 +413,19 @@ async function initDB() {
     ALTER TABLE returns ADD COLUMN IF NOT EXISTS record_type VARCHAR(20) DEFAULT 'return';
   `);
 
+  // 플랫폼 확장 1단계: platform 컬럼 추가 + coupang 백필
+  // NOTE: 향후 다중플랫폼 시 UNIQUE(user_id, order_number) → UNIQUE(user_id, platform, order_number) 마이그레이션 검토 필요
+  await pool.query(`
+    ALTER TABLE orders     ADD COLUMN IF NOT EXISTS platform VARCHAR(30) DEFAULT 'coupang';
+    ALTER TABLE ad_reports ADD COLUMN IF NOT EXISTS platform VARCHAR(30) DEFAULT 'coupang';
+    ALTER TABLE coupons    ADD COLUMN IF NOT EXISTS platform VARCHAR(30) DEFAULT 'coupang';
+    ALTER TABLE returns    ADD COLUMN IF NOT EXISTS platform VARCHAR(30) DEFAULT 'coupang';
+    UPDATE orders     SET platform = 'coupang' WHERE platform IS NULL;
+    UPDATE ad_reports SET platform = 'coupang' WHERE platform IS NULL;
+    UPDATE coupons    SET platform = 'coupang' WHERE platform IS NULL;
+    UPDATE returns    SET platform = 'coupang' WHERE platform IS NULL;
+  `);
+
   // 가구매 비용 관리
   await pool.query(`
     CREATE TABLE IF NOT EXISTS fake_purchase_vendors (
@@ -517,6 +530,10 @@ async function initDB() {
     'CREATE INDEX IF NOT EXISTS idx_ad_reports_date     ON ad_reports(user_id, report_date)',
     'CREATE INDEX IF NOT EXISTS idx_returns_user_id     ON returns(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_returns_receipt     ON returns(user_id, receipt_number)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_user_platform_date ON orders(user_id, platform, order_date)',
+    'CREATE INDEX IF NOT EXISTS idx_ad_reports_user_platform  ON ad_reports(user_id, platform, report_date)',
+    'CREATE INDEX IF NOT EXISTS idx_returns_user_platform     ON returns(user_id, platform)',
+    'CREATE INDEX IF NOT EXISTS idx_coupons_user_platform     ON coupons(user_id, platform)',
   ];
   for (const sql of perfIndexes) {
     try { await pool.query(sql); } catch(e) { console.warn('[db] 인덱스 생성 스킵:', e.message); }
