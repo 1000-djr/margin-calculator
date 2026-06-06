@@ -42,14 +42,14 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
             AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
             AND fd.start_date <= (
               CASE WHEN o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
-                   THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+                   THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS')::timestamp AT TIME ZONE 'Asia/Seoul'
                    ELSE (TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')::TIMESTAMP + INTERVAL '23 hours 59 minutes 59 seconds') AT TIME ZONE 'Asia/Seoul'
               END
             )
             AND (fd.end_date IS NULL
               OR fd.end_date >= (
                 CASE WHEN o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
-                     THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+                     THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS')::timestamp AT TIME ZONE 'Asia/Seoul'
                      ELSE TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')::TIMESTAMP AT TIME ZONE 'Asia/Seoul'
                 END
               )
@@ -64,14 +64,14 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
             AND o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
             AND fd.start_date <= (
               CASE WHEN o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
-                   THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+                   THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS')::timestamp AT TIME ZONE 'Asia/Seoul'
                    ELSE (TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')::TIMESTAMP + INTERVAL '23 hours 59 minutes 59 seconds') AT TIME ZONE 'Asia/Seoul'
               END
             )
             AND (fd.end_date IS NULL
               OR fd.end_date >= (
                 CASE WHEN o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}'
-                     THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS') AT TIME ZONE 'Asia/Seoul'
+                     THEN TO_TIMESTAMP(SUBSTRING(o.order_date,1,19), 'YYYY-MM-DD HH24:MI:SS')::timestamp AT TIME ZONE 'Asia/Seoul'
                      ELSE TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')::TIMESTAMP AT TIME ZONE 'Asia/Seoul'
                 END
               )
