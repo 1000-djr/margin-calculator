@@ -1169,6 +1169,7 @@ function couponRow(r) {
     start_at:        r.start_at ? r.start_at.toISOString() : '',
     end_at:          r.end_at   ? r.end_at.toISOString()   : '',
     option_ids:      Array.isArray(r.option_ids) ? r.option_ids : (r.option_ids || []),
+    coupon_type:     r.coupon_type || 'instant',
   };
 }
 
@@ -1194,12 +1195,13 @@ router.get('/coupons', requireAuth, async (req, res) => {
 });
 
 router.post('/coupons', requireAuth, async (req, res) => {
-  const { coupon_id, name, discount_amount, start_at, end_at, option_ids } = req.body;
+  const { coupon_id, name, discount_amount, start_at, end_at, option_ids, coupon_type } = req.body;
   if (!name) return res.status(400).json({ error: 'name 필수' });
+  const validType = coupon_type === 'download' ? 'download' : 'instant';
   try {
     const { rows } = await pool.query(
-      `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids,coupon_type)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [
         req.user.id,
         coupon_id || null,
@@ -1208,6 +1210,7 @@ router.post('/coupons', requireAuth, async (req, res) => {
         start_at || null,
         end_at   || null,
         JSON.stringify(Array.isArray(option_ids) ? option_ids : []),
+        validType,
       ]
     );
     res.status(201).json(couponRow(rows[0]));
@@ -1233,7 +1236,8 @@ router.post('/coupons/bulk', requireAuth, async (req, res) => {
 
       for (const c of batch) {
         if (!c.name) { skipped++; continue; }
-        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6})`);
+        const validType = c.coupon_type === 'download' ? 'download' : 'instant';
+        placeholders.push(`($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7})`);
         params.push(
           req.user.id,
           c.coupon_id       || null,
@@ -1242,13 +1246,14 @@ router.post('/coupons/bulk', requireAuth, async (req, res) => {
           c.start_at        || null,
           c.end_at          || null,
           JSON.stringify(Array.isArray(c.option_ids) ? c.option_ids : []),
+          validType,
         );
-        p += 7;
+        p += 8;
       }
 
       if (placeholders.length > 0) {
         const result = await pool.query(
-          `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids)
+          `INSERT INTO coupons (user_id,coupon_id,name,discount_amount,start_at,end_at,option_ids,coupon_type)
            VALUES ${placeholders.join(',')}
            ON CONFLICT (user_id, coupon_id) WHERE coupon_id IS NOT NULL DO NOTHING
            RETURNING *`,
@@ -1267,12 +1272,13 @@ router.post('/coupons/bulk', requireAuth, async (req, res) => {
 });
 
 router.put('/coupons/:id', requireAuth, async (req, res) => {
-  const { coupon_id, name, discount_amount, start_at, end_at, option_ids } = req.body;
+  const { coupon_id, name, discount_amount, start_at, end_at, option_ids, coupon_type } = req.body;
   if (!name) return res.status(400).json({ error: 'name 필수' });
+  const validType = coupon_type === 'download' ? 'download' : 'instant';
   try {
     const { rows } = await pool.query(
       `UPDATE coupons
-       SET coupon_id=$3, name=$4, discount_amount=$5, start_at=$6, end_at=$7, option_ids=$8
+       SET coupon_id=$3, name=$4, discount_amount=$5, start_at=$6, end_at=$7, option_ids=$8, coupon_type=$9
        WHERE id=$1 AND user_id=$2 RETURNING *`,
       [
         req.params.id,
@@ -1283,6 +1289,7 @@ router.put('/coupons/:id', requireAuth, async (req, res) => {
         start_at || null,
         end_at   || null,
         JSON.stringify(Array.isArray(option_ids) ? option_ids : []),
+        validType,
       ]
     );
     if (!rows.length) return res.status(404).json({ error: '쿠폰을 찾을 수 없습니다' });

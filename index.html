@@ -1308,6 +1308,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div class="card-title"><span class="dot"></span><span id="couponFormTitle">새 쿠폰 추가</span></div>
       <div class="field-row">
         <div class="field" style="flex:2"><label>쿠폰명</label><input type="text" id="couponName" placeholder="예: 신규가입 할인"></div>
+        <div class="field"><label>쿠폰 타입</label>
+          <select id="couponType">
+            <option value="instant">즉시할인</option>
+            <option value="download">다운로드</option>
+          </select>
+        </div>
         <div class="field"><label>쿠폰ID (쿠팡)</label><input type="number" id="couponCouponId" placeholder="숫자 ID" min="0"></div>
         <div class="field"><label>할인금액 (원)</label><input type="number" id="couponDiscount" placeholder="0" min="0"></div>
       </div>
@@ -1341,7 +1347,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div class="card" style="padding:0;overflow:hidden">
       <table class="data-table" style="white-space:normal">
         <thead><tr>
-          <th>쿠폰명</th><th>쿠폰ID</th><th>할인금액</th><th id="couponPeriodTh" onclick="toggleCouponSort()" style="cursor:pointer;user-select:none">사용기간 <span id="couponSortIcon"></span></th><th>옵션ID 수</th><th>상태</th><th></th>
+          <th>쿠폰명</th><th>타입</th><th>쿠폰ID</th><th>할인금액</th><th id="couponPeriodTh" onclick="toggleCouponSort()" style="cursor:pointer;user-select:none">사용기간 <span id="couponSortIcon"></span></th><th>옵션ID 수</th><th>상태</th><th></th>
         </tr></thead>
         <tbody id="couponTbody"></tbody>
       </table>
@@ -5732,10 +5738,10 @@ async function setDiscountMode(mode) {
 
 // ── 쿠폰 탭 ──────────────────────────────────────────────────────────────────
 function downloadCouponTemplate() {
-  const headers = ['쿠폰명', '쿠폰ID', '할인금액(원)', '시작일시(YYYY-MM-DD HH:mm)', '종료일시(YYYY-MM-DD HH:mm)', '적용옵션ID(쉼표구분)'];
-  const example = ['신규가입 할인쿠폰', '123456789', '3000', '2026-05-01 00:00', '2026-05-31 23:59', '111111111,222222222,333333333'];
+  const headers = ['쿠폰명', '쿠폰타입(instant/download)', '쿠폰ID', '할인금액(원)', '시작일시(YYYY-MM-DD HH:mm)', '종료일시(YYYY-MM-DD HH:mm)', '적용옵션ID(쉼표구분)'];
+  const example = ['신규가입 할인쿠폰', 'instant', '123456789', '3000', '2026-05-01 00:00', '2026-05-31 23:59', '111111111,222222222,333333333'];
   const ws = XLSX.utils.aoa_to_sheet([headers, example]);
-  ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 26 }, { wch: 26 }, { wch: 40 }];
+  ws['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 26 }, { wch: 26 }, { wch: 40 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '쿠폰등록양식');
   XLSX.writeFile(wb, '쿠폰_대량등록_양식.xlsx');
@@ -5770,6 +5776,7 @@ async function handleCouponBulkUpload(input) {
       }
 
       const colName  = findCol(headers, ['쿠폰명']);
+      const colType  = findCol(headers, ['쿠폰타입(instant/download)', '쿠폰타입', '타입', 'coupon_type']);
       const colCid   = findCol(headers, ['쿠폰ID', '쿠폰 ID', 'coupon_id']);
       const colAmt   = findCol(headers, ['할인금액(원)', '할인금액()', '할인금액', '할인 금액']);
       const colStart = findCol(headers, ['시작일시(YYYY-MM-DD HH:mm)', '시작일시', '사용시작일시', '시작 일시', '유효시작일']);
@@ -5813,6 +5820,8 @@ async function handleCouponBulkUpload(input) {
         if (row.every(c => String(c).trim() === '')) continue; // 빈 행 skip
 
         const name      = String(colName  >= 0 ? row[colName]  : '').trim();
+        const typeRaw   = String(colType  >= 0 ? row[colType]  : '').trim().toLowerCase();
+        const coupon_type = (typeRaw === 'download' || typeRaw === '다운로드') ? 'download' : 'instant';
         const coupon_id = String(colCid   >= 0 ? row[colCid]   : '').trim();
         const amtRaw    = colAmt >= 0 ? row[colAmt] : '';
         const amt       = parseFloat(String(amtRaw).replace(/,/g, '')) || 0;
@@ -5837,7 +5846,7 @@ async function handleCouponBulkUpload(input) {
         }
 
         const option_ids = optsRaw ? optsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-        validItems.push({ coupon_id: coupon_id || null, name, discount_amount: amt, start_at, end_at, option_ids });
+        validItems.push({ coupon_id: coupon_id || null, name, discount_amount: amt, start_at, end_at, option_ids, coupon_type });
       }
 
       if (currentUser && validItems.length) {
@@ -5913,6 +5922,8 @@ function resetCouponForm() {
     if (el) el.value = '';
   });
   document.getElementById('couponOptionIds').value = '';
+  const couponTypeReset = document.getElementById('couponType');
+  if (couponTypeReset) couponTypeReset.value = 'instant';
   document.getElementById('couponFormTitle').textContent = '새 쿠폰 추가';
   document.getElementById('couponSaveBtn').textContent = '+ 쿠폰 추가';
   document.getElementById('couponCancelBtn').style.display = 'none';
@@ -5941,6 +5952,8 @@ function editCoupon(id) {
   };
 
   document.getElementById('couponName').value       = c.name || '';
+  const couponTypeEl = document.getElementById('couponType');
+  if (couponTypeEl) couponTypeEl.value = c.coupon_type === 'download' ? 'download' : 'instant';
   document.getElementById('couponCouponId').value   = c.coupon_id || '';
   document.getElementById('couponDiscount').value   = c.discount_amount || '';
   fillDatetime(c.start_at, 'couponStartDate', 'couponStartTime');
@@ -5972,7 +5985,8 @@ async function saveCoupon() {
   if (!discount_amount) { alert('할인금액을 입력하세요'); return; }
   if (!start_at || !end_at) { alert('사용기간을 입력하세요'); return; }
 
-  const payload = { coupon_id: coupon_id || null, name, discount_amount, start_at, end_at, option_ids };
+  const coupon_type = document.getElementById('couponType')?.value || 'instant';
+  const payload = { coupon_id: coupon_id || null, name, discount_amount, start_at, end_at, option_ids, coupon_type };
 
   if (editingCouponId !== null) {
     // 수정
@@ -6068,7 +6082,7 @@ function renderCoupons() {
   });
 
   if (!coupons.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:24px">등록된 쿠폰이 없습니다</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:24px">등록된 쿠폰이 없습니다</td></tr>`;
   } else {
     tbody.innerHTML = sorted.map(c => {
       const applied = getCouponAppliedOrders(c);
@@ -6083,6 +6097,9 @@ function renderCoupons() {
       const overlapBadge = overlapIds.has(c.id)
         ? ` <span title="동일 기간·옵션ID에 다른 쿠폰과 겹칩니다. 할인금액이 큰 쿠폰 1개만 적용됩니다." style="background:#f59e0b;color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;cursor:help">⚠️ 중복</span>`
         : '';
+      const typeBadge = c.coupon_type === 'download'
+        ? `<span style="background:#0071e3;color:#fff;border-radius:4px;padding:2px 7px;font-size:11px">다운로드</span>`
+        : `<span style="background:var(--surface3);color:var(--text-sub);border-radius:4px;padding:2px 7px;font-size:11px">즉시할인</span>`;
 
       const fmt = dt => {
         if (!dt) return '-';
@@ -6098,6 +6115,7 @@ function renderCoupons() {
 
       return `<tr>
         <td>${c.name}${overlapBadge}</td>
+        <td>${typeBadge}</td>
         <td style="font-family:var(--mono)">${c.coupon_id || '-'}</td>
         <td style="font-family:var(--mono)">${(c.discount_amount || 0).toLocaleString('ko-KR')}원</td>
         <td style="font-size:12px;font-family:var(--mono)">${period}</td>

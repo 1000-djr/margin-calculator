@@ -252,6 +252,8 @@ async function initDB() {
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS start_at        TIMESTAMPTZ;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS end_at          TIMESTAMPTZ;
     ALTER TABLE coupons ADD COLUMN IF NOT EXISTS option_ids      JSONB DEFAULT '[]';
+    ALTER TABLE coupons ADD COLUMN IF NOT EXISTS coupon_type     VARCHAR(20) DEFAULT 'instant';
+    UPDATE coupons SET coupon_type = 'instant' WHERE coupon_type IS NULL;
   `);
 
   await pool.query(`
