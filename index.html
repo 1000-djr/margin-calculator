@@ -3354,6 +3354,7 @@ function renderHistory() {
         <td>${h.sale.toLocaleString()}원</td>
         <td class="${cls}" style="font-weight:600">${h.margin.toLocaleString()}원</td>
         <td class="${cls}">${h.marginRate}%</td>
+        <td>${parseFloat(h.marginRate) > 0 ? Math.round(10000 / parseFloat(h.marginRate)) + '%' : '-'}</td>
         <td class="supplier-cell">${h.supplier || '-'}</td>
         <td class="action-cell">
           <button class="history-edit-btn" onclick="loadHistoryToCalc(${h._idx})">수정</button>
@@ -3377,6 +3378,7 @@ function renderHistory() {
             <th>판매가</th>
             <th>마진</th>
             <th>마진율</th>
+            <th>E-ROAS</th>
             <th>공급처</th>
             <th></th>
           </tr></thead>
