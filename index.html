@@ -846,6 +846,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <div class="big-value" id="r1-margin">-</div>
           <div class="big-sub" id="r1-rate">마진율 -</div>
         </div>
+        <div class="big-result" id="r1-eroas-box" style="margin-top:10px">
+          <div class="big-label">E-ROAS <span style="font-weight:400;font-size:11px;color:var(--text-dim)">(손익분기 ROAS)</span></div>
+          <div class="big-value" id="r1-eroas">-</div>
+          <div class="big-sub">1 ÷ 마진율</div>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -2491,7 +2496,7 @@ function calc1() {
   const sale = parseFloat(document.getElementById('salePrice').value) || 0;
   const fee  = getFeeRate();
   if (!sale || !cost) {
-    ['r1-sale','r1-fee','r1-after','r1-cost','r1-vat','r1-margin','r1-rate'].forEach(id => {
+    ['r1-sale','r1-fee','r1-after','r1-cost','r1-vat','r1-margin','r1-rate','r1-eroas'].forEach(id => {
       const el = document.getElementById(id); if (el) el.textContent = '-';
     });
     return;
@@ -2522,6 +2527,11 @@ function calc1() {
   }
   document.getElementById('r1-margin').textContent = fmt(margin);
   document.getElementById('r1-rate').textContent   = '마진율 ' + fmtPct(rate);
+  // E-ROAS = 1 / 마진율 (손익분기 ROAS). rate는 %값이므로 10000/rate
+  const eroasEl = document.getElementById('r1-eroas');
+  if (eroasEl) {
+    eroasEl.textContent = (rate > 0) ? Math.round(10000 / rate) + '%' : '-';
+  }
   const box = document.getElementById('r1-box'), val = document.getElementById('r1-margin');
   box.className = 'big-result'; val.className = 'big-value';
   if (margin < 0) { box.classList.add('danger'); val.classList.add('danger'); }
