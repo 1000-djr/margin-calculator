@@ -762,27 +762,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
   <div class="panel active" id="tab-calc">
-    <div class="section-label">상품 정보</div>
-    <div class="card" style="padding:16px">
-      <div class="field-row">
-        <div class="field">
-          <label>상품명</label>
-          <input type="text" id="calcProductName" placeholder="상품명을 입력하세요">
-        </div>
-        <div class="field">
-          <label>단위</label>
-          <div class="unit-combo">
-            <input type="number" id="calcUnitQty" placeholder="1" min="0.1" step="0.1">
-            <select id="calcUnitType">
-              <option value="kg">kg</option>
-              <option value="g">g</option>
-              <option value="박스">박스</option>
-              <option value="개">개</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>판매 매체</span>
       <div style="display:flex;gap:6px;align-items:center">
@@ -831,6 +810,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           </div>
         </div>
         <div class="field"><label>판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
+        <div class="field"><label>상품명 <span style="font-weight:400;font-size:11px;color:var(--text-dim)">(이력 저장용 · 선택)</span></label>
+          <input type="text" id="calcProductName" placeholder="예: 세척사과 (B2B 불러오면 자동 입력)"></div>
+        <div class="field"><label>단위</label>
+          <div class="unit-combo">
+            <input type="number" id="calcUnitQty" placeholder="1" min="0.1" step="0.1">
+            <select id="calcUnitType">
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="박스">박스</option>
+              <option value="개">개</option>
+            </select>
+          </div>
+        </div>
         <div id="exemptFeeNote" class="fee-note">면세 상품 — 실질수수료 자동 적용</div>
       </div>
       <div class="card">
