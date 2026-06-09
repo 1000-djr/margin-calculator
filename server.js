@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.get('/favicon.svg', (req, res) => res.sendFile(path.join(__dirname, 'public', 'favicon.svg')));
 app.use(express.static(path.join(__dirname)));
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
