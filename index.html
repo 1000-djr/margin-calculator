@@ -865,6 +865,21 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div class="result-row"><span class="result-label">예상 마진액</span><span class="result-value green" id="r-minMargin">-</span></div>
       </div>
     </div>
+    <div id="editModeNotice" class="edit-mode-notice" style="display:none">
+      ✏️ 이력 수정 중 — 저장하면 기존 항목을 덮어씁니다
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="saveCalcBtn" onclick="saveCalc()">💾 이력 저장</button>
+      <button class="btn btn-ghost" onclick="resetCalc()">초기화</button>
+    </div>
+    <hr class="divider" style="margin-top:28px">
+    <div class="section-label" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
+      <span>계산 이력</span>
+      <button class="btn btn-danger btn-sm" onclick="clearHistory()">이력 전체 삭제</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>
+    </div>
     <hr class="divider">
     <div class="section-label">② 2차 마진 계산 (광고비 포함)</div>
     <div class="info-box" style="margin-bottom:14px">📌 광고비를 포함한 <b>실수익</b>을 확인하는 단계입니다. 1차 마진 확인 후 토글을 켜세요.</div>
@@ -894,21 +909,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           </div>
         </div>
       </div>
-    </div>
-    <div id="editModeNotice" class="edit-mode-notice" style="display:none">
-      ✏️ 이력 수정 중 — 저장하면 기존 항목을 덮어씁니다
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="saveCalcBtn" onclick="saveCalc()">💾 이력 저장</button>
-      <button class="btn btn-ghost" onclick="resetCalc()">초기화</button>
-    </div>
-    <hr class="divider" style="margin-top:28px">
-    <div class="section-label" style="margin-top:0;display:flex;align-items:center;justify-content:space-between">
-      <span>계산 이력</span>
-      <button class="btn btn-danger btn-sm" onclick="clearHistory()">이력 전체 삭제</button>
-    </div>
-    <div class="history-list" id="historyList">
-      <div style="color:var(--text-dim);font-size:13px;text-align:center;padding:40px">저장된 이력이 없습니다</div>
     </div>
   </div>
 
