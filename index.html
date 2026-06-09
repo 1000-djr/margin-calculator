@@ -2338,6 +2338,29 @@ function onB2BProductSelect() {
     ).join('');
   }
   document.getElementById('calcProductName').value = item.name;
+  // 단위(item.unit, 예 '3kg','10kg','2.5kg') 파싱해서 수량/단위칸에 채움
+  (function fillUnit(u){
+    const qtyEl = document.getElementById('calcUnitQty');
+    const typeEl = document.getElementById('calcUnitType');
+    if (!u) { return; }
+    const m = String(u).match(/^([0-9]+(?:\.[0-9]+)?)\s*(.*?)$/);
+    if (m) {
+      if (qtyEl) qtyEl.value = m[1];
+      const t = (m[2] || '').trim();
+      if (typeEl && t) {
+        let found = Array.from(typeEl.options).some(o => o.value === t);
+        if (!found) { const opt = document.createElement('option'); opt.value = t; opt.textContent = t; typeEl.appendChild(opt); }
+        typeEl.value = t;
+      }
+    } else {
+      if (qtyEl) qtyEl.value = '';
+      if (typeEl) {
+        let found = Array.from(typeEl.options).some(o => o.value === u);
+        if (!found) { const opt = document.createElement('option'); opt.value = u; opt.textContent = u; typeEl.appendChild(opt); }
+        typeEl.value = u;
+      }
+    }
+  })(item.unit);
   b2bCostValue = 0;
   b2bSelectedSupplierIdx = -1;
   noteEl.textContent = '공급처를 선택하면 매입가가 자동 입력됩니다';
@@ -3386,7 +3409,7 @@ function renderHistory() {
     return;
   }
 
-  // 품목명+단위 기준으로 그룹핑 (같은 상품이라도 단위가 다르면 별도 행)
+  // (product + unit) 기준 하위 그룹
   const groupMap = new Map();
   history.forEach((h, i) => {
     const key = h.product + '||' + (h.unit || '');
@@ -3394,46 +3417,80 @@ function renderHistory() {
     groupMap.get(key).items.push({ ...h, _idx: i });
   });
 
-  container.innerHTML = Array.from(groupMap.values()).map(({ product: productName, unit: productUnit, items }) => {
-    const groupId = 'hg-' + (productName + '_' + productUnit).replace(/[^a-zA-Z0-9가-힣]/g, '_');
-    const rows = items.map(h => {
-      const cls = h.margin < 0 ? 'red' : parseFloat(h.marginRate) < 15 ? 'yellow' : 'green';
-      return `<tr>
-        <td class="date-cell">${h.date}</td>
-        <td>${h.cost.toLocaleString()}원</td>
-        <td>${h.sale.toLocaleString()}원</td>
-        <td class="${cls}" style="font-weight:600">${h.margin.toLocaleString()}원</td>
-        <td class="${cls}">${h.marginRate}%</td>
-        <td>${parseFloat(h.marginRate) > 0 ? Math.round(10000 / parseFloat(h.marginRate)) + '%' : '-'}</td>
-        <td class="supplier-cell">${h.supplier || '-'}</td>
-        <td class="action-cell">
-          <button class="history-edit-btn" onclick="loadHistoryToCalc(${h._idx})">수정</button>
-          <button class="history-del-btn" onclick="deleteHistory(${h._idx})">삭제</button>
-        </td>
-      </tr>`;
+  // product 기준 상위 그룹
+  const superGroups = new Map();
+  groupMap.forEach(({ product, unit, items }) => {
+    if (!superGroups.has(product)) superGroups.set(product, []);
+    superGroups.get(product).push({ unit, items });
+  });
+
+  // 단위 정렬: 숫자 추출 오름차순, 없으면 문자열
+  function parseUnitNum(u) { const m = u.match(/[\d.]+/); return m ? parseFloat(m[0]) : null; }
+
+  container.innerHTML = [...superGroups.entries()].map(([productName, unitGroups]) => {
+    unitGroups.sort((a, b) => {
+      const na = parseUnitNum(a.unit), nb = parseUnitNum(b.unit);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.unit.localeCompare(b.unit);
+    });
+
+    const superId = 'hsg-' + productName.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+    const totalCount = unitGroups.reduce((sum, { items }) => sum + items.length, 0);
+
+    const unitCards = unitGroups.map(({ unit: productUnit, items }) => {
+      const groupId = 'hg-' + (productName + '_' + productUnit).replace(/[^a-zA-Z0-9가-힣]/g, '_');
+      const rows = items.map(h => {
+        const cls = h.margin < 0 ? 'red' : parseFloat(h.marginRate) < 15 ? 'yellow' : 'green';
+        return `<tr>
+          <td class="date-cell">${h.date}</td>
+          <td>${h.cost.toLocaleString()}원</td>
+          <td>${h.sale.toLocaleString()}원</td>
+          <td class="${cls}" style="font-weight:600">${h.margin.toLocaleString()}원</td>
+          <td class="${cls}">${h.marginRate}%</td>
+          <td>${parseFloat(h.marginRate) > 0 ? Math.round(10000 / parseFloat(h.marginRate)) + '%' : '-'}</td>
+          <td class="supplier-cell">${h.supplier || '-'}</td>
+          <td class="action-cell">
+            <button class="history-edit-btn" onclick="loadHistoryToCalc(${h._idx})">수정</button>
+            <button class="history-del-btn" onclick="deleteHistory(${h._idx})">삭제</button>
+          </td>
+        </tr>`;
+      }).join('');
+
+      return `<div class="history-group" style="margin-bottom:8px;margin-left:16px">
+        <div class="history-group-header" onclick="toggleHistoryGroup('${groupId}')">
+          <span class="history-group-name">${productName}</span>
+          ${productUnit ? `<span class="history-group-unit">${productUnit}</span>` : ''}
+          <span class="history-group-count">${items.length}건</span>
+          <span class="history-group-toggle" id="${groupId}-arrow">▲</span>
+        </div>
+        <div class="history-group-body" id="${groupId}">
+          <table class="history-table">
+            <thead><tr>
+              <th>날짜</th>
+              <th>매입가</th>
+              <th>판매가</th>
+              <th>마진</th>
+              <th>마진율</th>
+              <th>E-ROAS</th>
+              <th>공급처</th>
+              <th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
     }).join('');
 
-    return `<div class="history-group">
-      <div class="history-group-header" onclick="toggleHistoryGroup('${groupId}')">
-        <span class="history-group-name">${productName}</span>
-        ${productUnit ? `<span class="history-group-unit">${productUnit}</span>` : ''}
-        <span class="history-group-count">${items.length}건</span>
-        <span class="history-group-toggle" id="${groupId}-arrow">▲</span>
+    return `<div style="margin-bottom:14px;border:2px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+      <div style="background:var(--surface2);padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)" onclick="toggleHistorySuperGroup('${superId}')">
+        <span style="flex:1;font-size:14px;font-weight:700;color:var(--text)">${productName}</span>
+        <span style="font-size:11px;font-weight:400;color:var(--text-dim)">[${unitGroups.length}개 단위 · ${totalCount}건]</span>
+        <span id="${superId}-arrow" style="font-size:11px;color:var(--text-dim)">▲</span>
       </div>
-      <div class="history-group-body" id="${groupId}">
-        <table class="history-table">
-          <thead><tr>
-            <th>날짜</th>
-            <th>매입가</th>
-            <th>판매가</th>
-            <th>마진</th>
-            <th>마진율</th>
-            <th>E-ROAS</th>
-            <th>공급처</th>
-            <th></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+      <div id="${superId}" style="padding:10px 8px 4px">
+        ${unitCards}
       </div>
     </div>`;
   }).join('');
@@ -3446,6 +3503,15 @@ function toggleHistoryGroup(groupId) {
   const isCollapsed = body.classList.contains('collapsed');
   body.classList.toggle('collapsed', !isCollapsed);
   arrow.textContent = isCollapsed ? '▲' : '▼';
+}
+
+function toggleHistorySuperGroup(superId) {
+  const body  = document.getElementById(superId);
+  const arrow = document.getElementById(superId + '-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 function loadHistoryToCalc(idx) {
