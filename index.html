@@ -6879,9 +6879,25 @@ async function renderProfit() {
 
       let groupIdx = 0;
       const htmlParts = [];
-      groupMap.forEach((rows, groupName) => {
+      groupMap.forEach((rawRows, groupName) => {
         const gIdx = groupIdx++;
         const gClass = `pg-${gIdx}`;
+
+        // 같은 옵션명끼리 합산 (옵션ID 다른 동일옵션 통합)
+        const optMap = new Map();
+        rawRows.forEach(p => {
+          const oKey = (p.option_name || '').trim();
+          if (!optMap.has(oKey)) {
+            optMap.set(oKey, { option_name: p.option_name, qty:0, revenue_after:0, commission:0, total_cost:0, actual_ad_cost:0, ad_cost_raw:0, net_profit:0, _allAdOnly:true, _anyCost:false, _hasSales:false });
+          }
+          const o = optMap.get(oKey);
+          o.qty += p.qty||0; o.revenue_after += p.revenue_after||0; o.commission += p.commission||0;
+          o.total_cost += p.total_cost||0; o.actual_ad_cost += p.actual_ad_cost||0; o.ad_cost_raw += p.ad_cost_raw||0; o.net_profit += p.net_profit||0;
+          if (!p.ad_only) o._allAdOnly = false;
+          if (p.total_cost > 0) o._anyCost = true;
+          if ((p.revenue_after||0) > 0) o._hasSales = true;
+        });
+        const rows = [...optMap.values()].map(o => ({ ...o, ad_only: o._allAdOnly && !o._hasSales, margin_rate: o.revenue_after>0 ? (o.net_profit/o.revenue_after*100) : 0 }));
 
         // 그룹 합계 계산
         let gQty = 0, gRev = 0, gComm = 0, gCost = 0, gAd = 0, gTax = 0, gNet = 0;
@@ -6895,9 +6911,9 @@ async function renderProfit() {
           gTax  += tax;
           gNet  += p.net_profit || 0;
 
-          // 다운로드용 캐시 누적 (옵션 단위)
+          // 다운로드용 캐시 누적 (합산된 옵션 단위)
           profitProductData.push({
-            등록상품명:   p.product_name,
+            등록상품명:   groupName,
             옵션명:       p.option_name,
             수량:         p.qty,
             실매출:       p.revenue_after,
