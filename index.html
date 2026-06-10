@@ -6709,11 +6709,20 @@ async function renderProfit() {
   });
 
   // 매칭 현황: PNM 자동매칭 우선, 없으면 optionMatchings 수동, 없으면 미매칭
+  // 옵션ID로만 PNM 조회 (상품명+옵션명 fallback 금지 - 옵션ID 다르면 별개 취급)
+  const findPNMByOptionId = (oid) => {
+    const s = String(oid || '').trim();
+    if (!s) return null;
+    return productNameMappings.find(m => m.option_id && String(m.option_id).trim() === s) || null;
+  };
   let matchedCount = 0, unmatchedCount = 0;
   const unmatchedItems = [], autoItems = [], manualItems = [];
   optionMap.forEach((g) => {
-    const pnm = findPNM(g.optionId, g.productName, g.optionName);
+    // g.optionIds 중 하나라도 옵션ID 기준 PNM이 있으면 자동매칭
+    const pnmId = [...g.optionIds].find(id => findPNMByOptionId(id));
+    const pnm = pnmId ? findPNMByOptionId(pnmId) : null;
     if (pnm) {
+      if (pnmId !== g.optionId) g.optionId = pnmId;
       matchedCount++;
       autoItems.push({ ...g, pnm });
     } else if ([...g.optionIds].some(id => optionMatchings[id])) {
@@ -6723,6 +6732,15 @@ async function renderProfit() {
       matchedCount++;
       manualItems.push(g);
     } else {
+      // 미매칭: 동일 상품명+옵션명의 기존 PNM이 있으면 추천용으로 첨부
+      const suggest = productNameMappings.find(m =>
+        (m.registered_name||'').trim() === (g.productName||'').trim() &&
+        (m.option_name||'').trim() === (g.optionName||'').trim() &&
+        m.b2b_name
+      ) || productNameMappings.find(m =>
+        (m.registered_name||'').trim() === (g.productName||'').trim() && m.b2b_name
+      );
+      g._suggestPNM = suggest || null;
       unmatchedCount++;
       unmatchedItems.push(g);
     }
@@ -6775,8 +6793,22 @@ async function renderProfit() {
       matchHtml += `<div style="font-size:12px;font-weight:600;color:var(--red);margin-bottom:4px">미매칭 항목 — B2B 상품 연결 필요</div>
         <table class="profit-table"><thead><tr><th>등록상품명</th><th>옵션명</th><th>옵션ID</th><th>수량</th><th>과세구분</th><th></th></tr></thead><tbody>`;
       unmatchedItems.forEach(g => {
+        const sug = g._suggestPNM;
+        const sugLabel = sug ? `${sug.b2b_name}${sug.b2b_unit ? ' ' + sug.b2b_unit : ''}` : '';
+        const sugVal = sug ? (sug.b2b_name + '\t' + (sug.b2b_unit || '')) : '';
+        const sugBtn = sug
+          ? `<button class="btn btn-ghost btn-xs" style="color:var(--blue);margin-left:4px"
+               onclick="(function(){
+                 showMatchForm('${g.optionId}',null,'${g.productName.replace(/'/g,"\\'")}','${(g.optionName||'').replace(/'/g,"\\'")}');
+                 var sel=document.getElementById('matchB2BSelect_${g.optionId}');
+                 if(sel){sel.value='${sugVal.replace(/'/g,"\\'").replace(/\t/g,'\\t')}';onMatchB2BSelect('${g.optionId}');}
+               })()">추천 적용</button>`
+          : '';
+        const sugHint = sug
+          ? `<div style="font-size:11px;color:var(--blue);margin-top:2px">추천: ${sugLabel}${sugBtn}</div>`
+          : '';
         matchHtml += `<tr>
-          <td>${g.productName}</td><td>${g.optionName}</td>
+          <td>${g.productName}${sugHint}</td><td>${g.optionName}</td>
           <td style="font-family:var(--mono)">${g.optionId||'-'}</td>
           <td style="font-family:var(--mono)">${g.qty}</td>
           <td>${taxToggleHtml(g.optionId, g.productName, g.optionName)}</td>
