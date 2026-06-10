@@ -7200,17 +7200,17 @@ async function saveOptionMatching(optionId, productName, optionName) {
       alert('저장 실패: 네트워크 오류');
       return;
     }
-    const idx = productNameMappings.findIndex(m =>
-      (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
-      (m.registered_name === productName && (m.option_name || '') === (optionName || ''))
-    );
+    // optionId가 있으면 옵션ID로만 매칭 (상품명 fallback 금지). 없을 때만 상품명+옵션명.
+    const idx = optionId
+      ? productNameMappings.findIndex(m => m.option_id && String(m.option_id) === String(optionId))
+      : productNameMappings.findIndex(m => m.registered_name === productName && (m.option_name||'') === (optionName||'') && !m.option_id);
     if (idx >= 0) productNameMappings[idx] = saved;
     else productNameMappings.push(saved);
   } else {
-    const idx = productNameMappings.findIndex(m =>
-      (optionId && m.option_id && String(m.option_id) === String(optionId)) ||
-      (m.registered_name === productName && (m.option_name || '') === (optionName || ''))
-    );
+    // optionId가 있으면 옵션ID로만 매칭 (상품명 fallback 금지). 없을 때만 상품명+옵션명.
+    const idx = optionId
+      ? productNameMappings.findIndex(m => m.option_id && String(m.option_id) === String(optionId))
+      : productNameMappings.findIndex(m => m.registered_name === productName && (m.option_name||'') === (optionName||'') && !m.option_id);
     const local = { id: Date.now(), ...entry };
     if (idx >= 0) productNameMappings[idx] = local;
     else productNameMappings.push(local);

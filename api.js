@@ -1996,13 +1996,14 @@ router.post('/product-name-mappings', requireAuth, async (req, res) => {
         );
         row = rows[0];
       } else {
+        // option_id가 새로운 경우: 새 행으로 INSERT (동일 상품명+옵션명이어도 option_id 다르면 공존)
+        // ON CONFLICT는 pnm_unique_idx (user_id, registered_name, option_name, COALESCE(option_id,'')) 기준
         const { rows } = await pool.query(
           `INSERT INTO product_name_mapping
              (user_id, registered_name, option_name, b2b_name, b2b_unit, option_id)
            VALUES ($1,$2,$3,$4,$5,$6)
-           ON CONFLICT (user_id, registered_name, option_name)
-             DO UPDATE SET b2b_name=EXCLUDED.b2b_name, b2b_unit=EXCLUDED.b2b_unit,
-                           option_id=EXCLUDED.option_id
+           ON CONFLICT (user_id, registered_name, option_name, COALESCE(option_id,''))
+             DO UPDATE SET b2b_name=EXCLUDED.b2b_name, b2b_unit=EXCLUDED.b2b_unit
            RETURNING *`,
           [req.user.id, registered_name, option_name, b2b_name, b2b_unit, oid]
         );
@@ -2012,7 +2013,7 @@ router.post('/product-name-mappings', requireAuth, async (req, res) => {
       const { rows } = await pool.query(
         `INSERT INTO product_name_mapping (user_id, registered_name, option_name, b2b_name, b2b_unit)
          VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (user_id, registered_name, option_name)
+         ON CONFLICT (user_id, registered_name, option_name, COALESCE(option_id,''))
            DO UPDATE SET b2b_name=EXCLUDED.b2b_name, b2b_unit=EXCLUDED.b2b_unit
          RETURNING *`,
         [req.user.id, registered_name, option_name, b2b_name, b2b_unit]

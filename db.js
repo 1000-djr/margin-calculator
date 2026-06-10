@@ -305,6 +305,16 @@ async function initDB() {
       END IF;
     END$$;
   `);
+  // PNM: option_id 포함 UNIQUE 인덱스로 교체
+  // 동일 상품명+옵션명이라도 option_id가 다르면 별도 매칭 공존 허용
+  try { await pool.query(`ALTER TABLE product_name_mapping DROP CONSTRAINT IF EXISTS product_name_mapping_user_id_registered_name_option_name_key`); } catch(e) { /* 없으면 무시 */ }
+  try { await pool.query(`ALTER TABLE product_name_mapping DROP CONSTRAINT IF EXISTS product_name_mapping_user_registered_option_unique`); } catch(e) { /* 없으면 무시 */ }
+  try { await pool.query(`DROP INDEX IF EXISTS pnm_unique_idx`); } catch(e) { /* 없으면 무시 */ }
+  try { await pool.query(`DROP INDEX IF EXISTS idx_pnm_option_id`); } catch(e) { /* 없으면 무시 */ }
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS pnm_unique_idx
+      ON product_name_mapping (user_id, registered_name, option_name, COALESCE(option_id,''))
+  `);
 
   // users 테이블 마이그레이션: status, is_admin, expires_at 컬럼 추가
   await pool.query(`
