@@ -1037,7 +1037,7 @@ router.get('/ad-reports/summary', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// 광고 심층분석 - 옵션별 집계
+// 광고 심층분석 - 옵션별 집계 + 손익분기 ROAS
 // GET /api/ad-analysis/options?start=YYYY-MM-DD&end=YYYY-MM-DD
 router.get('/ad-analysis/options', requireAuth, async (req, res) => {
   try {
@@ -1058,17 +1058,51 @@ router.get('/ad-analysis/options', requireAuth, async (req, res) => {
     if (end)   { params.push(end);   q += ` AND report_date <= $${params.length}`; }
     q += ' GROUP BY option_id ORDER BY SUM(ad_cost) DESC';
     const { rows } = await pool.query(q, params);
-    res.json(rows.map(r => ({
-      option_id:    r.option_id,
-      product_name: r.product_name,
-      impressions:  parseInt(r.impressions)  || 0,
-      clicks:       parseInt(r.clicks)       || 0,
-      ad_cost:      parseFloat(r.ad_cost)    || 0,
-      orders_1d:    parseInt(r.orders_1d)    || 0,
-      revenue_1d:   parseFloat(r.revenue_1d) || 0,
-      orders_14d:   parseInt(r.orders_14d)   || 0,
-      revenue_14d:  parseFloat(r.revenue_14d)|| 0,
-    })));
+
+    // calculateProfit으로 by_product 가져와 손익분기 ROAS 계산
+    const profitResult = await calculateProfit(req.user.id, start || null, end || null, 'month');
+    const byProductMap = {};
+    (profitResult.by_product || []).forEach(bp => {
+      byProductMap[bp.option_id] = bp;
+    });
+
+    res.json(rows.map(r => {
+      const bp = byProductMap[r.option_id];
+      let margin_rate = null, breakeven_roas = null, matched = false, option_name = '';
+
+      if (bp) {
+        option_name = bp.option_name || '';
+        const revBefore = bp.revenue_before || 0;
+        const revAfter  = bp.revenue_after  || 0;
+        const comm      = bp.commission     || 0;
+        const cost      = bp.total_cost     || 0;
+        const adOnly    = bp.ad_only        || false;
+        const unmatched = (cost === 0 && !adOnly);
+        if (!unmatched && revBefore > 0) {
+          // 광고비 전 순수익 = revenue_after - commission - total_cost + commission/11 (매입세액공제, 광고비분 제외)
+          const profitBeforeAd = revAfter - comm - cost + comm / 11;
+          margin_rate   = profitBeforeAd / revBefore;
+          breakeven_roas = margin_rate > 0 ? Math.round(1 / margin_rate * 100) : null;
+          matched = true;
+        }
+      }
+
+      return {
+        option_id:      r.option_id,
+        product_name:   r.product_name,
+        option_name,
+        impressions:    parseInt(r.impressions)   || 0,
+        clicks:         parseInt(r.clicks)        || 0,
+        ad_cost:        parseFloat(r.ad_cost)     || 0,
+        orders_1d:      parseInt(r.orders_1d)     || 0,
+        revenue_1d:     parseFloat(r.revenue_1d)  || 0,
+        orders_14d:     parseInt(r.orders_14d)    || 0,
+        revenue_14d:    parseFloat(r.revenue_14d) || 0,
+        margin_rate,
+        breakeven_roas,
+        matched,
+      };
+    }));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

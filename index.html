@@ -1251,8 +1251,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <div id="adAnalysisSummaryCards" class="summary-cards-4col" style="margin-bottom:8px"></div>
 
       <!-- 안내 문구 -->
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px">
-        * 쿠팡 광고 대시보드와 동일하게 부가세 제외 기준 분석 데이터입니다.
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:16px">
+        * 광고비·ROAS는 부가세 제외(순광고비) 기준이며, 광고 ROAS는 쿠팡 광고센터와 동일한 쿠폰전 매출 기준입니다. 손익분기 ROAS는 쿠폰·원가·수수료·부가세를 반영한 실제 마진 기준입니다.
       </div>
 
       <!-- 테이블 -->
@@ -1273,10 +1273,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
                 <th id="adAnH_o14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">주문(14일)</th>
                 <th id="adAnH_r14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">매출(14일)</th>
                 <th id="adAnH_roas14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">ROAS(14일)</th>
+                <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">손익분기ROAS</th>
               </tr>
             </thead>
             <tbody id="adAnalysisTableBody">
-              <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">데이터를 불러오는 중...</td></tr>
+              <tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-dim)">데이터를 불러오는 중...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1284,8 +1285,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
       <!-- 하단 범례 -->
       <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--text-dim)">
-        <span><span style="color:var(--green);font-weight:600">● 초록</span> = 평균 이상 효율 좋음</span>
-        <span><span style="color:var(--red);font-weight:600">● 빨강</span> = 평균 미만 점검 필요</span>
+        <span><span style="color:var(--green);font-weight:600">● 초록</span> = 손익분기 이상 (흑자)</span>
+        <span><span style="color:var(--red);font-weight:600">● 빨강</span> = 손익분기 미만 (적자)</span>
+        <span><span style="color:var(--text-dim);font-weight:600">● 회색</span> = 원가 미매칭</span>
       </div>
 
     </div>
@@ -9257,7 +9259,7 @@ function _adAnGetDates() {
 
 async function loadAdAnalysis() {
   const body = document.getElementById('adAnalysisTableBody');
-  if (body) body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">불러오는 중...</td></tr>';
+  if (body) body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-dim)">불러오는 중...</td></tr>';
   const { start, end } = _adAnGetDates();
   try {
     const res = await fetch(`/api/ad-analysis/options?start=${start}&end=${end}`);
@@ -9265,7 +9267,7 @@ async function loadAdAnalysis() {
     _adAnState.data = await res.json();
     _renderAdAnalysisTable();
   } catch(e) {
-    if (body) body.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--red)">${e.message}</td></tr>`;
+    if (body) body.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--red)">${e.message}</td></tr>`;
   }
 }
 
@@ -9275,7 +9277,7 @@ function _renderAdAnalysisTable() {
   const hide1d  = view === '14d';
   const hide14d = view === '1d';
 
-  // 평균 ROAS 계산 (전환기준에 따라)
+  // 평균 광고ROAS (요약카드용)
   let totalCost = 0, totalRev = 0;
   rows.forEach(r => {
     totalCost += r.ad_cost;
@@ -9286,7 +9288,6 @@ function _renderAdAnalysisTable() {
   const avgRoas = totalCost > 0 ? totalRev / totalCost * 100 : 0;
 
   // 요약 카드
-  const fmt  = n => n >= 10000 ? (n/10000).toFixed(1)+'만' : n.toLocaleString();
   const fmtW = n => Math.round(n).toLocaleString() + '원';
   const cards = document.getElementById('adAnalysisSummaryCards');
   if (cards) {
@@ -9300,7 +9301,7 @@ function _renderAdAnalysisTable() {
         <div class="summary-card-value">${fmtW(totalRev)}</div>
       </div>
       <div class="summary-card">
-        <div class="summary-card-label">평균 ROAS</div>
+        <div class="summary-card-label">평균 광고ROAS</div>
         <div class="summary-card-value ${avgRoas >= 100 ? 'green' : 'red'}">${Math.round(avgRoas)}%</div>
       </div>
       <div class="summary-card">
@@ -9316,11 +9317,11 @@ function _renderAdAnalysisTable() {
   const body = document.getElementById('adAnalysisTableBody');
   if (!body) return;
   if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">해당 기간에 데이터가 없습니다</td></tr>';
+    body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--text-dim)">해당 기간에 데이터가 없습니다</td></tr>';
     return;
   }
 
-  const tdR = (v, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${extra}">${v}</td>`;
+  const tdR  = (v, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${extra}">${v}</td>`;
   const tdRh = (v, hide, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${hide?'display:none;':''}${extra}">${v}</td>`;
 
   body.innerHTML = rows.map((r, i) => {
@@ -9328,15 +9329,33 @@ function _renderAdAnalysisTable() {
     const cpc   = r.clicks > 0 ? '₩' + Math.round(r.ad_cost / r.clicks).toLocaleString() : '-';
     const roas1 = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
     const roas14= r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
-    const roasAll = r.ad_cost > 0 ? Math.round(Math.max(r.revenue_1d, r.revenue_14d) / r.ad_cost * 100) : 0;
-    const displayRoas = view === '1d' ? roas1 : view === '14d' ? roas14 : roasAll;
-    const roasColor1  = roas1  >= avgRoas ? 'var(--green)' : 'var(--red)';
-    const roasColor14 = roas14 >= avgRoas ? 'var(--green)' : 'var(--red)';
+
+    // 손익분기 ROAS 기준 판정 (matched=false면 회색, null이면 판단불가)
+    const be = r.breakeven_roas;
+    const roasColorFn = (roas) => {
+      if (!r.matched || be === null) return 'var(--text-dim)';
+      return roas >= be ? 'var(--green)' : 'var(--red)';
+    };
+    const roasColor1  = roasColorFn(roas1);
+    const roasColor14 = roasColorFn(roas14);
+
+    // 손익분기ROAS 셀
+    let beCell;
+    if (!r.matched || be === null) {
+      beCell = `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;color:var(--text-dim)">미매칭</td>`;
+    } else {
+      beCell = `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;color:var(--text-sub)">${be}%</td>`;
+    }
+
     const border = i > 0 ? 'border-top:1px solid var(--border)' : '';
-    const name   = r.product_name || r.option_id || '-';
+    const pname  = r.product_name || '';
+    const oname  = r.option_name  || '';
+    const label  = pname || r.option_id || '-';
+    const title  = [pname, oname].filter(Boolean).join(' · ');
     return `<tr style="${border}">
-      <td style="padding:9px 14px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">
-        <div style="font-weight:500">${name}</div>
+      <td style="padding:9px 14px;font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${title}">
+        <div style="font-weight:500">${label}</div>
+        ${oname ? `<div style="font-size:11px;color:var(--text-sub)">${oname}</div>` : ''}
         <div style="font-size:10px;color:var(--text-dim);font-family:var(--mono)">${r.option_id||''}</div>
       </td>
       ${tdR(parseInt(r.impressions).toLocaleString())}
@@ -9350,6 +9369,7 @@ function _renderAdAnalysisTable() {
       ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
       ${tdRh('₩'+Math.round(r.revenue_14d).toLocaleString(), hide14d)}
       ${tdRh(roas14+'%', hide14d, `color:${roasColor14};font-weight:600`)}
+      ${beCell}
     </tr>`;
   }).join('');
 }
