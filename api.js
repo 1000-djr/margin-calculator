@@ -1037,6 +1037,41 @@ router.get('/ad-reports/summary', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// 광고 심층분석 - 옵션별 집계
+// GET /api/ad-analysis/options?start=YYYY-MM-DD&end=YYYY-MM-DD
+router.get('/ad-analysis/options', requireAuth, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const params = [req.user.id];
+    let q = `
+      SELECT option_id,
+             MAX(product_name) AS product_name,
+             SUM(impressions)  AS impressions,
+             SUM(clicks)       AS clicks,
+             SUM(ad_cost)      AS ad_cost,
+             SUM(orders_1d)    AS orders_1d,
+             SUM(revenue_1d)   AS revenue_1d,
+             SUM(orders_14d)   AS orders_14d,
+             SUM(revenue_14d)  AS revenue_14d
+      FROM ad_reports WHERE user_id=$1`;
+    if (start) { params.push(start); q += ` AND report_date >= $${params.length}`; }
+    if (end)   { params.push(end);   q += ` AND report_date <= $${params.length}`; }
+    q += ' GROUP BY option_id ORDER BY SUM(ad_cost) DESC';
+    const { rows } = await pool.query(q, params);
+    res.json(rows.map(r => ({
+      option_id:    r.option_id,
+      product_name: r.product_name,
+      impressions:  parseInt(r.impressions)  || 0,
+      clicks:       parseInt(r.clicks)       || 0,
+      ad_cost:      parseFloat(r.ad_cost)    || 0,
+      orders_1d:    parseInt(r.orders_1d)    || 0,
+      revenue_1d:   parseFloat(r.revenue_1d) || 0,
+      orders_14d:   parseInt(r.orders_14d)   || 0,
+      revenue_14d:  parseFloat(r.revenue_14d)|| 0,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/ad-reports', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date } = req.query;

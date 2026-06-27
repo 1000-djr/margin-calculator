@@ -1153,7 +1153,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <div class="panel" id="tab-ads">
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>광고 리포트 업로드</span>
-      <button class="btn btn-ghost btn-sm" onclick="openAdGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-sm" onclick="openAdAnalysis()" style="font-size:12px;padding:4px 12px;background:#0071E3;color:#fff;border:none">📊 광고 심층분석</button>
+        <button class="btn btn-ghost btn-sm" onclick="openAdGuideModal()" style="font-size:12px;padding:3px 10px">안내</button>
+      </div>
     </div>
     <div class="card">
       <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap">
@@ -1205,6 +1208,86 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </div>
         <div id="adMappingList"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ══ 광고 심층분석 전체화면 뷰 ════════════════════════════════════ -->
+  <div id="adAnalysisView" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:500;overflow-y:auto">
+    <div style="max-width:1280px;margin:0 auto;padding:20px 24px 40px">
+
+      <!-- 상단바 -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+        <button onclick="closeAdAnalysis()" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-dim);display:flex;align-items:center;gap:4px;padding:4px 0">
+          ← 광고
+        </button>
+        <div style="font-size:18px;font-weight:700;color:var(--text)">광고 심층분석</div>
+      </div>
+
+      <!-- 분석 탭 -->
+      <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0">
+        <button id="adAnalysisTabOptions" onclick="setAdAnalysisTab('options')"
+          style="padding:7px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:#0071E3;border-bottom:2px solid #0071E3;margin-bottom:-1px">옵션별</button>
+        <button onclick="" style="padding:7px 18px;border:none;background:none;cursor:not-allowed;font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;opacity:0.5">키워드별 <span style="font-size:10px">(준비중)</span></button>
+        <button onclick="" style="padding:7px 18px;border:none;background:none;cursor:not-allowed;font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;opacity:0.5">노출영역별 <span style="font-size:10px">(준비중)</span></button>
+      </div>
+
+      <!-- 기간 토글 + 전환기준 -->
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:16px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:11px;font-weight:600;color:var(--text-dim);margin-right:4px;letter-spacing:0.04em">기간</span>
+          <button id="adAnPeriodYesterday" class="quick-pill" onclick="setAdAnalysisPeriod('yesterday')">어제</button>
+          <button id="adAnPeriod7d"        class="quick-pill active" onclick="setAdAnalysisPeriod('7d')">최근 7일</button>
+          <button id="adAnPeriodMonth"     class="quick-pill" onclick="setAdAnalysisPeriod('month')">이번달</button>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:11px;font-weight:600;color:var(--text-dim);margin-right:4px;letter-spacing:0.04em">전환기준</span>
+          <button id="adViewAll" class="quick-pill active" onclick="setAdView('all')">전체</button>
+          <button id="adView1d"  class="quick-pill" onclick="setAdView('1d')">1일</button>
+          <button id="adView14d" class="quick-pill" onclick="setAdView('14d')">14일</button>
+        </div>
+      </div>
+
+      <!-- 요약 카드 -->
+      <div id="adAnalysisSummaryCards" class="summary-cards-4col" style="margin-bottom:8px"></div>
+
+      <!-- 안내 문구 -->
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:16px">
+        광고비·ROAS는 순광고비(VAT 제외) 기준입니다. 쿠팡 광고센터 수치와 동일합니다.
+      </div>
+
+      <!-- 테이블 -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="overflow-x:auto">
+          <table id="adAnalysisTable" style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+                <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:0.04em;white-space:nowrap">옵션명</th>
+                <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">노출</th>
+                <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">클릭</th>
+                <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">CTR</th>
+                <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">CPC</th>
+                <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">광고비</th>
+                <th id="adAnH_o1" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#0071E3;white-space:nowrap">주문(1일)</th>
+                <th id="adAnH_r1" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#0071E3;white-space:nowrap">매출(1일)</th>
+                <th id="adAnH_roas1" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#0071E3;white-space:nowrap">ROAS(1일)</th>
+                <th id="adAnH_o14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">주문(14일)</th>
+                <th id="adAnH_r14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">매출(14일)</th>
+                <th id="adAnH_roas14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">ROAS(14일)</th>
+              </tr>
+            </thead>
+            <tbody id="adAnalysisTableBody">
+              <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">데이터를 불러오는 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 하단 범례 -->
+      <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--text-dim)">
+        <span><span style="color:var(--green);font-weight:600">● 초록</span> = 평균 이상 효율 좋음</span>
+        <span><span style="color:var(--red);font-weight:600">● 빨강</span> = 평균 미만 점검 필요</span>
+      </div>
+
     </div>
   </div>
 
@@ -9088,6 +9171,187 @@ async function handleTrafficBulkUpload(input) {
   };
   reader.readAsArrayBuffer(file);
   input.value = '';
+}
+
+// ── 광고 심층분석 ──────────────────────────────────────────────────────────
+let _adAnState = { period: '7d', view: 'all', data: [] };
+
+function openAdAnalysis() {
+  // 모든 탭 패널 숨기기
+  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+  document.getElementById('adAnalysisView').style.display = 'block';
+  _adAnState.period = '7d';
+  _adAnState.view   = 'all';
+  _setAdPeriodUI('7d');
+  _setAdViewUI('all');
+  loadAdAnalysis();
+}
+
+function closeAdAnalysis() {
+  document.getElementById('adAnalysisView').style.display = 'none';
+  // 광고 탭 다시 표시
+  const activeTab = document.querySelector('.tab.active');
+  const panelId   = activeTab ? activeTab.dataset.tab : 'tab-ads';
+  const panel     = document.getElementById(panelId || 'tab-ads');
+  if (panel) panel.style.display = '';
+}
+
+function setAdAnalysisPeriod(p) {
+  _adAnState.period = p;
+  _setAdPeriodUI(p);
+  loadAdAnalysis();
+}
+
+function setAdView(v) {
+  _adAnState.view = v;
+  _setAdViewUI(v);
+  _renderAdAnalysisTable();
+}
+
+function setAdAnalysisTab(tab) {
+  // 현재는 'options'만 동작
+  if (tab !== 'options') return;
+}
+
+function _setAdPeriodUI(p) {
+  ['Yesterday','7d','Month'].forEach(k => {
+    document.getElementById('adAnPeriod' + k)?.classList.toggle('active', k.toLowerCase() === p || (k === 'Yesterday' && p === 'yesterday'));
+  });
+  // fix: id names match
+  document.getElementById('adAnPeriodYesterday')?.classList.toggle('active', p === 'yesterday');
+  document.getElementById('adAnPeriod7d')?.classList.toggle('active', p === '7d');
+  document.getElementById('adAnPeriodMonth')?.classList.toggle('active', p === 'month');
+}
+
+function _setAdViewUI(v) {
+  document.getElementById('adViewAll')?.classList.toggle('active', v === 'all');
+  document.getElementById('adView1d') ?.classList.toggle('active', v === '1d');
+  document.getElementById('adView14d')?.classList.toggle('active', v === '14d');
+  // 컬럼 가시성 조절
+  const hide1d  = v === '14d';
+  const hide14d = v === '1d';
+  ['adAnH_o1','adAnH_r1','adAnH_roas1'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hide1d ? 'none' : '';
+  });
+  ['adAnH_o14','adAnH_r14','adAnH_roas14'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hide14d ? 'none' : '';
+  });
+}
+
+function _adAnGetDates() {
+  const fmt = d => d.toISOString().slice(0, 10);
+  const today = new Date();
+  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  const p = _adAnState.period;
+  if (p === 'yesterday') return { start: fmt(yesterday), end: fmt(yesterday) };
+  if (p === '7d') {
+    const s = new Date(today); s.setDate(today.getDate() - 7);
+    return { start: fmt(s), end: fmt(yesterday) };
+  }
+  // month
+  const s = new Date(today.getFullYear(), today.getMonth(), 1);
+  return { start: fmt(s), end: fmt(today) };
+}
+
+async function loadAdAnalysis() {
+  const body = document.getElementById('adAnalysisTableBody');
+  if (body) body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">불러오는 중...</td></tr>';
+  const { start, end } = _adAnGetDates();
+  try {
+    const res = await fetch(`/api/ad-analysis/options?start=${start}&end=${end}`);
+    if (!res.ok) throw new Error(await res.text());
+    _adAnState.data = await res.json();
+    _renderAdAnalysisTable();
+  } catch(e) {
+    if (body) body.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+function _renderAdAnalysisTable() {
+  const rows = _adAnState.data;
+  const view = _adAnState.view;
+  const hide1d  = view === '14d';
+  const hide14d = view === '1d';
+
+  // 평균 ROAS 계산 (전환기준에 따라)
+  let totalCost = 0, totalRev = 0;
+  rows.forEach(r => {
+    totalCost += r.ad_cost;
+    if (view === '1d')       totalRev += r.revenue_1d;
+    else if (view === '14d') totalRev += r.revenue_14d;
+    else                     totalRev += Math.max(r.revenue_1d, r.revenue_14d);
+  });
+  const avgRoas = totalCost > 0 ? totalRev / totalCost * 100 : 0;
+
+  // 요약 카드
+  const fmt  = n => n >= 10000 ? (n/10000).toFixed(1)+'만' : n.toLocaleString();
+  const fmtW = n => Math.round(n).toLocaleString() + '원';
+  const cards = document.getElementById('adAnalysisSummaryCards');
+  if (cards) {
+    cards.innerHTML = `
+      <div class="summary-card">
+        <div class="summary-card-label">총 광고비</div>
+        <div class="summary-card-value">${fmtW(totalCost)}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">광고매출 (${view==='all'?'최대':view})</div>
+        <div class="summary-card-value">${fmtW(totalRev)}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">평균 ROAS</div>
+        <div class="summary-card-value ${avgRoas >= 100 ? 'green' : 'red'}">${Math.round(avgRoas)}%</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">옵션 수</div>
+        <div class="summary-card-value">${rows.length.toLocaleString()}</div>
+      </div>
+    `;
+  }
+
+  // 컬럼 가시성
+  _setAdViewUI(view);
+
+  const body = document.getElementById('adAnalysisTableBody');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">해당 기간에 데이터가 없습니다</td></tr>';
+    return;
+  }
+
+  const tdR = (v, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${extra}">${v}</td>`;
+  const tdRh = (v, hide, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${hide?'display:none;':''}${extra}">${v}</td>`;
+
+  body.innerHTML = rows.map((r, i) => {
+    const ctr   = r.impressions > 0 ? (r.clicks / r.impressions * 100).toFixed(2) + '%' : '-';
+    const cpc   = r.clicks > 0 ? '₩' + Math.round(r.ad_cost / r.clicks).toLocaleString() : '-';
+    const roas1 = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
+    const roas14= r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
+    const roasAll = r.ad_cost > 0 ? Math.round(Math.max(r.revenue_1d, r.revenue_14d) / r.ad_cost * 100) : 0;
+    const displayRoas = view === '1d' ? roas1 : view === '14d' ? roas14 : roasAll;
+    const roasColor1  = roas1  >= avgRoas ? 'var(--green)' : 'var(--red)';
+    const roasColor14 = roas14 >= avgRoas ? 'var(--green)' : 'var(--red)';
+    const border = i > 0 ? 'border-top:1px solid var(--border)' : '';
+    const name   = r.product_name || r.option_id || '-';
+    return `<tr style="${border}">
+      <td style="padding:9px 14px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${name}">
+        <div style="font-weight:500">${name}</div>
+        <div style="font-size:10px;color:var(--text-dim);font-family:var(--mono)">${r.option_id||''}</div>
+      </td>
+      ${tdR(parseInt(r.impressions).toLocaleString())}
+      ${tdR(parseInt(r.clicks).toLocaleString())}
+      ${tdR(ctr)}
+      ${tdR(cpc)}
+      ${tdR('₩'+Math.round(r.ad_cost).toLocaleString())}
+      ${tdRh(r.orders_1d.toLocaleString(), hide1d)}
+      ${tdRh('₩'+Math.round(r.revenue_1d).toLocaleString(), hide1d)}
+      ${tdRh(roas1+'%', hide1d, `color:${roasColor1};font-weight:600`)}
+      ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
+      ${tdRh('₩'+Math.round(r.revenue_14d).toLocaleString(), hide14d)}
+      ${tdRh(roas14+'%', hide14d, `color:${roasColor14};font-weight:600`)}
+    </tr>`;
+  }).join('');
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
