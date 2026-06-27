@@ -1284,10 +1284,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
 
       <!-- 하단 범례 -->
-      <div style="display:flex;gap:16px;margin-top:12px;font-size:11px;color:var(--text-dim)">
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:11px;color:var(--text-dim)">
         <span><span style="color:var(--green);font-weight:600">● 초록</span> = 손익분기 이상 (흑자)</span>
         <span><span style="color:var(--red);font-weight:600">● 빨강</span> = 손익분기 미만 (적자)</span>
-        <span><span style="color:var(--text-dim);font-weight:600">● 회색</span> = 원가 미매칭</span>
+        <span><span style="color:var(--red);font-weight:600">판매없음</span> = 해당 기간 광고비만 발생</span>
+        <span><span style="color:var(--warning,#FF9500);font-weight:600">원가매칭 →</span> = 수익분석에서 원가 등록 필요</span>
       </div>
 
     </div>
@@ -9215,6 +9216,17 @@ function setAdAnalysisTab(tab) {
   if (tab !== 'options') return;
 }
 
+function goToCostMatching() {
+  closeAdAnalysis();
+  // 수익분석 탭 버튼 찾아서 전환
+  const profitTab = Array.from(document.querySelectorAll('.tab')).find(el => el.textContent.includes('수익분석'));
+  if (profitTab) switchTab('profit', profitTab);
+  setTimeout(() => {
+    const el = document.getElementById('profitMatchSection');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
+}
+
 function _setAdPeriodUI(p) {
   ['Yesterday','7d','Month'].forEach(k => {
     document.getElementById('adAnPeriod' + k)?.classList.toggle('active', k.toLowerCase() === p || (k === 'Yesterday' && p === 'yesterday'));
@@ -9336,21 +9348,23 @@ function _renderAdAnalysisTable() {
     const roas1 = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
     const roas14= r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
 
-    // 손익분기 ROAS 기준 판정 (matched=false면 회색, null이면 판단불가)
+    // 손익분기 ROAS 기준 판정
     const be = r.breakeven_roas;
     const roasColorFn = (roas) => {
-      if (!r.matched || be === null) return 'var(--text-dim)';
+      if (r.status !== 'ok' || be === null) return 'var(--text-dim)';
       return roas >= be ? 'var(--green)' : 'var(--red)';
     };
     const roasColor1  = roasColorFn(roas1);
     const roasColor14 = roasColorFn(roas14);
 
-    // 손익분기ROAS 셀
+    // 손익분기ROAS 셀 — status별 표시
     let beCell;
-    if (!r.matched || be === null) {
-      beCell = `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;color:var(--text-dim)">미매칭</td>`;
-    } else {
+    if (r.status === 'ok') {
       beCell = `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;color:var(--text-sub)">${be}%</td>`;
+    } else if (r.status === 'no_sales') {
+      beCell = `<td style="text-align:right;padding:9px 10px;font-size:11px;color:var(--red)">판매없음</td>`;
+    } else {
+      beCell = `<td style="text-align:right;padding:9px 10px;font-size:11px"><button onclick="goToCostMatching()" style="font-size:11px;padding:2px 8px;background:var(--bg-warning,#FFF4E5);color:var(--warning,#FF9500);border:1px solid var(--warning,#FF9500);border-radius:6px;cursor:pointer">원가매칭 →</button></td>`;
     }
 
     const border = i > 0 ? 'border-top:1px solid var(--border)' : '';

@@ -1069,6 +1069,7 @@ router.get('/ad-analysis/options', requireAuth, async (req, res) => {
     res.json(rows.map(r => {
       const bp = byProductMap[r.option_id];
       let margin_rate = null, breakeven_roas = null, matched = false, option_name = '';
+      let status = 'no_sales'; // 기본: 판매 없음
 
       if (bp) {
         option_name = bp.option_name || '';
@@ -1077,15 +1078,19 @@ router.get('/ad-analysis/options', requireAuth, async (req, res) => {
         const comm      = bp.commission     || 0;
         const cost      = bp.total_cost     || 0;
         const adOnly    = bp.ad_only        || false;
-        const unmatched = (cost === 0 && !adOnly);
-        if (!unmatched && revBefore > 0) {
+        if (revBefore <= 0) {
+          status = 'no_sales';
+        } else if (cost === 0 && !adOnly) {
+          status = 'no_cost';
+        } else {
           // 광고비 전 순수익 = revenue_after - commission - total_cost + commission/11 (매입세액공제, 광고비분 제외)
           const profitBeforeAd = revAfter - comm - cost + comm / 11;
-          margin_rate   = profitBeforeAd / revBefore;
+          margin_rate    = profitBeforeAd / revBefore;
           breakeven_roas = margin_rate > 0 ? Math.round(1 / margin_rate * 100) : null;
           matched = true;
+          status  = 'ok';
         }
-      }
+      } // bp 없으면 status = 'no_sales' (by_product에 아예 없음 = 판매 없음)
 
       return {
         option_id:      r.option_id,
@@ -1101,6 +1106,7 @@ router.get('/ad-analysis/options', requireAuth, async (req, res) => {
         margin_rate,
         breakeven_roas,
         matched,
+        status,
       };
     }));
   } catch(e) { res.status(500).json({ error: e.message }); }
