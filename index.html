@@ -9243,18 +9243,24 @@ function _setAdViewUI(v) {
 }
 
 function _adAnGetDates() {
-  const fmt = d => d.toISOString().slice(0, 10);
-  const today = new Date();
-  const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+  // KST 기준 날짜 (UTC+9)
+  const now = new Date();
+  const todayKst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const y = todayKst.getUTCFullYear(), mo = todayKst.getUTCMonth(), d = todayKst.getUTCDate();
+  const pad = n => String(n).padStart(2, '0');
+  const fmtParts = (yy, mm, dd) => `${yy}-${pad(mm + 1)}-${pad(dd)}`;
+  const todayStr = fmtParts(y, mo, d);
+  const yest = new Date(Date.UTC(y, mo, d - 1));
+  const yestStr = fmtParts(yest.getUTCFullYear(), yest.getUTCMonth(), yest.getUTCDate());
   const p = _adAnState.period;
-  if (p === 'yesterday') return { start: fmt(yesterday), end: fmt(yesterday) };
+  if (p === 'yesterday') return { start: yestStr, end: yestStr };
   if (p === '7d') {
-    const s = new Date(today); s.setDate(today.getDate() - 7);
-    return { start: fmt(s), end: fmt(yesterday) };
+    const s = new Date(Date.UTC(y, mo, d - 6)); // 오늘 포함 7일
+    const sStr = fmtParts(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate());
+    return { start: sStr, end: todayStr };
   }
-  // month
-  const s = new Date(today.getFullYear(), today.getMonth(), 1);
-  return { start: fmt(s), end: fmt(today) };
+  // 이번달: 1일 ~ 오늘
+  return { start: fmtParts(y, mo, 1), end: todayStr };
 }
 
 async function loadAdAnalysis() {
@@ -9326,7 +9332,7 @@ function _renderAdAnalysisTable() {
 
   body.innerHTML = rows.map((r, i) => {
     const ctr   = r.impressions > 0 ? (r.clicks / r.impressions * 100).toFixed(2) + '%' : '-';
-    const cpc   = r.clicks > 0 ? '₩' + Math.round(r.ad_cost / r.clicks).toLocaleString() : '-';
+    const cpc   = r.clicks > 0 ? Math.round(r.ad_cost / r.clicks).toLocaleString() + '원' : '-';
     const roas1 = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
     const roas14= r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
 
@@ -9362,12 +9368,12 @@ function _renderAdAnalysisTable() {
       ${tdR(parseInt(r.clicks).toLocaleString())}
       ${tdR(ctr)}
       ${tdR(cpc)}
-      ${tdR('₩'+Math.round(r.ad_cost).toLocaleString())}
+      ${tdR(Math.round(r.ad_cost).toLocaleString()+'원')}
       ${tdRh(r.orders_1d.toLocaleString(), hide1d)}
-      ${tdRh('₩'+Math.round(r.revenue_1d).toLocaleString(), hide1d)}
+      ${tdRh(Math.round(r.revenue_1d).toLocaleString()+'원', hide1d)}
       ${tdRh(roas1+'%', hide1d, `color:${roasColor1};font-weight:600`)}
       ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
-      ${tdRh('₩'+Math.round(r.revenue_14d).toLocaleString(), hide14d)}
+      ${tdRh(Math.round(r.revenue_14d).toLocaleString()+'원', hide14d)}
       ${tdRh(roas14+'%', hide14d, `color:${roasColor14};font-weight:600`)}
       ${beCell}
     </tr>`;
