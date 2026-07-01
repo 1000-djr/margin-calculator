@@ -1229,7 +1229,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           style="padding:7px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:#0071E3;border-bottom:2px solid #0071E3;margin-bottom:-1px">옵션별</button>
         <button id="adAnalysisTabKeywords" onclick="setAdAnalysisTab('keywords')"
           style="padding:7px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px">키워드별</button>
-        <button onclick="" style="padding:7px 18px;border:none;background:none;cursor:not-allowed;font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;opacity:0.5">노출영역별 <span style="font-size:10px">(준비중)</span></button>
+        <button id="adAnalysisTabPlacements" onclick="setAdAnalysisTab('placements')"
+          style="padding:7px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:400;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px">노출영역별</button>
       </div>
 
       <!-- 기간 토글 + 전환기준 -->
@@ -1355,6 +1356,46 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </div>
 
       </div><!-- /adTabKeywords -->
+
+      <!-- ── 노출영역별 탭 콘텐츠 ──────────────────────────────────────────── -->
+      <div id="adTabPlacements" style="display:none">
+
+        <!-- 설명 박스 -->
+        <div style="background:var(--surface2);border-radius:10px;padding:14px 18px;margin-bottom:16px;font-size:12.5px;color:var(--text-sub)">
+          <b style="color:var(--text)">노출영역</b> · 검색은 키워드 검색으로 노출(구매의도 높음), 비검색은 상품추천 등, 리타겟팅은 쿠팡 외부 재노출. 광고비가 어디 쓰이고 어디가 효율 좋은지 비교하세요.
+        </div>
+
+        <!-- 영역별 카드 그리드 -->
+        <div id="adPlacementCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px"></div>
+
+        <!-- 상세 테이블 -->
+        <div class="card" style="padding:0;overflow:hidden">
+          <div style="overflow-x:auto">
+            <table id="adPlTable" style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead>
+                <tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+                  <th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:0.04em;white-space:nowrap">노출영역</th>
+                  <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">노출</th>
+                  <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">클릭</th>
+                  <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">CTR</th>
+                  <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">CPC</th>
+                  <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">광고비</th>
+                  <th style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:var(--text-dim);white-space:nowrap">비중</th>
+                  <th id="adPlH_o1"    style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#0071E3;white-space:nowrap">주문(1일)</th>
+                  <th id="adPlH_r1"    style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#0071E3;white-space:nowrap">매출(1일)</th>
+                  <th id="adPlH_roas1" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#0071E3;white-space:nowrap">ROAS(1일)</th>
+                  <th id="adPlH_o14"   style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">주문(14일)</th>
+                  <th id="adPlH_roas14" style="text-align:right;padding:10px 10px;font-size:11px;font-weight:600;color:#7c3aed;white-space:nowrap">ROAS(14일)</th>
+                </tr>
+              </thead>
+              <tbody id="adPlTableBody">
+                <tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">데이터를 불러오는 중...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /adTabPlacements -->
 
     </div>
   </div>
@@ -9242,7 +9283,7 @@ async function handleTrafficBulkUpload(input) {
 }
 
 // ── 광고 심층분석 ──────────────────────────────────────────────────────────
-let _adAnState = { period: '7d', view: 'all', tab: 'options', data: [], kwData: [], kwFilter: 'all' };
+let _adAnState = { period: '7d', view: 'all', tab: 'options', data: [], kwData: [], kwFilter: 'all', plData: [] };
 
 function openAdAnalysis() {
   // 모든 탭 패널 숨기기
@@ -9269,34 +9310,50 @@ function closeAdAnalysis() {
 function setAdAnalysisPeriod(p) {
   _adAnState.period = p;
   _setAdPeriodUI(p);
-  if (_adAnState.tab === 'keywords') loadAdKeywords();
+  if (_adAnState.tab === 'keywords')   loadAdKeywords();
+  else if (_adAnState.tab === 'placements') loadAdPlacements();
   else loadAdAnalysis();
 }
 
 function setAdView(v) {
   _adAnState.view = v;
   _setAdViewUI(v);
-  if (_adAnState.tab === 'keywords') renderAdKeywords();
+  if (_adAnState.tab === 'keywords')   renderAdKeywords();
+  else if (_adAnState.tab === 'placements') renderAdPlacements();
   else _renderAdAnalysisTable();
 }
 
 function setAdAnalysisTab(tab) {
   _adAnState.tab = tab;
   _setAdTabUI(tab);
-  if (tab === 'keywords') loadAdKeywords();
+  if (tab === 'keywords')   loadAdKeywords();
+  else if (tab === 'placements') loadAdPlacements();
   else loadAdAnalysis();
 }
 
 function _setAdTabUI(tab) {
-  const optBtn = document.getElementById('adAnalysisTabOptions');
-  const kwBtn  = document.getElementById('adAnalysisTabKeywords');
-  const optDiv = document.getElementById('adTabOptions');
-  const kwDiv  = document.getElementById('adTabKeywords');
-  const isKw   = tab === 'keywords';
-  if (optBtn) { optBtn.style.color = isKw ? 'var(--text-dim)' : '#0071E3'; optBtn.style.borderBottomColor = isKw ? 'transparent' : '#0071E3'; optBtn.style.fontWeight = isKw ? '400' : '600'; }
-  if (kwBtn)  { kwBtn.style.color  = isKw ? '#0071E3' : 'var(--text-dim)'; kwBtn.style.borderBottomColor  = isKw ? '#0071E3' : 'transparent'; kwBtn.style.fontWeight  = isKw ? '600' : '400'; }
-  if (optDiv) optDiv.style.display = isKw ? 'none' : '';
-  if (kwDiv)  kwDiv.style.display  = isKw ? '' : 'none';
+  const tabs = [
+    { id: 'adAnalysisTabOptions',    key: 'options' },
+    { id: 'adAnalysisTabKeywords',   key: 'keywords' },
+    { id: 'adAnalysisTabPlacements', key: 'placements' },
+  ];
+  const divs = [
+    { id: 'adTabOptions',    key: 'options' },
+    { id: 'adTabKeywords',   key: 'keywords' },
+    { id: 'adTabPlacements', key: 'placements' },
+  ];
+  tabs.forEach(({ id, key }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const active = key === tab;
+    el.style.color            = active ? '#0071E3' : 'var(--text-dim)';
+    el.style.borderBottomColor = active ? '#0071E3' : 'transparent';
+    el.style.fontWeight       = active ? '600' : '400';
+  });
+  divs.forEach(({ id, key }) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = key === tab ? '' : 'none';
+  });
 }
 
 function goToCostMatching() {
@@ -9341,6 +9398,15 @@ function _setAdViewUI(v) {
     if (el) el.style.display = hide1d ? 'none' : '';
   });
   ['adKwH_o14','adKwH_roas14'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hide14d ? 'none' : '';
+  });
+  // 노출영역별 컬럼 가시성
+  ['adPlH_o1','adPlH_r1','adPlH_roas1'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = hide1d ? 'none' : '';
+  });
+  ['adPlH_o14','adPlH_roas14'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = hide14d ? 'none' : '';
   });
@@ -9616,6 +9682,112 @@ function renderAdKeywords() {
       ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
       ${tdRh(roas14+'%', hide14d, `color:${roas14>=avgRoas?'var(--green)':'var(--red)'};font-weight:600`)}
       <td style="text-align:center;padding:9px 10px">${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── 광고 심층분석 - 노출영역별 ──────────────────────────────────────────────
+function _plColor(name) {
+  if (!name) return '#8E8E93';
+  if (name.includes('비검색')) return '#5856D6';
+  if (name.includes('검색'))  return '#0071E3';
+  if (name.includes('리타겟')) return '#FF9500';
+  return '#8E8E93';
+}
+
+async function loadAdPlacements() {
+  const body = document.getElementById('adPlTableBody');
+  if (body) body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">불러오는 중...</td></tr>';
+  const cards = document.getElementById('adPlacementCards');
+  if (cards) cards.innerHTML = '';
+  const { start, end } = _adAnGetDates();
+  try {
+    const res = await fetch(`/api/ad-analysis/placements?start=${start}&end=${end}`);
+    if (!res.ok) throw new Error(await res.text());
+    _adAnState.plData = await res.json();
+    renderAdPlacements();
+  } catch(e) {
+    if (body) body.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--red)">${e.message}</td></tr>`;
+  }
+}
+
+function renderAdPlacements() {
+  const rows = _adAnState.plData;
+  const view = _adAnState.view;
+
+  const totalCost = rows.reduce((s, r) => s + r.ad_cost, 0);
+  const fmtW = n => Math.round(n).toLocaleString() + '원';
+
+  // 컬럼 가시성
+  _setAdViewUI(view);
+
+  // 영역별 카드
+  const cardsEl = document.getElementById('adPlacementCards');
+  if (cardsEl) {
+    if (!rows.length) {
+      cardsEl.innerHTML = '<div style="color:var(--text-dim);font-size:13px;grid-column:1/-1">해당 기간에 데이터가 없습니다</div>';
+    } else {
+      cardsEl.innerHTML = rows.map(r => {
+        const color   = _plColor(r.placement);
+        const share   = totalCost > 0 ? r.ad_cost / totalCost * 100 : 0;
+        const rev     = view === '14d' ? r.revenue_14d : r.revenue_1d;
+        const roas    = r.ad_cost > 0 ? Math.round(rev / r.ad_cost * 100) : 0;
+        const roasClr = roas >= 100 ? 'var(--green)' : 'var(--red)';
+        return `
+          <div class="card" style="padding:14px 16px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+              <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
+              <span style="font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.placement}">${r.placement}</span>
+            </div>
+            <div style="font-size:18px;font-weight:700;font-family:var(--mono);margin-bottom:2px">${fmtW(r.ad_cost)}</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">비중 ${share.toFixed(1)}%</div>
+            <div style="font-size:13px;font-weight:600;color:${roasClr};font-family:var(--mono);margin-bottom:8px">ROAS ${roas}%</div>
+            <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+              <div style="height:100%;width:${Math.min(share,100)}%;background:${color};border-radius:2px"></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  // 테이블
+  const body = document.getElementById('adPlTableBody');
+  if (!body) return;
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">해당 기간에 데이터가 없습니다</td></tr>';
+    return;
+  }
+
+  const hide1d  = view === '14d';
+  const hide14d = view === '1d';
+  const tdR  = (v, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${extra}">${v}</td>`;
+  const tdRh = (v, hide, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${hide?'display:none;':''}${extra}">${v}</td>`;
+
+  body.innerHTML = rows.map((r, i) => {
+    const color  = _plColor(r.placement);
+    const share  = totalCost > 0 ? (r.ad_cost / totalCost * 100).toFixed(1) + '%' : '-';
+    const ctr    = r.impressions > 0 ? (r.clicks / r.impressions * 100).toFixed(2) + '%' : '-';
+    const cpc    = r.clicks > 0 ? Math.round(r.ad_cost / r.clicks).toLocaleString() + '원' : '-';
+    const roas1  = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
+    const roas14 = r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
+    const roasClr1  = roas1  >= 100 ? 'var(--green)' : 'var(--red)';
+    const roasClr14 = roas14 >= 100 ? 'var(--green)' : 'var(--red)';
+    const border = i > 0 ? 'border-top:1px solid var(--border)' : '';
+    return `<tr style="${border}">
+      <td style="padding:9px 14px;font-size:12px;font-weight:500;white-space:nowrap">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle"></span>${r.placement}
+      </td>
+      ${tdR(parseInt(r.impressions).toLocaleString())}
+      ${tdR(parseInt(r.clicks).toLocaleString())}
+      ${tdR(ctr)}
+      ${tdR(cpc)}
+      ${tdR(fmtW(r.ad_cost))}
+      ${tdR(share)}
+      ${tdRh(r.orders_1d.toLocaleString(), hide1d)}
+      ${tdRh(fmtW(r.revenue_1d), hide1d)}
+      ${tdRh(roas1+'%', hide1d, `color:${roasClr1};font-weight:600`)}
+      ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
+      ${tdRh(roas14+'%', hide14d, `color:${roasClr14};font-weight:600`)}
     </tr>`;
   }).join('');
 }
