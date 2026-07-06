@@ -1322,11 +1322,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div id="adKwSummaryCards" class="summary-cards-4col" style="margin-bottom:12px"></div>
 
         <!-- 필터 버튼 -->
-        <div style="display:flex;gap:6px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">
           <button id="adKwFilterAll"    class="quick-pill active" onclick="setAdKwFilter('all')">전체</button>
           <button id="adKwFilterEx"     class="quick-pill" onclick="setAdKwFilter('ex')">제외후보만</button>
           <button id="adKwFilterTg"     class="quick-pill" onclick="setAdKwFilter('tg')">타겟후보만</button>
           <button id="adKwFilterNoConv" class="quick-pill" onclick="setAdKwFilter('noconv')">전환 0건만</button>
+          <button class="btn btn-ghost btn-sm" onclick="downloadAdKeywords()" style="font-size:12px;padding:4px 10px;margin-left:auto">📥 엑셀 다운로드</button>
         </div>
 
         <!-- 테이블 -->
@@ -9728,6 +9729,66 @@ function toggleAdKwCampaign(cid) {
   const isHidden = rows.length > 0 && rows[0].style.display === 'none';
   rows.forEach(r => r.style.display = isHidden ? '' : 'none');
   if (arrow) arrow.style.transform = isHidden ? '' : 'rotate(-90deg)';
+}
+
+function downloadAdKeywords() {
+  const rows = _adAnState.kwData || [];
+  if (!rows.length) { alert('먼저 데이터를 불러와주세요.'); return; }
+  const view = _adAnState.view;
+  const threshold = parseInt(document.getElementById('adKwThreshold')?.value) || 15;
+  const filter = _adAnState.kwFilter || 'all';
+
+  let totalCost = 0, totalRev = 0;
+  rows.forEach(r => { totalCost += r.ad_cost; totalRev += (view === '14d' ? r.revenue_14d : r.revenue_1d); });
+  const avgRoas = totalCost > 0 ? totalRev / totalCost * 100 : 0;
+
+  const judge = r => {
+    const orders = view === '14d' ? r.orders_14d : r.orders_1d;
+    const rev    = view === '14d' ? r.revenue_14d : r.revenue_1d;
+    const roas   = r.ad_cost > 0 ? rev / r.ad_cost * 100 : 0;
+    if (orders === 0 && r.clicks >= threshold) return 'ex';
+    if (orders > 0  && roas >= avgRoas)        return 'tg';
+    return '';
+  };
+
+  let list = rows.map(r => ({ ...r, _v: judge(r) }));
+  if (filter === 'ex')     list = list.filter(r => r._v === 'ex');
+  else if (filter === 'tg')     list = list.filter(r => r._v === 'tg');
+  else if (filter === 'noconv') list = list.filter(r => (view === '14d' ? r.orders_14d : r.orders_1d) === 0);
+
+  if (!list.length) { alert('다운로드할 키워드가 없습니다.'); return; }
+
+  const verdictLabel = v => v === 'ex' ? '제외후보' : v === 'tg' ? '타겟후보' : '';
+  const data = list.map(r => {
+    const ctr   = r.impressions > 0 ? parseFloat((r.clicks / r.impressions * 100).toFixed(2)) : 0;
+    const cpc   = r.clicks > 0 ? Math.round(r.ad_cost / r.clicks) : 0;
+    const roas1  = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
+    const roas14 = r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
+    return {
+      '캠페인':       r.campaign_name || '',
+      '키워드':       r.keyword,
+      '노출수':       r.impressions,
+      '클릭수':       r.clicks,
+      'CTR(%)':      ctr,
+      'CPC(원)':     cpc,
+      '광고비(원)':   Math.round(r.ad_cost),
+      '주문(1일)':    r.orders_1d,
+      '매출1일(원)':  Math.round(r.revenue_1d),
+      'ROAS1일(%)':  roas1,
+      '주문(14일)':   r.orders_14d,
+      '매출14일(원)': Math.round(r.revenue_14d),
+      'ROAS14일(%)': roas14,
+      '판정':         verdictLabel(r._v),
+    };
+  });
+
+  const headers = ['캠페인','키워드','노출수','클릭수','CTR(%)','CPC(원)','광고비(원)','주문(1일)','매출1일(원)','ROAS1일(%)','주문(14일)','매출14일(원)','ROAS14일(%)','판정'];
+  const ws = XLSX.utils.json_to_sheet(data, { header: headers });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '키워드성과');
+  const filterName = { all: '전체', ex: '제외후보', tg: '타겟후보', noconv: '전환0건' }[filter] || '전체';
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  XLSX.writeFile(wb, `키워드성과_${filterName}_${today}.xlsx`);
 }
 
 // ── 광고 심층분석 - 노출영역별 ──────────────────────────────────────────────
