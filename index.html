@@ -1323,9 +1323,10 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
         <!-- 필터 버튼 -->
         <div style="display:flex;gap:6px;margin-bottom:12px">
-          <button id="adKwFilterAll" class="quick-pill active" onclick="setAdKwFilter('all')">전체</button>
-          <button id="adKwFilterEx"  class="quick-pill" onclick="setAdKwFilter('ex')">제외후보만</button>
-          <button id="adKwFilterTg"  class="quick-pill" onclick="setAdKwFilter('tg')">타겟후보만</button>
+          <button id="adKwFilterAll"    class="quick-pill active" onclick="setAdKwFilter('all')">전체</button>
+          <button id="adKwFilterEx"     class="quick-pill" onclick="setAdKwFilter('ex')">제외후보만</button>
+          <button id="adKwFilterTg"     class="quick-pill" onclick="setAdKwFilter('tg')">타겟후보만</button>
+          <button id="adKwFilterNoConv" class="quick-pill" onclick="setAdKwFilter('noconv')">전환 0건만</button>
         </div>
 
         <!-- 테이블 -->
@@ -9555,10 +9556,10 @@ function _renderAdAnalysisTable() {
 // ── 광고 심층분석 - 키워드별 ────────────────────────────────────────────────
 function setAdKwFilter(f) {
   _adAnState.kwFilter = f;
-  ['adKwFilterAll','adKwFilterEx','adKwFilterTg'].forEach(id => {
+  ['adKwFilterAll','adKwFilterEx','adKwFilterTg','adKwFilterNoConv'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
-  const map = { all: 'adKwFilterAll', ex: 'adKwFilterEx', tg: 'adKwFilterTg' };
+  const map = { all: 'adKwFilterAll', ex: 'adKwFilterEx', tg: 'adKwFilterTg', noconv: 'adKwFilterNoConv' };
   document.getElementById(map[f])?.classList.add('active');
   renderAdKeywords();
 }
@@ -9641,6 +9642,7 @@ function renderAdKeywords() {
   let filtered = judged;
   if (filter === 'ex') filtered = judged.filter(r => r._verdict === 'ex');
   if (filter === 'tg') filtered = judged.filter(r => r._verdict === 'tg');
+  if (filter === 'noconv') filtered = judged.filter(r => (view === '14d' ? r.orders_14d : r.orders_1d) === 0);
 
   if (!filtered.length) {
     body.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--text-dim)">해당 조건에 데이터가 없습니다</td></tr>';
