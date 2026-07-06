@@ -1119,7 +1119,7 @@ router.get('/ad-analysis/keywords', requireAuth, async (req, res) => {
     const { start, end } = req.query;
     const params = [req.user.id];
     let q = `
-      SELECT keyword,
+      SELECT campaign_name, keyword,
              SUM(impressions) AS impressions,
              SUM(clicks)      AS clicks,
              SUM(ad_cost)     AS ad_cost,
@@ -1128,12 +1128,13 @@ router.get('/ad-analysis/keywords', requireAuth, async (req, res) => {
              SUM(orders_14d)  AS orders_14d,
              SUM(revenue_14d) AS revenue_14d
       FROM ad_reports
-      WHERE user_id=$1 AND keyword IS NOT NULL AND keyword <> ''`;
+      WHERE user_id=$1 AND keyword IS NOT NULL AND TRIM(keyword) <> '' AND TRIM(keyword) <> '-'`;
     if (start) { params.push(start); q += ` AND report_date >= $${params.length}`; }
     if (end)   { params.push(end);   q += ` AND report_date <= $${params.length}`; }
-    q += ' GROUP BY keyword ORDER BY SUM(ad_cost) DESC';
+    q += ' GROUP BY campaign_name, keyword ORDER BY campaign_name, SUM(ad_cost) DESC';
     const { rows } = await pool.query(q, params);
     res.json(rows.map(r => ({
+      campaign_name: r.campaign_name || '(캠페인 미지정)',
       keyword:     r.keyword,
       impressions: parseInt(r.impressions)   || 0,
       clicks:      parseInt(r.clicks)        || 0,

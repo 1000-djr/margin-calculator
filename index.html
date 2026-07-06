@@ -9652,38 +9652,80 @@ function renderAdKeywords() {
   const tdR  = (v, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${extra}">${v}</td>`;
   const tdRh = (v, hide, extra='') => `<td style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;${hide?'display:none;':''}${extra}">${v}</td>`;
 
-  body.innerHTML = filtered.map((r, i) => {
-    const orders = view === '14d' ? r.orders_14d : r.orders_1d;
-    const rev    = view === '14d' ? r.revenue_14d : r.revenue_1d;
-    const roas1  = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
-    const roas14 = r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
-    const ctr    = r.impressions > 0 ? (r.clicks / r.impressions * 100).toFixed(2) + '%' : '-';
-    const cpc    = r.clicks > 0 ? Math.round(r.ad_cost / r.clicks).toLocaleString() + '원' : '-';
-    const border = i > 0 ? 'border-top:1px solid var(--border)' : '';
+  // 캠페인별 그룹핑
+  const campaignMap = new Map();
+  filtered.forEach(r => {
+    const cname = r.campaign_name || '(캠페인 미지정)';
+    if (!campaignMap.has(cname)) campaignMap.set(cname, []);
+    campaignMap.get(cname).push(r);
+  });
 
-    // 판정 뱃지
-    let badge = '—';
-    if (r._verdict === 'ex') badge = `<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:var(--bg-danger,#FFF0F0);color:var(--red)">제외후보</span>`;
-    if (r._verdict === 'tg') badge = `<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:var(--bg-success,#F0FFF4);color:var(--green)">타겟후보</span>`;
+  // 캠페인 광고비 합 기준 내림차순 정렬
+  const sortedCampaigns = [...campaignMap.entries()].sort((a, b) => {
+    const sumA = a[1].reduce((s, r) => s + r.ad_cost, 0);
+    const sumB = b[1].reduce((s, r) => s + r.ad_cost, 0);
+    return sumB - sumA;
+  });
 
-    // 제외후보 행의 클릭수 강조
-    const clickStyle = r._verdict === 'ex' ? `color:var(--red);font-weight:600` : '';
+  const htmlParts = [];
+  sortedCampaigns.forEach(([cname, kwRows], ci) => {
+    const cid = 'adkwc_' + ci;
+    const cCost = kwRows.reduce((s, r) => s + r.ad_cost, 0);
+    const cRev  = kwRows.reduce((s, r) => s + (view === '14d' ? r.revenue_14d : r.revenue_1d), 0);
+    const cRoas = cCost > 0 ? Math.round(cRev / cCost * 100) : 0;
+    const roasColor = cRoas >= avgRoas ? 'var(--green)' : 'var(--red)';
 
-    return `<tr style="${border}">
-      <td style="padding:9px 14px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500" title="${r.keyword}">${r.keyword}</td>
-      ${tdR(parseInt(r.impressions).toLocaleString())}
-      ${tdR(parseInt(r.clicks).toLocaleString(), clickStyle)}
-      ${tdR(ctr)}
-      ${tdR(cpc)}
-      ${tdR(Math.round(r.ad_cost).toLocaleString()+'원')}
-      ${tdRh(r.orders_1d.toLocaleString(), hide1d)}
-      ${tdRh(Math.round(r.revenue_1d).toLocaleString()+'원', hide1d)}
-      ${tdRh(roas1+'%', hide1d, `color:${roas1>=avgRoas?'var(--green)':'var(--red)'};font-weight:600`)}
-      ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
-      ${tdRh(roas14+'%', hide14d, `color:${roas14>=avgRoas?'var(--green)':'var(--red)'};font-weight:600`)}
-      <td style="text-align:center;padding:9px 10px">${badge}</td>
-    </tr>`;
-  }).join('');
+    // 캠페인 헤더 행
+    htmlParts.push(`<tr style="background:#F5F5F7;cursor:pointer;border-top:2px solid var(--border)" onclick="toggleAdKwCampaign('${cid}')">
+      <td colspan="6" style="padding:9px 14px;font-size:12px;font-weight:700">
+        <span id="${cid}_arrow" style="display:inline-block;margin-right:6px;transition:transform .2s">▼</span>
+        ${cname}
+        <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:6px">[키워드 ${kwRows.length}개]</span>
+      </td>
+      <td colspan="2" style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;font-weight:600">광고비 ${Math.round(cCost).toLocaleString()}원</td>
+      <td colspan="2" style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;font-weight:600">매출 ${Math.round(cRev).toLocaleString()}원</td>
+      <td colspan="2" style="text-align:right;padding:9px 10px;font-family:var(--mono);font-size:12px;font-weight:700;color:${roasColor}">ROAS ${cRoas}%</td>
+    </tr>`);
+
+    // 하위 키워드 행들
+    kwRows.forEach((r, i) => {
+      const roas1  = r.ad_cost > 0 ? Math.round(r.revenue_1d  / r.ad_cost * 100) : 0;
+      const roas14 = r.ad_cost > 0 ? Math.round(r.revenue_14d / r.ad_cost * 100) : 0;
+      const ctr    = r.impressions > 0 ? (r.clicks / r.impressions * 100).toFixed(2) + '%' : '-';
+      const cpc    = r.clicks > 0 ? Math.round(r.ad_cost / r.clicks).toLocaleString() + '원' : '-';
+
+      let badge = '—';
+      if (r._verdict === 'ex') badge = `<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:var(--bg-danger,#FFF0F0);color:var(--red)">제외후보</span>`;
+      if (r._verdict === 'tg') badge = `<span style="display:inline-block;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:600;background:var(--bg-success,#F0FFF4);color:var(--green)">타겟후보</span>`;
+
+      const clickStyle = r._verdict === 'ex' ? `color:var(--red);font-weight:600` : '';
+
+      htmlParts.push(`<tr class="${cid}_row" style="border-top:1px solid var(--border)">
+        <td style="padding:9px 14px 9px 28px;font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500" title="${r.keyword}">${r.keyword}</td>
+        ${tdR(parseInt(r.impressions).toLocaleString())}
+        ${tdR(parseInt(r.clicks).toLocaleString(), clickStyle)}
+        ${tdR(ctr)}
+        ${tdR(cpc)}
+        ${tdR(Math.round(r.ad_cost).toLocaleString()+'원')}
+        ${tdRh(r.orders_1d.toLocaleString(), hide1d)}
+        ${tdRh(Math.round(r.revenue_1d).toLocaleString()+'원', hide1d)}
+        ${tdRh(roas1+'%', hide1d, `color:${roas1>=avgRoas?'var(--green)':'var(--red)'};font-weight:600`)}
+        ${tdRh(r.orders_14d.toLocaleString(), hide14d)}
+        ${tdRh(roas14+'%', hide14d, `color:${roas14>=avgRoas?'var(--green)':'var(--red)'};font-weight:600`)}
+        <td style="text-align:center;padding:9px 10px">${badge}</td>
+      </tr>`);
+    });
+  });
+
+  body.innerHTML = htmlParts.join('');
+}
+
+function toggleAdKwCampaign(cid) {
+  const rows = document.querySelectorAll('.' + cid + '_row');
+  const arrow = document.getElementById(cid + '_arrow');
+  const isHidden = rows.length > 0 && rows[0].style.display === 'none';
+  rows.forEach(r => r.style.display = isHidden ? '' : 'none');
+  if (arrow) arrow.style.transform = isHidden ? '' : 'rotate(-90deg)';
 }
 
 // ── 광고 심층분석 - 노출영역별 ──────────────────────────────────────────────
