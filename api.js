@@ -466,6 +466,54 @@ router.get('/admin/discount-match', requireRealAdmin, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/admin/product-group-debug?email=xxx&q=감자
+router.get('/admin/product-group-debug', requireRealAdmin, async (req, res) => {
+  try {
+    const { email, user_id, q } = req.query;
+    let uid = user_id;
+    if (!uid && email) {
+      const { rows } = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
+      if (!rows[0]) return res.status(404).json({ error: '유저 없음' });
+      uid = rows[0].id;
+    }
+    if (!uid || !q) return res.status(400).json({ error: 'email(또는 user_id)와 q 필수' });
+    uid = parseInt(uid);
+
+    // 주문서 상품
+    const { rows: orders } = await pool.query(`
+      SELECT DISTINCT option_id, product_name, option_name, display_product_id
+      FROM orders
+      WHERE user_id=$1 AND product_name ILIKE '%'||$2||'%'
+      ORDER BY product_name, option_name
+    `, [uid, q]);
+
+    // 광고 상품
+    const { rows: ads } = await pool.query(`
+      SELECT DISTINCT option_id, product_name
+      FROM ad_reports
+      WHERE user_id=$1 AND product_name ILIKE '%'||$2||'%'
+      ORDER BY product_name
+    `, [uid, q]);
+
+    res.json({
+      user_id: uid,
+      query: q,
+      orders_products: orders.map(o => ({
+        option_id: o.option_id,
+        product_name: o.product_name,
+        product_name_len: (o.product_name||'').length,
+        option_name: o.option_name,
+        display_product_id: o.display_product_id,
+      })),
+      ad_products: ads.map(a => ({
+        option_id: a.option_id,
+        product_name: a.product_name,
+        product_name_len: (a.product_name||'').length,
+      })),
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // DELETE: 특정 유저의 빈 날짜(report_date 공란/null) 광고데이터 일괄 삭제
 router.delete('/admin/empty-date-ads', requireRealAdmin, async (req, res) => {
   try {
