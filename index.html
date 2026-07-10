@@ -7057,23 +7057,29 @@ async function renderProfit() {
     if (!byProduct.length) {
       productTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
-      const productRows = [...byProduct];
-      if (profitProductSort === 'asc')
-        productRows.sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '', 'ko'));
-      else if (profitProductSort === 'desc')
-        productRows.sort((a, b) => (b.product_name || '').localeCompare(a.product_name || '', 'ko'));
-
-      // product_name 기준 그룹핑
+      // display_product_id 기준 그룹핑 (없으면 product_name 폴백)
       const groupMap = new Map();
-      productRows.forEach(p => {
-        const key = p.product_name || '';
+      byProduct.forEach(p => {
+        const key = p.display_product_id ? 'pid:' + p.display_product_id : 'name:' + (p.product_name || '');
         if (!groupMap.has(key)) groupMap.set(key, []);
         groupMap.get(key).push(p);
       });
 
+      // 그룹 표시명 결정 후 정렬
+      const groupEntries = [...groupMap.entries()].map(([key, rows]) => ({
+        key,
+        groupName: rows[0]?.product_name || '',
+        rows,
+      }));
+      const productRows = groupEntries;
+      if (profitProductSort === 'asc')
+        productRows.sort((a, b) => (a.groupName || '').localeCompare(b.groupName || '', 'ko'));
+      else if (profitProductSort === 'desc')
+        productRows.sort((a, b) => (b.groupName || '').localeCompare(a.groupName || '', 'ko'));
+
       let groupIdx = 0;
       const htmlParts = [];
-      groupMap.forEach((rawRows, groupName) => {
+      productRows.forEach(({ groupName, rows: rawRows }) => {
         const gIdx = groupIdx++;
         const gClass = `pg-${gIdx}`;
 

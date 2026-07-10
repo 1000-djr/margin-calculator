@@ -398,6 +398,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         o.option_id,
         o.product_name,
         o.option_name,
+        o.display_product_id,
         o.quantity,
         o.payment_amount + o.shipping_fee                 AS gross_sale,
         GREATEST(
@@ -450,6 +451,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         option_id,
         product_name,
         option_name,
+        MAX(display_product_id)                      AS display_product_id,
         SUM(quantity)::INTEGER                       AS qty,
         SUM(gross_sale)::BIGINT                      AS revenue_before,
         SUM(net_sale)::BIGINT                        AS revenue_after,
@@ -481,6 +483,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
              THEN '광고비만 발생 (옵션ID: ' || pa.option_id || ')'
              ELSE '' END
       )                                         AS product_name,
+      po.display_product_id                     AS display_product_id,
       COALESCE(po.option_name,    '')           AS option_name,
       COALESCE(po.qty,            0)            AS qty,
       COALESCE(po.revenue_before, 0)            AS revenue_before,
@@ -520,9 +523,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     const adOnly = r.ad_only === true || r.ad_only === 't';
     const ad     = adOnly ? splitAdProductName(r.product_name) : null;
     return {
-      option_id:      r.option_id,
-      product_name:   ad ? ad.name : r.product_name,
-      option_name:    ad ? ad.option : r.option_name,
+      option_id:           r.option_id,
+      display_product_id:  r.display_product_id || null,
+      product_name:        ad ? ad.name : r.product_name,
+      option_name:         ad ? ad.option : r.option_name,
       qty,
       revenue_before: parseInt(r.revenue_before) || 0,
       revenue_after:  rev,
