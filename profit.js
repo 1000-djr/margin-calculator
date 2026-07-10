@@ -481,6 +481,15 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         AND display_product_id IS NOT NULL
         AND display_product_id <> ''
       GROUP BY option_id
+    ),
+    -- 상품명 → display_product_id 매핑 (옵션ID로도 못 찾는 광고전용 옵션의 2차 폴백)
+    name_product_map AS (
+      SELECT product_name, MAX(display_product_id) AS display_product_id
+      FROM orders
+      WHERE user_id = $1
+        AND display_product_id IS NOT NULL AND display_product_id <> ''
+        AND product_name IS NOT NULL AND TRIM(product_name) <> ''
+      GROUP BY product_name
     )
     SELECT
       COALESCE(po.option_id,      pa.option_id) AS option_id,
@@ -492,7 +501,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
              THEN '광고비만 발생 (옵션ID: ' || pa.option_id || ')'
              ELSE '' END
       )                                         AS product_name,
-      COALESCE(po.display_product_id, opm.display_product_id) AS display_product_id,
+      COALESCE(po.display_product_id, opm.display_product_id, npm.display_product_id) AS display_product_id,
       COALESCE(po.option_name,    '')           AS option_name,
       COALESCE(po.qty,            0)            AS qty,
       COALESCE(po.revenue_before, 0)            AS revenue_before,
@@ -506,6 +515,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     FROM product_orders po
     FULL OUTER JOIN product_ads pa ON pa.option_id = po.option_id
     LEFT JOIN option_product_map opm ON opm.option_id = COALESCE(po.option_id, pa.option_id)
+    LEFT JOIN name_product_map npm ON npm.product_name = COALESCE(NULLIF(TRIM(po.product_name),''), NULLIF(TRIM(pa.ad_product_name),''))
     ORDER BY COALESCE(NULLIF(TRIM(po.product_name),''), NULLIF(TRIM(pa.ad_product_name),''), ''),
              COALESCE(po.option_name, '')
   `, params);
