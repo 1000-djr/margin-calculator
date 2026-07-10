@@ -515,7 +515,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     FROM product_orders po
     FULL OUTER JOIN product_ads pa ON pa.option_id = po.option_id
     LEFT JOIN option_product_map opm ON opm.option_id = COALESCE(po.option_id, pa.option_id)
-    LEFT JOIN name_product_map npm ON npm.product_name = COALESCE(NULLIF(TRIM(po.product_name),''), NULLIF(TRIM(pa.ad_product_name),''))
+    LEFT JOIN name_product_map npm ON npm.product_name = COALESCE(
+      NULLIF(TRIM(po.product_name),''),
+      NULLIF(TRIM(SPLIT_PART(pa.ad_product_name, ',', 1)),'')
+    )
     ORDER BY COALESCE(NULLIF(TRIM(po.product_name),''), NULLIF(TRIM(pa.ad_product_name),''), ''),
              COALESCE(po.option_name, '')
   `, params);
