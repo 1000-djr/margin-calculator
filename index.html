@@ -5207,7 +5207,12 @@ async function uploadFilteredAds() {
 
 function setAdsQuickDate(type) {
   const today = new Date();
-  const fmt = d => d.toISOString().slice(0, 10);
+  const fmt = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  };
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
   let from, to;
   if (type === 'yesterday') {
@@ -6578,7 +6583,12 @@ let _activeQuickPill = null;
 
 function setQuickDate(type) {
   const today = new Date();
-  const fmt = d => d.toISOString().slice(0, 10);
+  const fmt = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  };
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
 
   let from, to;
@@ -6614,7 +6624,12 @@ function clearQuickSelect() {
 
 function setOrdersQuickDate(type) {
   const today = new Date();
-  const fmt = d => d.toISOString().slice(0, 10);
+  const fmt = d => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  };
   const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
   let from, to;
   if (type === 'yesterday') {
