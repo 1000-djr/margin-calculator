@@ -145,7 +145,16 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
             LIMIT 1
           ),
           0
-        )                                                 AS unit_cost
+        )                                                 AS unit_cost,
+        GREATEST(
+          o.payment_amount + o.shipping_fee
+          - COALESCE((${discountSubquery}
+            ), 0),
+          0
+        ) * CASE
+              WHEN o.product_name LIKE '%감자%' OR o.product_name LIKE '%고구마%' THEN 0.0836
+              ELSE 0.1166
+            END                                           AS line_commission
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -174,7 +183,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         COUNT(*)::INTEGER                        AS total_orders,
         SUM(gross_sale)::BIGINT                  AS revenue_before,
         SUM(net_sale)::BIGINT                    AS revenue_after,
-        (SUM(net_sale) * 0.1166)::NUMERIC(14,2)  AS commission,
+        SUM(line_commission)::NUMERIC(14,2)       AS commission,
         SUM(unit_cost * quantity)::NUMERIC(14,2)  AS total_cost
       FROM order_detail
     ),
@@ -326,7 +335,16 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
             LIMIT 1
           ),
           0
-        )                                                 AS unit_cost
+        )                                                 AS unit_cost,
+        GREATEST(
+          o.payment_amount + o.shipping_fee
+          - COALESCE((${discountSubquery}
+            ), 0),
+          0
+        ) * CASE
+              WHEN o.product_name LIKE '%감자%' OR o.product_name LIKE '%고구마%' THEN 0.0836
+              ELSE 0.1166
+            END                                           AS line_commission
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -340,7 +358,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         COUNT(*)::INTEGER                        AS orders,
         SUM(gross_sale)::BIGINT                  AS revenue_before,
         SUM(net_sale)::BIGINT                    AS revenue_after,
-        (SUM(net_sale) * 0.1166)::NUMERIC(14,2)  AS commission,
+        SUM(line_commission)::NUMERIC(14,2)       AS commission,
         SUM(unit_cost * quantity)::NUMERIC(14,2)  AS total_cost
       FROM order_detail
       GROUP BY period_key
@@ -438,7 +456,16 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
             LIMIT 1
           ),
           0
-        )                                                 AS unit_cost
+        )                                                 AS unit_cost,
+        GREATEST(
+          o.payment_amount + o.shipping_fee
+          - COALESCE((${discountSubquery}
+            ), 0),
+          0
+        ) * CASE
+              WHEN o.product_name LIKE '%감자%' OR o.product_name LIKE '%고구마%' THEN 0.0836
+              ELSE 0.1166
+            END                                           AS line_commission
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -455,7 +482,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         SUM(quantity)::INTEGER                       AS qty,
         SUM(gross_sale)::BIGINT                      AS revenue_before,
         SUM(net_sale)::BIGINT                        AS revenue_after,
-        (SUM(net_sale) * 0.1166)::NUMERIC(14,2)      AS commission,
+        SUM(line_commission)::NUMERIC(14,2)           AS commission,
         SUM(unit_cost * quantity)::NUMERIC(14,2)     AS total_cost
       FROM order_detail
       GROUP BY option_id, product_name, option_name
