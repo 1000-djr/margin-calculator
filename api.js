@@ -114,8 +114,36 @@ function requireAuth(req, res, next) {
 }
 
 // ─── 현재 유저 정보 ───────────────────────────────────────────────────────────
-router.get('/auth/me', (req, res) => {
+router.get('/auth/me', async (req, res) => {
   if (!req.user) return res.json(null);
+
+  // 멤버 전용 계정 자동 진입:
+  // 세션에 impersonating_user_id가 없고 _noAutoSwitch 플래그도 없으면
+  // 멤버 전용 계정인지 확인하여 자동으로 첫 번째 공유 계정으로 전환
+  if (!req.session.impersonating_user_id && !req.session._noAutoSwitch && !req.originalAdmin) {
+    try {
+      const loginUserId = req.user.id;
+      if (await isMemberOnlyAccount(loginUserId)) {
+        const { rows: ownerRows } = await pool.query(
+          `SELECT s.owner_user_id, u.*
+             FROM account_shares s
+             JOIN users u ON u.id = s.owner_user_id
+            WHERE s.member_user_id = $1 AND s.status = 'active'
+            LIMIT 1`,
+          [loginUserId]
+        );
+        if (ownerRows.length) {
+          req.session.impersonating_user_id = ownerRows[0].owner_user_id;
+          req.originalUser   = req.user;
+          req.isSharedAccess = true;
+          req.user           = ownerRows[0];
+        }
+      }
+    } catch (e) {
+      console.warn('[auth/me] 자동 전환 오류:', e.message);
+    }
+  }
+
   const user = { ...req.user };
   if (req.originalAdmin) {
     user._impersonating    = true;
@@ -127,6 +155,12 @@ router.get('/auth/me', (req, res) => {
     user._actingAs  = { id: req.user.id, name: req.user.name, email: req.user.email };
     user._isShared  = true;
     user.is_admin   = false; // 공유 멤버는 어드민 권한 없음
+  }
+  // 멤버 전용 계정 여부 (전환 중이 아닐 때만 의미 있음)
+  if (!req.isSharedAccess && !req.originalAdmin) {
+    try {
+      user._memberOnly = await isMemberOnlyAccount(req.user.id);
+    } catch (e) { user._memberOnly = false; }
   }
   res.json(user);
 });
@@ -160,19 +194,32 @@ router.post('/admin/impersonate/:userId', requireRealAdmin, async (req, res) => 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 멤버 전용 계정 판정 헬퍼 ────────────────────────────────────────────────
+// '본인 데이터 0건 + 공유받은 계정 1개 이상' 이면 true
+async function isMemberOnlyAccount(userId) {
+  const { rows: shared } = await pool.query(
+    `SELECT 1 FROM account_shares WHERE member_user_id = $1 AND status = 'active' LIMIT 1`,
+    [userId]
+  );
+  if (!shared.length) return false;
+  const { rows: own } = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM orders     WHERE user_id = $1) +
+       (SELECT COUNT(*) FROM ad_reports WHERE user_id = $1) +
+       (SELECT COUNT(*) FROM b2b_prices WHERE user_id = $1) AS cnt`,
+    [userId]
+  );
+  return (parseInt(own[0]?.cnt) || 0) === 0;
+}
+
 // ─── 계정 공유 (팀 기능) 엔드포인트 ─────────────────────────────────────────
 
 // GET /api/shares/accessible — 내가 접근 가능한 계정 목록 (본인 + 공유받은 owner들)
+// 멤버 전용 계정이면 본인(is_self) 항목을 제외하고 공유받은 계정만 반환
 router.get('/shares/accessible', requireAuth, async (req, res) => {
   try {
     const realUser = req.originalUser || req.user;
     const results  = [];
-
-    // 본인 계정
-    const { rows: selfRows } = await pool.query(
-      'SELECT id, name, email FROM users WHERE id = $1', [realUser.id]
-    );
-    if (selfRows.length) results.push({ ...selfRows[0], is_self: true });
 
     // 공유받은 owner 계정들
     const { rows: sharedRows } = await pool.query(
@@ -183,6 +230,15 @@ router.get('/shares/accessible', requireAuth, async (req, res) => {
       [realUser.id]
     );
     sharedRows.forEach(r => results.push({ ...r, is_self: false }));
+
+    // 본인 계정 — 멤버 전용 계정이면 숨김 (공유받은 계정이 없으면 잠기지 않도록 항상 포함)
+    const memberOnly = sharedRows.length > 0 && await isMemberOnlyAccount(realUser.id);
+    if (!memberOnly) {
+      const { rows: selfRows } = await pool.query(
+        'SELECT id, name, email FROM users WHERE id = $1', [realUser.id]
+      );
+      if (selfRows.length) results.unshift({ ...selfRows[0], is_self: true });
+    }
 
     res.json(results);
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -221,8 +277,10 @@ router.post('/shares/switch/:userId', requireAuth, async (req, res) => {
 });
 
 // POST /api/shares/exit — 전환 해제 (requireAuth만, 어드민 불필요)
+// _noAutoSwitch 플래그로 멤버 전용 계정 자동 진입 막기 (세션 동안)
 router.post('/shares/exit', requireAuth, (req, res) => {
   delete req.session.impersonating_user_id;
+  req.session._noAutoSwitch = true;
   res.json({ ok: true });
 });
 

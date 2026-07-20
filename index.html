@@ -747,7 +747,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <!-- 공유 계정 접근 배너 -->
   <div id="sharedAccessBanner" style="display:none;background:#0071e3;color:#fff;padding:10px 20px;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;margin-bottom:12px;border-radius:10px">
     <span id="sharedAccessBannerText"></span>
-    <button onclick="exitSharedAccess()" style="background:#fff;color:#0071e3;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">내 계정으로 돌아가기</button>
+    <button id="sharedExitBtn" onclick="exitSharedAccess()" style="background:#fff;color:#0071e3;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">내 계정으로 돌아가기</button>
   </div>
   <div class="header">
     <div onclick="switchTab('calc')" style="display:flex;align-items:center;gap:0;cursor:pointer" title="마진 계산 탭으로 이동">
@@ -2166,6 +2166,9 @@ function updateAuthUI() {
       document.getElementById('sharedAccessBannerText').textContent =
         `⚠ ${currentUser._actingAs?.name || currentUser.name || ''}님 계정에서 작업 중입니다`;
       sharedBanner.style.display = 'flex';
+      // 멤버 전용 계정이면 '내 계정으로 돌아가기' 버튼 숨김 (빈 계정이라 의미 없음)
+      const exitBtn = document.getElementById('sharedExitBtn');
+      if (exitBtn) exitBtn.style.display = currentUser._memberOnly ? 'none' : 'inline-block';
     } else if (sharedBanner) {
       sharedBanner.style.display = 'none';
     }

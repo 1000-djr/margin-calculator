@@ -92,6 +92,7 @@ tbody td{padding:13px 16px;vertical-align:middle}
 .badge.pending {background:#FEF3C7;color:#92400E}
 .badge.blocked {background:#FEE2E2;color:#991B1B}
 .badge.admin   {background:#EDE9FE;color:#5B21B6}
+.badge.member  {background:#F3E8FF;color:#7C3AED}
 
 /* ── Action Buttons ──────────────────────────────────────────────────────── */
 .btn-group{display:flex;gap:5px;flex-wrap:wrap}
@@ -568,6 +569,7 @@ function rowHtml(u){
       <td>
         ${badgeHtml(u.status)}
         ${u.is_admin?'<span class="badge admin" style="margin-left:4px">어드민</span>':''}
+        ${u.is_member_only?'<span class="badge member" style="margin-left:4px">멤버</span>':''}
       </td>
       <td class="mono">${fmtW(d.revBefore)}</td>
       <td class="mono">${fmtW(d.revAfter)}</td>
@@ -600,9 +602,15 @@ function renderTable(users){
   const tbody=document.getElementById('userTbody');
   if(!users.length){tbody.innerHTML='<tr><td colspan="13" class="empty">유저가 없습니다.</td></tr>';return;}
   const isAdminNoSales=(u)=>{ const d=calcDerived(u); return u.is_admin && (d.revBefore||0)===0 && (d.revAfter||0)===0; };
-  const normalUsers=users.filter(u=>!isAdminNoSales(u));
+  const isMemberOnly=(u)=>u.is_member_only===true;
+  const normalUsers=users.filter(u=>!isAdminNoSales(u)&&!isMemberOnly(u));
   const adminUsers=users.filter(u=>isAdminNoSales(u));
+  const memberUsers=users.filter(u=>isMemberOnly(u));
   let html=normalUsers.map(rowHtml).join('');
+  if(memberUsers.length){
+    html+='<tr><td colspan="13" style="background:#F5F0FF;color:#7C3AED;font-size:12px;font-weight:600;padding:8px 12px;border-top:2px solid #DDD6FE">팀 멤버 계정 (본인 데이터 없음) · '+memberUsers.length+'명</td></tr>';
+    html+=memberUsers.map(rowHtml).join('');
+  }
   if(adminUsers.length){
     html+='<tr><td colspan="13" style="background:#F5F5F7;color:#6E6E73;font-size:12px;font-weight:600;padding:8px 12px;border-top:2px solid #D2D2D7">관리자 계정 (매출 없음) · '+adminUsers.length+'명</td></tr>';
     html+=adminUsers.map(rowHtml).join('');

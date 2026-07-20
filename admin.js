@@ -11,9 +11,10 @@ const { calculateProfit } = require('./profit');
 
 // ─── 어드민 미들웨어 ──────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
-  const admin = req.originalAdmin || req.user;
-  if (!admin)          return res.status(401).json({ error: '로그인이 필요합니다.' });
-  if (!admin.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
+  // 실제 로그인 유저 기준 (공유 멤버가 owner의 is_admin을 상속하는 구멍 방지)
+  const realUser = req.originalUser || req.originalAdmin || req.user;
+  if (!realUser)          return res.status(401).json({ error: '로그인이 필요합니다.' });
+  if (!realUser.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
   next();
 }
 
@@ -40,17 +41,31 @@ router.get('/admin/users', requireAdmin, async (req, res) => {
       users.map(u => calculateProfit(u.id, start, end, 'month').catch(() => null))
     );
 
+    // 멤버 전용 계정 판정: account_shares 멤버이고 본인 데이터 0건
+    const { rows: memberOnlyRows } = await pool.query(`
+      SELECT s.member_user_id
+        FROM account_shares s
+       WHERE s.status = 'active'
+         AND s.member_user_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM orders     WHERE user_id = s.member_user_id)
+         AND NOT EXISTS (SELECT 1 FROM ad_reports WHERE user_id = s.member_user_id)
+         AND NOT EXISTS (SELECT 1 FROM b2b_prices WHERE user_id = s.member_user_id)
+       GROUP BY s.member_user_id
+    `);
+    const memberOnlySet = new Set(memberOnlyRows.map(r => r.member_user_id));
+
     const rows = users.map((u, i) => {
       const p = profitResults[i]?.summary || {};
       return {
         ...u,
-        total_orders:   p.total_orders   || 0,
-        revenue_before: p.revenue_before || 0,
-        revenue_after:  p.revenue_after  || 0,
-        commission:     p.commission     || 0,
-        total_cost:     p.total_cost     || 0,
-        actual_ad_cost: p.actual_ad_cost || 0,
-        ad_cost_raw:    p.ad_cost_raw    || 0,
+        total_orders:    p.total_orders   || 0,
+        revenue_before:  p.revenue_before || 0,
+        revenue_after:   p.revenue_after  || 0,
+        commission:      p.commission     || 0,
+        total_cost:      p.total_cost     || 0,
+        actual_ad_cost:  p.actual_ad_cost || 0,
+        ad_cost_raw:     p.ad_cost_raw    || 0,
+        is_member_only:  memberOnlySet.has(u.id),
       };
     });
 
