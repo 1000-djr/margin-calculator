@@ -404,6 +404,27 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .user-name { font-size: 13px; font-weight: 600; color: var(--text); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .logout-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer; font-family: var(--sans); transition: all 0.15s; white-space: nowrap; }
 .logout-btn:hover { border-color: var(--red); color: var(--red); }
+/* ── 계정 전환 드롭다운 ── */
+.acct-switch-wrap { position: relative; }
+.acct-switch-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 12px; cursor: pointer; font-family: var(--sans); transition: all 0.15s; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.acct-switch-btn:hover { border-color: var(--accent); color: var(--accent); }
+.acct-switch-dropdown { display: none; position: absolute; right: 0; top: calc(100% + 6px); min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.1); z-index: 999; overflow: hidden; }
+.acct-switch-dropdown.open { display: block; }
+.acct-switch-item { padding: 9px 14px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.1s; }
+.acct-switch-item:hover { background: var(--surface2); }
+.acct-switch-item.active { font-weight: 700; color: var(--accent); }
+.acct-switch-item .acct-badge { font-size: 10px; background: var(--accent); color: #fff; border-radius: 4px; padding: 1px 5px; }
+/* ── 공유 접근 배너 ── */
+#sharedAccessBanner { display:none; background:#0071e3; color:#fff; padding:10px 20px; align-items:center; justify-content:space-between; gap:12px; font-size:13px; font-weight:600; margin-bottom:12px; border-radius:10px; }
+/* ── 팀 멤버 모달 ── */
+.member-row { display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--border); }
+.member-row:last-child { border-bottom:none; }
+.member-info { flex:1; min-width:0; }
+.member-email { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.member-meta { font-size:11px; color:var(--text-dim); margin-top:1px; }
+.member-status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.member-status-dot.linked { background:#34c759; }
+.member-status-dot.pending { background:#f59e0b; }
 /* ── 업로드 영역 ── */
 .upload-area { border: 2px dashed var(--border); border-radius: 10px; padding: 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface2); }
 .upload-area:hover { border-color: var(--accent); background: #f0f5ff; }
@@ -715,13 +736,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
 <!-- ══ 메인 앱 (로그인 후 표시) ══════════════════════════════════════════ -->
 <div class="app" id="app" style="display:none">
-  <!-- 대리접속 배너 -->
+  <!-- 어드민 대리접속 배너 -->
   <div id="impersonateBanner" style="display:none;background:#f97316;color:#fff;padding:10px 20px;display:none;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;margin-bottom:12px;border-radius:10px">
     <span id="impersonateBannerText"></span>
     <div style="display:flex;gap:8px;align-items:center">
       <a href="/admin" style="color:#fff;text-decoration:underline;font-size:12px">어드민 페이지</a>
       <button onclick="exitImpersonate()" style="background:#fff;color:#f97316;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">원래 계정으로 돌아가기</button>
     </div>
+  </div>
+  <!-- 공유 계정 접근 배너 -->
+  <div id="sharedAccessBanner" style="display:none;background:#0071e3;color:#fff;padding:10px 20px;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;margin-bottom:12px;border-radius:10px">
+    <span id="sharedAccessBannerText"></span>
+    <button onclick="exitSharedAccess()" style="background:#fff;color:#0071e3;border:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">내 계정으로 돌아가기</button>
   </div>
   <div class="header">
     <div onclick="switchTab('calc')" style="display:flex;align-items:center;gap:0;cursor:pointer" title="마진 계산 탭으로 이동">
@@ -741,6 +767,13 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
 <div class="auth-area" style="display:flex;align-items:center;gap:8px">
         <a id="adminBtn" href="/admin" style="display:none;padding:6px 14px;background:#1d1d1f;color:#fff;border-radius:980px;font-size:12px;font-weight:500;text-decoration:none;letter-spacing:.2px;transition:opacity .15s" onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'">Admin</a>
+        <!-- 팀 멤버 관리 버튼 (owner 본인일 때만) -->
+        <button id="teamMemberBtn" onclick="openTeamMemberModal()" style="display:none;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer;white-space:nowrap">👥 팀 관리</button>
+        <!-- 계정 전환 드롭다운 -->
+        <div class="acct-switch-wrap" id="acctSwitchWrap" style="display:none">
+          <button class="acct-switch-btn" onclick="toggleAcctDropdown(event)" id="acctSwitchBtn">🔄 계정 전환 ▾</button>
+          <div class="acct-switch-dropdown" id="acctSwitchDropdown"></div>
+        </div>
         <div class="user-profile" id="userProfile">
           <img id="userAvatar" class="user-avatar" src="" alt="프로필">
           <span id="userName" class="user-name"></span>
@@ -2103,10 +2136,12 @@ async function checkAuth() {
 }
 
 function updateAuthUI() {
-  const loginScreen = document.getElementById('loginScreen');
-  const appEl       = document.getElementById('app');
-  const userProfile = document.getElementById('userProfile');
-  const banner      = document.getElementById('impersonateBanner');
+  const loginScreen      = document.getElementById('loginScreen');
+  const appEl            = document.getElementById('app');
+  const userProfile      = document.getElementById('userProfile');
+  const banner           = document.getElementById('impersonateBanner');
+  const sharedBanner     = document.getElementById('sharedAccessBanner');
+  const acctSwitchWrap   = document.getElementById('acctSwitchWrap');
 
   if (currentUser) {
     loginScreen.style.display = 'none';
@@ -2117,7 +2152,7 @@ function updateAuthUI() {
     // 대리접속 중이면 어드민 버튼 숨김 (배너의 '어드민 페이지' 링크로 대체)
     document.getElementById('adminBtn').style.display = (currentUser.is_admin && !currentUser._impersonating) ? 'inline-block' : 'none';
 
-    // 대리접속 배너
+    // 어드민 대리접속 배너
     if (currentUser._impersonating && banner) {
       document.getElementById('impersonateBannerText').textContent =
         `어드민 대리접속 중: ${currentUser.name || ''} (${currentUser.email || ''})`;
@@ -2125,11 +2160,37 @@ function updateAuthUI() {
     } else if (banner) {
       banner.style.display = 'none';
     }
+
+    // 공유 계정 접근 배너
+    if (currentUser._isShared && sharedBanner) {
+      document.getElementById('sharedAccessBannerText').textContent =
+        `⚠ ${currentUser._actingAs?.name || currentUser.name || ''}님 계정에서 작업 중입니다`;
+      sharedBanner.style.display = 'flex';
+    } else if (sharedBanner) {
+      sharedBanner.style.display = 'none';
+    }
+
+    // 팀 멤버 관리 버튼 — owner 본인 계정일 때만 (전환 중, 대리접속 중에는 숨김)
+    const teamMemberBtn = document.getElementById('teamMemberBtn');
+    if (teamMemberBtn) {
+      teamMemberBtn.style.display = (!currentUser._impersonating && !currentUser._isShared) ? 'inline-block' : 'none';
+    }
+
+    // 계정 전환 드롭다운 — 공유 계정이 1개 이상이면 표시 (어드민 대리접속 중에는 숨김)
+    if (!currentUser._impersonating) {
+      loadAcctSwitchList();
+    } else {
+      if (acctSwitchWrap) acctSwitchWrap.style.display = 'none';
+    }
   } else {
     loginScreen.style.display = 'flex';
     appEl.style.display       = 'none';
     userProfile.style.display = 'none';
     if (banner) banner.style.display = 'none';
+    if (sharedBanner) sharedBanner.style.display = 'none';
+    if (acctSwitchWrap) acctSwitchWrap.style.display = 'none';
+    const tb = document.getElementById('teamMemberBtn');
+    if (tb) tb.style.display = 'none';
   }
   // auth 확인 완료 후 정확한 화면이 결정된 다음 한 번만 fade-in
   document.body.style.opacity = '1';
@@ -2138,6 +2199,138 @@ function updateAuthUI() {
 async function exitImpersonate() {
   await fetch('/api/admin/impersonate/exit', { method: 'POST' });
   await checkAuth();
+}
+
+async function exitSharedAccess() {
+  await fetch('/api/shares/exit', { method: 'POST' });
+  location.reload();
+}
+
+// ── 계정 전환 드롭다운 ──────────────────────────────────────────────────────
+let _acctList = [];
+
+async function loadAcctSwitchList() {
+  const wrap = document.getElementById('acctSwitchWrap');
+  try {
+    _acctList = await fetch('/api/shares/accessible').then(r => r.json());
+  } catch (e) { _acctList = []; }
+  // 본인 계정만 있으면 드롭다운 숨김
+  if (!wrap) return;
+  if (_acctList.length <= 1) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  renderAcctDropdown();
+}
+
+function renderAcctDropdown() {
+  const dropdown = document.getElementById('acctSwitchDropdown');
+  if (!dropdown) return;
+  const currentId = currentUser?._isShared ? currentUser._actingAs?.id : currentUser?.id;
+  // 실제 로그인 유저 id는 _isShared 시 originalUser에 있지만 API가 반환하지 않으므로 is_self로 판단
+  dropdown.innerHTML = _acctList.map(a => {
+    const isActive = currentUser?._isShared
+      ? a.id === currentUser?._actingAs?.id
+      : a.is_self;
+    return `<div class="acct-switch-item ${isActive ? 'active' : ''}" onclick="switchToAccount(${a.id}, ${a.is_self})">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name || a.email}</span>
+      ${a.is_self ? '<span class="acct-badge">나</span>' : ''}
+      ${isActive ? '<span style="color:var(--accent)">✓</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleAcctDropdown(e) {
+  e.stopPropagation();
+  const d = document.getElementById('acctSwitchDropdown');
+  if (d) d.classList.toggle('open');
+}
+
+document.addEventListener('click', () => {
+  const d = document.getElementById('acctSwitchDropdown');
+  if (d) d.classList.remove('open');
+});
+
+async function switchToAccount(userId, isSelf) {
+  const d = document.getElementById('acctSwitchDropdown');
+  if (d) d.classList.remove('open');
+  try {
+    const res = await fetch(`/api/shares/switch/${userId}`, { method: 'POST' });
+    if (!res.ok) { const j = await res.json(); alert(j.error || '전환 실패'); return; }
+    location.reload();
+  } catch (e) { alert('계정 전환 중 오류가 발생했습니다.'); }
+}
+
+// ── 팀 멤버 관리 모달 ───────────────────────────────────────────────────────
+function openTeamMemberModal() {
+  let modal = document.getElementById('teamMemberModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'teamMemberModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML = `
+      <div style="background:var(--surface);border-radius:16px;padding:28px;max-width:440px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.18)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <h3 style="font-size:16px;font-weight:700">팀 멤버 관리</h3>
+          <button onclick="document.getElementById('teamMemberModal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-dim)">×</button>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px">초대된 멤버는 이 계정으로 전환해서 데이터를 볼 수 있습니다.</p>
+        <div style="display:flex;gap:8px;margin-bottom:20px">
+          <input id="newMemberEmail" type="email" placeholder="이메일 입력" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface2);color:var(--text);outline:none">
+          <button onclick="inviteMember()" style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">초대</button>
+        </div>
+        <div id="memberList" style="min-height:40px"><div style="color:var(--text-dim);font-size:13px;text-align:center;padding:16px">불러오는 중...</div></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  loadMemberList();
+}
+
+async function loadMemberList() {
+  const el = document.getElementById('memberList');
+  if (!el) return;
+  try {
+    const members = await fetch('/api/shares/members').then(r => r.json());
+    if (!members.length) {
+      el.innerHTML = '<div style="color:var(--text-dim);font-size:13px;text-align:center;padding:16px">초대된 멤버가 없습니다.</div>';
+      return;
+    }
+    el.innerHTML = members.map(m => `
+      <div class="member-row">
+        <span class="member-status-dot ${m.is_linked ? 'linked' : 'pending'}"></span>
+        <div class="member-info">
+          <div class="member-email">${m.member_email}</div>
+          <div class="member-meta">${m.is_linked ? (m.member_name || '연결됨') : '미가입(초대 대기)'}</div>
+        </div>
+        <button onclick="removeMember(${m.id})" style="padding:4px 10px;border:1px solid var(--red);background:none;color:var(--red);border-radius:6px;font-size:12px;cursor:pointer;flex-shrink:0">제거</button>
+      </div>`).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--red);font-size:13px;text-align:center;padding:16px">불러오기 실패</div>';
+  }
+}
+
+async function inviteMember() {
+  const input = document.getElementById('newMemberEmail');
+  const email = input?.value?.trim();
+  if (!email) return;
+  try {
+    const res  = await fetch('/api/shares/members', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || '초대 실패'); return; }
+    if (input) input.value = '';
+    await loadMemberList();
+  } catch (e) { alert('오류가 발생했습니다.'); }
+}
+
+async function removeMember(shareId) {
+  if (!confirm('이 멤버의 접근 권한을 제거하겠습니까?')) return;
+  try {
+    const res = await fetch(`/api/shares/members/${shareId}`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json(); alert(d.error || '제거 실패'); return; }
+    await loadMemberList();
+  } catch (e) { alert('오류가 발생했습니다.'); }
 }
 
 async function loadUserData() {

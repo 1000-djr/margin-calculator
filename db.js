@@ -585,6 +585,23 @@ async function initDB() {
     `);
   } catch(e) { console.warn('[db] coupons unique index 스킵:', e.message); }
 
+  // 팀 기능 — 계정 공유 테이블
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS account_shares (
+        id             SERIAL PRIMARY KEY,
+        owner_user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        member_email   TEXT NOT NULL,
+        member_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        status         TEXT NOT NULL DEFAULT 'active',
+        created_at     TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(owner_user_id, member_email)
+      );
+      CREATE INDEX IF NOT EXISTS idx_shares_member ON account_shares(member_user_id);
+      CREATE INDEX IF NOT EXISTS idx_shares_email  ON account_shares(LOWER(member_email));
+    `);
+  } catch(e) { console.warn('[db] account_shares 마이그레이션 스킵:', e.message); }
+
   console.log('[db] Tables ready');
 }
 

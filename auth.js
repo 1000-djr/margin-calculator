@@ -36,6 +36,19 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
            isAdmin ? 'active' : 'pending',
            isAdmin]
         );
+        // 로그인 성공 후: 이 이메일로 초대된 account_shares 행에 member_user_id 연결
+        try {
+          await pool.query(
+            `UPDATE account_shares
+                SET member_user_id = $1
+              WHERE LOWER(member_email) = LOWER($2)
+                AND member_user_id IS NULL`,
+            [rows[0].id, email]
+          );
+        } catch (shareErr) {
+          console.warn('[auth] account_shares 자동 연결 실패:', shareErr.message);
+        }
+
         return done(null, rows[0]);
       } catch (err) {
         return done(err);

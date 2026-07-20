@@ -34,15 +34,37 @@ app.use(session(sessionConfig));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// ─── 대리접속 미들웨어 ───────────────────────────────────────────────────────
-// passport 세션 복원 후, impersonating_user_id가 있으면 req.user를 교체
+// ─── 대리접속/계정공유 미들웨어 ─────────────────────────────────────────────
+// passport 세션 복원 후, impersonating_user_id가 있으면 req.user를 교체.
+// 어드민이면 기존 방식, 아니면 account_shares 테이블로 공유 권한 확인.
 app.use(async (req, res, next) => {
-  if (req.session?.impersonating_user_id && req.user?.is_admin) {
+  if (req.session?.impersonating_user_id && req.user) {
+    const targetId   = req.session.impersonating_user_id;
+    const loginUser  = req.user;
     try {
-      const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [req.session.impersonating_user_id]);
-      if (rows.length) {
-        req.originalAdmin = req.user;   // 원래 어드민 보관
-        req.user = rows[0];             // 대리접속 유저로 교체
+      if (loginUser.is_admin) {
+        // 기존 어드민 대리접속 경로 — 하위호환 유지
+        const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [targetId]);
+        if (rows.length) {
+          req.originalUser  = loginUser;  // 실제 로그인 유저 (항상)
+          req.originalAdmin = loginUser;  // 어드민 경로용 (하위호환)
+          req.user          = rows[0];
+        }
+      } else {
+        // 공유 멤버 확인: member_user_id=나, owner_user_id=target, status=active
+        const { rows: shareRows } = await pool.query(
+          `SELECT id FROM account_shares
+           WHERE owner_user_id = $1 AND member_user_id = $2 AND status = 'active'`,
+          [targetId, loginUser.id]
+        );
+        if (shareRows.length) {
+          const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [targetId]);
+          if (rows.length) {
+            req.originalUser   = loginUser;  // 실제 로그인 유저
+            req.isSharedAccess = true;
+            req.user           = rows[0];
+          }
+        }
       }
     } catch (e) {
       console.error('[impersonate] 유저 조회 실패', e);
@@ -57,8 +79,8 @@ app.use('/api', apiRouter);
 app.use('/', adminRouter);
 
 app.get('/', (req, res) => {
-  // 어드민 대리접속 중이면 status 체크 건너뜀 (impersonated user의 status로 어드민이 차단되는 버그 방지)
-  if (req.user && !req.originalAdmin) {
+  // 어드민 대리접속 또는 공유 접근 중이면 status 체크 건너뜀
+  if (req.user && !req.originalAdmin && !req.isSharedAccess) {
     const { status, expires_at } = req.user;
     if (status === 'pending') return res.redirect('/pending?reason=pending');
     if (status === 'blocked') return res.redirect('/pending?reason=blocked');

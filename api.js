@@ -123,14 +123,20 @@ router.get('/auth/me', (req, res) => {
     user.is_admin          = false; // 대리접속 중에는 어드민 버튼 숨김 (어드민 페이지는 별도 링크로)
     user._originalIsAdmin  = true;
   }
+  if (req.isSharedAccess) {
+    user._actingAs  = { id: req.user.id, name: req.user.name, email: req.user.email };
+    user._isShared  = true;
+    user.is_admin   = false; // 공유 멤버는 어드민 권한 없음
+  }
   res.json(user);
 });
 
 // ─── 어드민 대리접속 ──────────────────────────────────────────────────────────
 function requireRealAdmin(req, res, next) {
-  const admin = req.originalAdmin || req.user;
-  if (!admin)          return res.status(401).json({ error: '로그인이 필요합니다.' });
-  if (!admin.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
+  // 실제 로그인한 유저 기준으로 판정 (공유 멤버가 owner의 is_admin을 상속하는 구멍 방지)
+  const realUser = req.originalUser || req.user;
+  if (!realUser)          return res.status(401).json({ error: '로그인이 필요합니다.' });
+  if (!realUser.is_admin) return res.status(403).json({ error: '어드민 권한이 필요합니다.' });
   next();
 }
 
@@ -151,6 +157,138 @@ router.post('/admin/impersonate/:userId', requireRealAdmin, async (req, res) => 
 
     req.session.impersonating_user_id = targetId;
     res.json({ ok: true, user: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 계정 공유 (팀 기능) 엔드포인트 ─────────────────────────────────────────
+
+// GET /api/shares/accessible — 내가 접근 가능한 계정 목록 (본인 + 공유받은 owner들)
+router.get('/shares/accessible', requireAuth, async (req, res) => {
+  try {
+    const realUser = req.originalUser || req.user;
+    const results  = [];
+
+    // 본인 계정
+    const { rows: selfRows } = await pool.query(
+      'SELECT id, name, email FROM users WHERE id = $1', [realUser.id]
+    );
+    if (selfRows.length) results.push({ ...selfRows[0], is_self: true });
+
+    // 공유받은 owner 계정들
+    const { rows: sharedRows } = await pool.query(
+      `SELECT u.id, u.name, u.email
+         FROM account_shares s
+         JOIN users u ON u.id = s.owner_user_id
+        WHERE s.member_user_id = $1 AND s.status = 'active'`,
+      [realUser.id]
+    );
+    sharedRows.forEach(r => results.push({ ...r, is_self: false }));
+
+    res.json(results);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shares/switch/:userId — 그 계정으로 전환
+router.post('/shares/switch/:userId', requireAuth, async (req, res) => {
+  try {
+    const realUser = req.originalUser || req.user;
+    const targetId = parseInt(req.params.userId);
+
+    if (targetId === realUser.id) {
+      // 자기 자신으로 전환 = 전환 해제
+      delete req.session.impersonating_user_id;
+      return res.json({ ok: true });
+    }
+
+    // 어드민이거나 공유 권한 있으면 허용
+    let allowed = realUser.is_admin;
+    if (!allowed) {
+      const { rows } = await pool.query(
+        `SELECT id FROM account_shares
+          WHERE owner_user_id = $1 AND member_user_id = $2 AND status = 'active'`,
+        [targetId, realUser.id]
+      );
+      allowed = rows.length > 0;
+    }
+    if (!allowed) return res.status(403).json({ error: '접근 권한이 없습니다.' });
+
+    const { rows: targetRows } = await pool.query('SELECT id FROM users WHERE id = $1', [targetId]);
+    if (!targetRows.length) return res.status(404).json({ error: '유저 없음' });
+
+    req.session.impersonating_user_id = targetId;
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shares/exit — 전환 해제 (requireAuth만, 어드민 불필요)
+router.post('/shares/exit', requireAuth, (req, res) => {
+  delete req.session.impersonating_user_id;
+  res.json({ ok: true });
+});
+
+// GET /api/shares/members — 내 계정에 초대된 멤버 목록 (owner 본인만)
+router.get('/shares/members', requireAuth, async (req, res) => {
+  try {
+    const realUser = req.originalUser || req.user;
+    if (req.isSharedAccess) return res.status(403).json({ error: '전환 중에는 멤버 관리가 불가합니다.' });
+
+    const { rows } = await pool.query(
+      `SELECT s.id, s.member_email, s.status, s.created_at,
+              u.name AS member_name,
+              CASE WHEN s.member_user_id IS NOT NULL THEN true ELSE false END AS is_linked
+         FROM account_shares s
+         LEFT JOIN users u ON u.id = s.member_user_id
+        WHERE s.owner_user_id = $1
+        ORDER BY s.created_at DESC`,
+      [realUser.id]
+    );
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/shares/members — 멤버 초대
+router.post('/shares/members', requireAuth, async (req, res) => {
+  try {
+    const realUser = req.originalUser || req.user;
+    if (req.isSharedAccess) return res.status(403).json({ error: '전환 중에는 멤버를 초대할 수 없습니다.' });
+
+    const { email } = req.body;
+    if (!email || !email.includes('@')) return res.status(400).json({ error: '올바른 이메일을 입력해주세요.' });
+    if (email.toLowerCase() === realUser.email.toLowerCase()) {
+      return res.status(400).json({ error: '자기 자신은 초대할 수 없습니다.' });
+    }
+
+    // 이미 가입된 유저라면 member_user_id 미리 연결
+    const { rows: existRows } = await pool.query(
+      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]
+    );
+    const memberUserId = existRows[0]?.id || null;
+
+    const { rows } = await pool.query(
+      `INSERT INTO account_shares (owner_user_id, member_email, member_user_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (owner_user_id, member_email) DO NOTHING
+       RETURNING *`,
+      [realUser.id, email.toLowerCase(), memberUserId]
+    );
+    if (!rows.length) return res.status(409).json({ error: '이미 초대된 이메일입니다.' });
+    res.json(rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/shares/members/:id — 멤버 제거
+router.delete('/shares/members/:id', requireAuth, async (req, res) => {
+  try {
+    const realUser = req.originalUser || req.user;
+    if (req.isSharedAccess) return res.status(403).json({ error: '전환 중에는 멤버를 제거할 수 없습니다.' });
+
+    const shareId = parseInt(req.params.id);
+    const { rowCount } = await pool.query(
+      'DELETE FROM account_shares WHERE id = $1 AND owner_user_id = $2',
+      [shareId, realUser.id]
+    );
+    if (!rowCount) return res.status(404).json({ error: '항목 없음 또는 권한 없음' });
+    res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
