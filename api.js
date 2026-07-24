@@ -1002,6 +1002,20 @@ router.get('/orders/stats', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+router.get('/orders/option-first-date', requireAuth, async (req, res) => {
+  try {
+    const optionId = String(req.query.option_id || '').trim();
+    if (!optionId) return res.status(400).json({ error: 'option_id 필수' });
+    const { rows } = await pool.query(
+      `SELECT MIN(SUBSTRING(order_date,1,10)) AS first_date
+         FROM orders
+        WHERE user_id = $1 AND option_id = $2 AND is_excluded IS NOT TRUE`,
+      [req.user.id, optionId]
+    );
+    res.json({ option_id: optionId, first_date: rows[0]?.first_date || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/orders', requireAuth, async (req, res) => {
   try {
     const { start_date, end_date, exclude_excluded, offset, limit, search, exclusion_filter, sort_col, sort_dir } = req.query;
