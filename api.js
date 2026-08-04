@@ -36,6 +36,61 @@ function aesDecrypt(stored) {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
 }
 
+// ─── 도매처 API 시크릿 암호화 (ENCRYPTION_KEY 전용) ──────────────────────────
+function encryptSecret(plain) {
+  const keyRaw = process.env.ENCRYPTION_KEY;
+  if (!keyRaw) throw new Error('ENCRYPTION_KEY 환경변수가 설정되지 않았습니다. Railway 환경변수에 32바이트 이상의 키를 설정해주세요.');
+  const key = Buffer.from(keyRaw.slice(0, 32).padEnd(32, '0'), 'utf8');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return iv.toString('base64') + ':' + tag.toString('base64') + ':' + encrypted.toString('base64');
+}
+
+function decryptSecret(enc) {
+  const keyRaw = process.env.ENCRYPTION_KEY;
+  if (!keyRaw) throw new Error('ENCRYPTION_KEY 환경변수 미설정');
+  const key = Buffer.from(keyRaw.slice(0, 32).padEnd(32, '0'), 'utf8');
+  const [ivB64, tagB64, encB64] = enc.split(':');
+  const iv = Buffer.from(ivB64, 'base64');
+  const tag = Buffer.from(tagB64, 'base64');
+  const encrypted = Buffer.from(encB64, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+}
+
+// ─── 어드민플러스 API 헬퍼 ─────────────────────────────────────────────────────
+async function adminplusGetToken(clientId, clientSecret) {
+  const body = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
+  const r = await fetch('https://api.adminplus.co.kr/oauth/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString()
+  });
+  const j = await r.json();
+  if (!j.success) throw new Error('토큰 발급 실패: ' + j.message);
+  return j.data.access_token;
+}
+
+async function adminplusGetProducts(token, params = {}) {
+  const url = new URL('https://api.adminplus.co.kr/v1/seller/products');
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  const j = await r.json();
+  if (!j.success) throw new Error('상품 조회 실패: ' + j.message);
+  return j.data;
+}
+
+// ─── 도매처 API 설정 추출 헬퍼 ────────────────────────────────────────────────
+function getSupplierApiConfig(supplier) {
+  if (!supplier.api_linked || !supplier.api_type) return null;
+  if (supplier.api_type === 'adminplus') {
+    const clientSecret = supplier.api_client_secret_enc ? decryptSecret(supplier.api_client_secret_enc) : null;
+    return { type: 'adminplus', clientId: supplier.api_client_id, clientSecret };
+  }
+  return null;
+}
+
 // ─── 쿠팡 Open API HMAC-SHA256 인증 ──────────────────────────────────────────
 function coupangDatetime() {
   const now = new Date();
@@ -3773,38 +3828,83 @@ router.get('/orders/last-sync', requireAuth, async (req, res) => {
 });
 
 // ── 도매처 관리 ──────────────────────────────────────────────────────────────
+function wsRow(r) {
+  // api_client_secret_enc은 절대 응답에 포함하지 않음
+  const masked = r.api_client_id
+    ? r.api_client_id.slice(0, 4) + '****'
+    : null;
+  return {
+    id: r.id,
+    name: r.name,
+    url: r.url,
+    created_at: r.created_at,
+    api_linked: !!r.api_linked,
+    api_type: r.api_type || null,
+    api_client_id_masked: masked,
+  };
+}
+
 router.get('/wholesale-suppliers', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM wholesale_suppliers WHERE user_id=$1 ORDER BY created_at ASC',
       [req.user.id]
     );
-    res.json(rows);
+    res.json(rows.map(wsRow));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/wholesale-suppliers', requireAuth, async (req, res) => {
-  const { name, url } = req.body;
+  const { name, url, api_type, api_client_id, api_client_secret } = req.body;
   if (!name || !url) return res.status(400).json({ error: '이름과 URL을 입력하세요' });
   try {
+    let secretEnc = null, apiLinked = false;
+    if (api_type && api_client_id && api_client_secret) {
+      secretEnc = encryptSecret(api_client_secret);
+      apiLinked = true;
+    }
     const { rows } = await pool.query(
-      'INSERT INTO wholesale_suppliers (user_id,name,url) VALUES ($1,$2,$3) RETURNING *',
-      [req.user.id, name.trim(), url.trim()]
+      `INSERT INTO wholesale_suppliers (user_id,name,url,api_type,api_client_id,api_client_secret_enc,api_linked)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.user.id, name.trim(), url.trim(), api_type || null, api_client_id || null, secretEnc, apiLinked]
     );
-    res.json(rows[0]);
+    res.json(wsRow(rows[0]));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
-  const { name, url } = req.body;
+  const { name, url, api_type, api_client_id, api_client_secret } = req.body;
   if (!name || !url) return res.status(400).json({ error: '이름과 URL을 입력하세요' });
   try {
-    const { rows } = await pool.query(
-      'UPDATE wholesale_suppliers SET name=$1, url=$2 WHERE id=$3 AND user_id=$4 RETURNING *',
-      [name.trim(), url.trim(), req.params.id, req.user.id]
+    // 기존 레코드 조회 (secret 유지 여부 판단)
+    const { rows: existing } = await pool.query(
+      'SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
     );
-    if (!rows.length) return res.status(404).json({ error: '항목 없음' });
-    res.json(rows[0]);
+    if (!existing.length) return res.status(404).json({ error: '항목 없음' });
+    const prev = existing[0];
+    let secretEnc = prev.api_client_secret_enc; // 기존 값 유지
+    let apiLinked = !!prev.api_linked;
+    if (api_type && api_client_id) {
+      if (api_client_secret) {
+        // 새 secret 입력 → 암호화 갱신
+        secretEnc = encryptSecret(api_client_secret);
+        apiLinked = true;
+      } else {
+        // secret 비워도 client_id 있으면 연동 유지
+        apiLinked = true;
+      }
+    } else if (!api_type) {
+      // 연동 해제
+      secretEnc = null; apiLinked = false;
+    }
+    const { rows } = await pool.query(
+      `UPDATE wholesale_suppliers
+       SET name=$1, url=$2, api_type=$3, api_client_id=$4, api_client_secret_enc=$5, api_linked=$6
+       WHERE id=$7 AND user_id=$8 RETURNING *`,
+      [name.trim(), url.trim(), api_type || null, api_client_id || null, secretEnc, apiLinked, req.params.id, req.user.id]
+    );
+    res.json(wsRow(rows[0]));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -3813,6 +3913,27 @@ router.delete('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
     await pool.query('DELETE FROM wholesale_suppliers WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── 도매처 연결 테스트 ─────────────────────────────────────────────────────────
+router.post('/wholesale-suppliers/:id/test', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ ok: false, error: '도매처를 찾을 수 없습니다.' });
+    const supplier = rows[0];
+    const cfg = getSupplierApiConfig(supplier);
+    if (!cfg) return res.status(400).json({ ok: false, error: 'API 연동 정보가 없습니다.' });
+    if (cfg.type === 'adminplus') {
+      const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+      const data = await adminplusGetProducts(token, { limit: '5', status: 'active' });
+      const items = data.items || [];
+      return res.json({ ok: true, sample_count: items.length, first_name: items[0]?.name || null });
+    }
+    return res.status(400).json({ ok: false, error: '지원하지 않는 api_type: ' + cfg.type });
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
 // ─── 트래픽 슬롯 ──────────────────────────────────────────────────────────────

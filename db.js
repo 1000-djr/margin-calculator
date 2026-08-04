@@ -503,6 +503,13 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // 도매처 API 연동 컬럼 (마이그레이션)
+  try {
+    await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_type TEXT`);
+    await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_client_id TEXT`);
+    await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_client_secret_enc TEXT`);
+    await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_linked BOOLEAN DEFAULT FALSE`);
+  } catch(e) { console.warn('[db] wholesale_suppliers API 컬럼 추가 실패:', e.message); }
 
   // 트래픽 슬롯 관리 테이블
   await pool.query(`
