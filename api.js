@@ -4091,48 +4091,38 @@ router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
 });
 
 // ─── 도매처(더그린) 상품 전체 조회 ────────────────────────────────────────────
-router.get('/supplier/thegreen/products', requireAuth, async (req, res) => {
+// ─── 도매처 상품 전체 조회 (DB 도매처 기반) ───────────────────────────────────
+router.get('/supplier/:supplierId/products', requireAuth, async (req, res) => {
   try {
-    const id = process.env.ADMINPLUS_THEGREEN_CLIENT_ID;
-    const secret = process.env.ADMINPLUS_THEGREEN_CLIENT_SECRET;
-    if (!id || !secret) return res.status(500).json({ error: 'ADMINPLUS 환경변수 미설정' });
-    // 토큰 발급
-    const body = new URLSearchParams({ client_id: id, client_secret: secret });
-    const tr = await fetch('https://api.adminplus.co.kr/oauth/token', {
-      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString()
-    });
-    const tj = await tr.json();
-    if (!tj.success) return res.status(502).json({ error: '토큰 발급 실패: ' + tj.message });
-    const token = tj.data.access_token;
-    // 커서 페이지네이션으로 전체 상품 수집 (안전장치: 최대 50페이지)
+    const { rows } = await pool.query(
+      'SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2',
+      [req.params.supplierId, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: '도매처를 찾을 수 없습니다' });
+    const supplier = rows[0];
+    if (!supplier.api_linked || !supplier.api_type)
+      return res.status(400).json({ error: 'API 연동되지 않은 도매처입니다' });
+    const cfg = getSupplierApiConfig(supplier);
+    if (!cfg) return res.status(400).json({ error: 'API 설정을 읽을 수 없습니다' });
+    if (cfg.type !== 'adminplus')
+      return res.status(400).json({ error: '지원하지 않는 API 타입: ' + cfg.type });
+    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
     let items = [], cursor = null, pages = 0;
     do {
-      const url = new URL('https://api.adminplus.co.kr/v1/seller/products');
-      url.searchParams.set('limit', '500');
-      url.searchParams.set('status', 'active');
-      if (cursor) url.searchParams.set('cursor', cursor);
-      const pr = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
-      const pj = await pr.json();
-      if (!pj.success) return res.status(502).json({ error: '상품 조회 실패: ' + pj.message });
-      items = items.concat(pj.data.items || []);
-      cursor = pj.data.has_more ? pj.data.next_cursor : null;
+      const params = { limit: 500, status: 'active' };
+      if (cursor) params.cursor = cursor;
+      const data = await adminplusGetProducts(token, params);
+      items = items.concat(data.items || []);
+      cursor = data.has_more ? data.next_cursor : null;
       pages++;
     } while (cursor && pages < 50);
-    // 필요한 필드만 정리
     const products = items.map(p => ({
-      product_code: p.product_code,
-      name: p.name,
-      price: p.price,
-      taxable: p.taxable,
-      image: p.image,
-      shipping_origin: p.shipping_origin,
-      delivery_policy: p.delivery_policy,
-      order_cutoff_time: p.order_cutoff_time,
-      stock: p.stock,
-      status: p.status,
+      product_code: p.product_code, name: p.name, price: p.price, taxable: p.taxable,
+      image: p.image, shipping_origin: p.shipping_origin, delivery_policy: p.delivery_policy,
+      order_cutoff_time: p.order_cutoff_time, stock: p.stock, status: p.status,
       last_updated_date: p.last_updated_date,
     }));
-    res.json({ count: products.length, products });
+    res.json({ supplier_id: supplier.id, supplier_name: supplier.name, count: products.length, products });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

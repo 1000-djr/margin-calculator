@@ -1851,11 +1851,21 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <!-- ══ 도매처(더그린) 탭 ══════════════════════════════════════════════ -->
   <div class="panel" id="tab-supplier">
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
-      <span>더그린 상품</span>
+      <span id="supplierTabTitle">도매처 상품</span>
       <div style="display:flex;gap:8px;align-items:center">
         <span id="supplierCount" style="font-size:12px;color:var(--text-dim)"></span>
         <button class="btn btn-primary btn-sm" style="font-weight:600" onclick="loadSupplierProducts()">🔄 불러오기</button>
       </div>
+    </div>
+    <div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-dim);white-space:nowrap">도매처 선택</label>
+      <select id="supplierSelect" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans);outline:none" onchange="onSupplierSelectChange()">
+        <option value="">-- 불러오는 중 --</option>
+      </select>
+    </div>
+    <div id="supplierNoLinked" style="display:none;font-size:13px;color:var(--text-dim);text-align:center;padding:30px 0">
+      API 연동된 도매처가 없습니다.<br>
+      <span style="font-size:12px">도매처 관리(헤더 🏪 버튼)에서 API를 연동하세요.</span>
     </div>
     <div class="card" style="padding:10px 14px;margin-bottom:16px">
       <input id="supplierSearch" type="text" placeholder="상품명 검색..." oninput="filterSupplierProducts()"
@@ -1872,7 +1882,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 <div id="supplierB2BBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center" onclick="closeSupplierB2BModal(event)">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:460px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.2)" onclick="event.stopPropagation()">
     <div style="font-size:18px;font-weight:700;margin-bottom:6px">📦 B2B 매입가로 저장</div>
-    <div style="font-size:12px;color:var(--text-dim);margin-bottom:20px">더그린 상품 정보를 B2B 매입가에 등록합니다.</div>
+    <div id="sb2bModalDesc" style="font-size:12px;color:var(--text-dim);margin-bottom:20px">도매처 상품 정보를 B2B 매입가에 등록합니다.</div>
     <div style="display:flex;flex-direction:column;gap:14px">
       <div>
         <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">상품명</label>
@@ -2636,6 +2646,7 @@ function _activateTabUI(name) {
   if (name === 'traffic')  { loadTrafficSlots(); }
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
+  if (name === 'supplier') { initSupplierTab(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -10322,25 +10333,78 @@ function renderAdPlacements() {
   }).join('');
 }
 
-// ── 도매처(더그린) 탭 ─────────────────────────────────────────────────────────
+// ── 도매처 탭 ─────────────────────────────────────────────────────────────────
 let _supplierAll = [];
+let _currentSupplierName = '';
+
+async function initSupplierTab() {
+  // API 연동된 도매처 목록을 드롭다운에 채움
+  const sel = document.getElementById('supplierSelect');
+  const noLinked = document.getElementById('supplierNoLinked');
+  sel.innerHTML = '<option value="">-- 도매처 선택 --</option>';
+  try {
+    const r = await fetch('/api/wholesale-suppliers');
+    const list = await r.json();
+    const linked = Array.isArray(list) ? list.filter(s => s.api_linked) : [];
+    if (!linked.length) {
+      sel.style.display = 'none';
+      noLinked.style.display = 'block';
+    } else {
+      sel.style.display = '';
+      noLinked.style.display = 'none';
+      linked.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name + (s.api_type ? ' (' + s.api_type + ')' : '');
+        sel.appendChild(opt);
+      });
+      // 하나뿐이면 자동 선택
+      if (linked.length === 1) { sel.value = linked[0].id; onSupplierSelectChange(); }
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">도매처 목록 로드 실패</option>';
+  }
+}
+
+function onSupplierSelectChange() {
+  const sel = document.getElementById('supplierSelect');
+  const opt = sel.options[sel.selectedIndex];
+  _currentSupplierName = opt && opt.value ? opt.text.replace(/\s*\(.*\)$/, '') : '';
+  document.getElementById('supplierTabTitle').textContent =
+    _currentSupplierName ? _currentSupplierName + ' 상품' : '도매처 상품';
+  // 도매처 바꾸면 기존 목록 초기화
+  _supplierAll = [];
+  document.getElementById('supplierGrid').innerHTML = '';
+  document.getElementById('supplierCount').textContent = '';
+  document.getElementById('supplierSearch').value = '';
+  document.getElementById('supplierError').style.display = 'none';
+}
 
 async function loadSupplierProducts() {
+  const sel = document.getElementById('supplierSelect');
+  const sid = sel ? sel.value : '';
   const grid = document.getElementById('supplierGrid');
   const status = document.getElementById('supplierStatus');
   const errEl = document.getElementById('supplierError');
   const countEl = document.getElementById('supplierCount');
+  if (!sid) {
+    errEl.textContent = '도매처를 먼저 선택하세요.';
+    errEl.style.display = 'block';
+    return;
+  }
   grid.innerHTML = '';
   errEl.style.display = 'none';
   errEl.textContent = '';
   status.style.display = 'block';
   countEl.textContent = '';
   try {
-    const r = await fetch('/api/supplier/thegreen/products');
+    const r = await fetch('/api/supplier/' + sid + '/products');
     const j = await r.json();
     status.style.display = 'none';
     if (!r.ok) { errEl.textContent = j.error || '오류 발생'; errEl.style.display = 'block'; return; }
     _supplierAll = j.products || [];
+    _currentSupplierName = j.supplier_name || _currentSupplierName;
+    document.getElementById('supplierTabTitle').textContent = _currentSupplierName + ' 상품';
     countEl.textContent = `총 ${_supplierAll.length.toLocaleString()}개`;
     document.getElementById('supplierSearch').value = '';
     renderSupplierCards(_supplierAll);
@@ -10418,7 +10482,9 @@ function openSupplierB2BModal(code) {
   const { product_name, unit } = _extractUnitFromName(p.name || '');
   document.getElementById('sb2bProductName').value = product_name;
   document.getElementById('sb2bUnit').value = unit;
-  document.getElementById('sb2bSupplier').value = '더그린';
+  document.getElementById('sb2bSupplier').value = _currentSupplierName || '더그린';
+  const desc = document.getElementById('sb2bModalDesc');
+  if (desc) desc.textContent = (_currentSupplierName || '도매처') + ' 상품 정보를 B2B 매입가에 등록합니다.';
   document.getElementById('sb2bCost').value = p.price != null ? p.price : '';
   document.getElementById('sb2bStartDate').value = new Date().toISOString().slice(0, 10);
   document.getElementById('sb2bEndDate').value = '';
