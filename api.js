@@ -3973,4 +3973,50 @@ router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
   res.json(result);
 });
 
+// ─── 도매처(더그린) 상품 전체 조회 ────────────────────────────────────────────
+router.get('/supplier/thegreen/products', requireAuth, async (req, res) => {
+  try {
+    const id = process.env.ADMINPLUS_THEGREEN_CLIENT_ID;
+    const secret = process.env.ADMINPLUS_THEGREEN_CLIENT_SECRET;
+    if (!id || !secret) return res.status(500).json({ error: 'ADMINPLUS 환경변수 미설정' });
+    // 토큰 발급
+    const body = new URLSearchParams({ client_id: id, client_secret: secret });
+    const tr = await fetch('https://api.adminplus.co.kr/oauth/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString()
+    });
+    const tj = await tr.json();
+    if (!tj.success) return res.status(502).json({ error: '토큰 발급 실패: ' + tj.message });
+    const token = tj.data.access_token;
+    // 커서 페이지네이션으로 전체 상품 수집 (안전장치: 최대 50페이지)
+    let items = [], cursor = null, pages = 0;
+    do {
+      const url = new URL('https://api.adminplus.co.kr/v1/seller/products');
+      url.searchParams.set('limit', '500');
+      url.searchParams.set('status', 'active');
+      if (cursor) url.searchParams.set('cursor', cursor);
+      const pr = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+      const pj = await pr.json();
+      if (!pj.success) return res.status(502).json({ error: '상품 조회 실패: ' + pj.message });
+      items = items.concat(pj.data.items || []);
+      cursor = pj.data.has_more ? pj.data.next_cursor : null;
+      pages++;
+    } while (cursor && pages < 50);
+    // 필요한 필드만 정리
+    const products = items.map(p => ({
+      product_code: p.product_code,
+      name: p.name,
+      price: p.price,
+      taxable: p.taxable,
+      image: p.image,
+      shipping_origin: p.shipping_origin,
+      delivery_policy: p.delivery_policy,
+      order_cutoff_time: p.order_cutoff_time,
+      stock: p.stock,
+      status: p.status,
+      last_updated_date: p.last_updated_date,
+    }));
+    res.json({ count: products.length, products });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
