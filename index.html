@@ -10501,6 +10501,27 @@ function renderCompareGroups(list) {
     return ka[2].localeCompare(kb[2], 'ko');
   });
 
+  function makeRow(p, isLast) {
+    const code = (p.product_code || '').replace(/"/g, '');
+    const mapKey = 'cmp_' + code + '_' + p.supplier_id;
+    window._supplierProductMap[mapKey] = { ...p, _supplierNameOverride: p.supplier_name };
+    const priceStr = Number(p.price) ? Number(p.price).toLocaleString() + '원' : '-';
+    const color = _supplierColor(p.supplier_name);
+    const isExempt = p.taxable === '비과세';
+    const taxBadge = isExempt
+      ? ' <span style="background:#E8F5E9;color:#2E7D32;padding:1px 5px;border-radius:4px;font-size:10px;vertical-align:middle">면세</span>'
+      : '';
+    let stockLabel = '', stockStyle = 'font-size:10px;color:var(--text-dim)';
+    if (p.stock === 'soldout') { stockLabel = ' · 품절'; stockStyle = 'font-size:10px;color:var(--red)'; }
+    const border = isLast ? '' : 'border-bottom:0.5px solid var(--border);';
+    return `<div style="${border}padding:8px 12px;display:flex;align-items:center;gap:8px">
+      <span style="width:60px;flex-shrink:0;text-align:center;background:${color}18;color:${color};border:1px solid ${color}38;padding:2px 0;border-radius:5px;font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.supplier_name)}</span>
+      <div style="flex:1;min-width:0;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name || '')}${taxBadge}${stockLabel ? `<span style="${stockStyle}">${stockLabel}</span>` : ''}${p.order_cutoff_time ? `<span style="font-size:10px;color:var(--text-dim)"> · ${escHtml(p.order_cutoff_time)}</span>` : ''}</div>
+      <span style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;flex-shrink:0">${priceStr}</span>
+      <button onclick="openSupplierB2BModalDirect('${mapKey}')" style="flex-shrink:0;padding:3px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;font-size:10px;font-weight:500;color:var(--text-sub);cursor:pointer;font-family:var(--sans);white-space:nowrap">+ 매입가</button>
+    </div>`;
+  }
+
   el.innerHTML = sortedKeys.map(key => {
     // 가나다순 정렬
     const items = groups[key].slice().sort((a, b) =>
@@ -10508,35 +10529,22 @@ function renderCompareGroups(list) {
     );
     const label = key === '__기타__' ? '기타' : key;
 
-    const rows = items.map((p, idx) => {
-      const code = (p.product_code || '').replace(/"/g, '');
-      const mapKey = 'cmp_' + code + '_' + p.supplier_id;
-      window._supplierProductMap[mapKey] = { ...p, _supplierNameOverride: p.supplier_name };
-      const priceStr = Number(p.price) ? Number(p.price).toLocaleString() + '원' : '-';
-      const color = _supplierColor(p.supplier_name);
-      const isExempt = p.taxable === '비과세';
-      const taxBadge = isExempt
-        ? ' <span style="background:#E8F5E9;color:#2E7D32;padding:1px 5px;border-radius:4px;font-size:10px;vertical-align:middle">면세</span>'
-        : '';
-      let stockLabel = '', stockStyle = 'font-size:10px;color:var(--text-dim)';
-      if (p.stock === 'soldout') { stockLabel = ' · 품절'; stockStyle = 'font-size:10px;color:var(--red)'; }
-      const isLast = idx === items.length - 1;
-      const rowBorder = isLast ? '' : 'border-bottom:0.5px solid var(--border);';
+    // 열 우선 2열 배치: 앞 절반 → 왼쪽, 뒤 절반 → 오른쪽
+    const half = Math.ceil(items.length / 2);
+    const leftCol  = items.slice(0, half);
+    const rightCol = items.slice(half);
 
-      return `<div style="${rowBorder}padding:9px 14px;display:flex;align-items:center;gap:10px">
-        <span style="width:66px;flex-shrink:0;text-align:center;background:${color}18;color:${color};border:1px solid ${color}38;padding:3px 0;border-radius:5px;font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.supplier_name)}</span>
-        <div style="flex:1;min-width:0;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name || '')}${taxBadge}${stockLabel ? `<span style="${stockStyle}">${stockLabel}</span>` : ''}${p.order_cutoff_time ? `<span style="font-size:10px;color:var(--text-dim)"> · 마감 ${escHtml(p.order_cutoff_time)}</span>` : ''}</div>
-        <span style="font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;flex-shrink:0">${priceStr}</span>
-        <button onclick="openSupplierB2BModalDirect('${mapKey}')" style="flex-shrink:0;padding:4px 9px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:500;color:var(--text-sub);cursor:pointer;font-family:var(--sans);white-space:nowrap">+ 매입가</button>
-      </div>`;
-    }).join('');
+    const makeCol = (col) => col.map((p, i) => makeRow(p, i === col.length - 1)).join('');
 
     return `<div style="border:0.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
       <div style="padding:10px 14px;background:var(--surface2);border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:16px;font-weight:600;color:var(--text)">${escHtml(label)}</span>
         <span style="font-size:12px;color:var(--text-dim)">${items.length}건</span>
       </div>
-      ${rows}
+      <div style="display:grid;grid-template-columns:1fr 1fr">
+        <div style="border-right:0.5px solid var(--border)">${makeCol(leftCol)}</div>
+        <div>${makeCol(rightCol)}</div>
+      </div>
     </div>`;
   }).join('');
 }
