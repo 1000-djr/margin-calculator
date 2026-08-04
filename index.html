@@ -1829,6 +1829,52 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div id="supplierGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px"></div>
   </div>
 
+<!-- ══ 도매처 → B2B 매입가 저장 모달 ══════════════════════════════════ -->
+<div id="supplierB2BBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center" onclick="closeSupplierB2BModal(event)">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:460px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.2)" onclick="event.stopPropagation()">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">📦 B2B 매입가로 저장</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:20px">더그린 상품 정보를 B2B 매입가에 등록합니다.</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">상품명</label>
+        <input id="sb2bProductName" type="text" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">단위</label>
+          <input id="sb2bUnit" type="text" placeholder="예: 10kg" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">공급처</label>
+          <input id="sb2bSupplier" type="text" value="더그린" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">매입가 (원)</label>
+        <input id="sb2bCost" type="number" min="0" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">시작일 <span style="color:var(--red)">*</span></label>
+          <input id="sb2bStartDate" type="date" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">종료일 <span style="color:var(--text-dim)">(선택)</span></label>
+          <input id="sb2bEndDate" type="date" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+        </div>
+      </div>
+      <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--text-dim);line-height:1.5">
+        💡 이 매입가가 적용되기 시작한 날짜를 선택하세요. 수익분석에서 이 날짜 이후 주문에 이 원가가 적용됩니다.
+      </div>
+      <div id="sb2bError" style="display:none;font-size:12px;color:var(--red);padding:6px 0"></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px">
+      <button class="btn btn-sm" onclick="closeSupplierB2BModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-sub)">취소</button>
+      <button id="sb2bSaveBtn" class="btn btn-primary btn-sm" onclick="saveSupplierToB2B()" style="font-weight:600">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 반품/출고중지 API 동기화 모달 ══════════════════════════════════ -->
 <div id="returnSyncBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center" onclick="closeReturnSyncModal(event)">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:440px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.2)" onclick="event.stopPropagation()">
@@ -10198,9 +10244,13 @@ function filterSupplierProducts() {
   renderSupplierCards(filtered);
 }
 
+window._supplierProductMap = {};
+
 function renderSupplierCards(list) {
   const grid = document.getElementById('supplierGrid');
   if (!list.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text-dim);padding:40px 0;font-size:13px">검색 결과가 없습니다.</div>'; return; }
+  // 카드 참조용 맵에 저장
+  list.forEach(p => { if (p.product_code) window._supplierProductMap[p.product_code] = p; });
   grid.innerHTML = list.map(p => {
     const price = p.price != null ? Number(p.price).toLocaleString() + '원' : '-';
     // 1. 과세/면세: API는 '비과세' / '과세' 문자열로 옴
@@ -10225,6 +10275,7 @@ function renderSupplierCards(list) {
     const delivery = deliveryText
       ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px">${deliveryText}${detailsFirst ? ' <span title="${dp.details}">(' + detailsFirst + ')</span>' : ''}</div>`
       : '';
+    const code = p.product_code ? p.product_code.replace(/"/g, '') : '';
     return `<div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
       ${img}${placeholder}
       <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:6px">
@@ -10232,9 +10283,97 @@ function renderSupplierCards(list) {
         <div style="font-size:18px;font-weight:700;color:var(--accent);margin-top:2px">${price}</div>
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${taxBadge}${stockLabel ? `<span style="${stockStyle}">${stockLabel}</span>` : ''}${cutoff ? `<span style="font-size:11px;color:var(--text-dim)">· ${cutoff}</span>` : ''}</div>
         ${delivery}
+        <button id="sb2b-btn-${code}" onclick="openSupplierB2BModal('${code}')" style="margin-top:6px;width:100%;padding:7px 0;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:500;color:var(--text-sub);cursor:pointer;font-family:var(--sans);transition:background 0.15s" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background='var(--surface2)'">+ B2B 매입가로 저장</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function _extractUnitFromName(name) {
+  // 상품명 끝부분의 '숫자+단위' 패턴 추출
+  const m = name && name.match(/(\d+(?:\.\d+)?\s*(?:kg|g|개|봉|박스|팩|묶음|세트))\s*$/i);
+  if (!m) return { product_name: (name || '').trim(), unit: '' };
+  const unit = m[1].replace(/\s+/g, '');
+  const product_name = name.slice(0, name.lastIndexOf(m[0])).trim().replace(/\s+$/, '');
+  return { product_name: product_name || (name || '').trim(), unit };
+}
+
+function openSupplierB2BModal(code) {
+  const p = window._supplierProductMap[code];
+  if (!p) return;
+  const { product_name, unit } = _extractUnitFromName(p.name || '');
+  document.getElementById('sb2bProductName').value = product_name;
+  document.getElementById('sb2bUnit').value = unit;
+  document.getElementById('sb2bSupplier').value = '더그린';
+  document.getElementById('sb2bCost').value = p.price != null ? p.price : '';
+  document.getElementById('sb2bStartDate').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('sb2bEndDate').value = '';
+  document.getElementById('sb2bError').style.display = 'none';
+  document.getElementById('sb2bError').textContent = '';
+  const btn = document.getElementById('sb2bSaveBtn');
+  btn.textContent = '저장';
+  btn.disabled = false;
+  btn.dataset.code = code;
+  const bd = document.getElementById('supplierB2BBackdrop');
+  bd.style.display = 'flex';
+}
+
+function closeSupplierB2BModal(e) {
+  if (e && e.target !== document.getElementById('supplierB2BBackdrop')) return;
+  document.getElementById('supplierB2BBackdrop').style.display = 'none';
+}
+
+async function saveSupplierToB2B() {
+  const product_name = document.getElementById('sb2bProductName').value.trim();
+  const unit = document.getElementById('sb2bUnit').value.trim();
+  const supplier_name = document.getElementById('sb2bSupplier').value.trim();
+  const cost = document.getElementById('sb2bCost').value;
+  const start_date = document.getElementById('sb2bStartDate').value;
+  const end_date = document.getElementById('sb2bEndDate').value;
+  const errEl = document.getElementById('sb2bError');
+  errEl.style.display = 'none';
+  if (!product_name || !supplier_name || !cost || !start_date) {
+    errEl.textContent = '상품명, 공급처, 매입가, 시작일은 필수입니다.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const btn = document.getElementById('sb2bSaveBtn');
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
+  try {
+    const r = await fetch('/api/b2b-prices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_name, unit, supplier_name, cost: parseFloat(cost), start_date, end_date: end_date || undefined })
+    });
+    const j = await r.json();
+    if (r.status === 409) {
+      errEl.textContent = '이미 등록된 상품+공급처+시작일입니다.';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = '저장';
+      return;
+    }
+    if (!r.ok) {
+      errEl.textContent = j.error || '저장 실패';
+      errEl.style.display = 'block';
+      btn.disabled = false; btn.textContent = '저장';
+      return;
+    }
+    // 성공
+    document.getElementById('supplierB2BBackdrop').style.display = 'none';
+    const code = btn.dataset.code;
+    const cardBtn = document.getElementById('sb2b-btn-' + code);
+    if (cardBtn) {
+      const orig = cardBtn.textContent;
+      cardBtn.textContent = '✓ 저장됨';
+      cardBtn.style.background = '#E8F5E9'; cardBtn.style.color = '#2E7D32'; cardBtn.style.borderColor = '#A5D6A7';
+      setTimeout(() => { cardBtn.textContent = orig; cardBtn.style.background = ''; cardBtn.style.color = ''; cardBtn.style.borderColor = ''; }, 2500);
+    }
+  } catch(e) {
+    errEl.textContent = '네트워크 오류: ' + e.message;
+    errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = '저장';
+  }
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
