@@ -3932,4 +3932,45 @@ router.delete('/traffic-slots/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 어드민플러스 연결 테스트 + 서버 outbound IP 확인 ──────────────────────────
+router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
+  const result = {};
+
+  // 1. 우리 서버 outbound IP 확인 (화이트리스트 등록용)
+  try {
+    const ipr = await fetch('https://api.ipify.org?format=json');
+    const ipj = await ipr.json();
+    result.our_outbound_ip = ipj.ip;
+  } catch(e) { result.our_outbound_ip = 'IP확인실패: ' + e.message; }
+
+  // 2. 어드민플러스 토큰 발급 + 상품 조회
+  try {
+    const id = process.env.ADMINPLUS_THEGREEN_CLIENT_ID;
+    const secret = process.env.ADMINPLUS_THEGREEN_CLIENT_SECRET;
+    if (!id || !secret) { result.error = 'ADMINPLUS 환경변수 미설정'; return res.json(result); }
+    const body = new URLSearchParams({ client_id: id, client_secret: secret });
+    const tr = await fetch('https://api.adminplus.co.kr/oauth/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString()
+    });
+    const tj = await tr.json();
+    result.token_http = tr.status;
+    result.token_success = tj.success;
+    result.token_message = tj.message;
+    if (tj.success) {
+      const pr = await fetch('https://api.adminplus.co.kr/v1/seller/products?limit=5&status=active', {
+        headers: { 'Authorization': 'Bearer ' + tj.data.access_token }
+      });
+      const pj = await pr.json();
+      result.products_http = pr.status;
+      result.products_success = pj.success;
+      result.products_message = pj.message;
+      result.sample_count = pj.data?.items?.length || 0;
+      result.has_more = pj.data?.has_more;
+      result.first_item = pj.data?.items?.[0] || null;
+    }
+  } catch(e) { result.error = e.message; }
+
+  res.json(result);
+});
+
 module.exports = router;
