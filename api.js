@@ -3883,26 +3883,22 @@ router.put('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
     );
     if (!existing.length) return res.status(404).json({ error: '항목 없음' });
     const prev = existing[0];
-    let secretEnc = prev.api_client_secret_enc; // 기존 값 유지
-    let apiLinked = !!prev.api_linked;
-    if (api_type && api_client_id) {
-      if (api_client_secret) {
-        // 새 secret 입력 → 암호화 갱신
-        secretEnc = encryptSecret(api_client_secret);
-        apiLinked = true;
-      } else {
-        // secret 비워도 client_id 있으면 연동 유지
-        apiLinked = true;
-      }
-    } else if (!api_type) {
-      // 연동 해제
-      secretEnc = null; apiLinked = false;
+    // client_id: 비우면 기존 유지
+    const finalClientId = (api_client_id && api_client_id.trim()) ? api_client_id.trim() : prev.api_client_id;
+    // secret: 비우면 기존 유지
+    let secretEnc = prev.api_client_secret_enc;
+    if (api_client_secret && api_client_secret.trim()) {
+      secretEnc = encryptSecret(api_client_secret.trim());
     }
+    // api_linked: api_type 있고 id/secret 둘 다 존재하면 true, api_type 비우면 초기화
+    let apiLinked = false;
+    if (!api_type) { secretEnc = null; apiLinked = false; }
+    else if (api_type && finalClientId && secretEnc) { apiLinked = true; }
     const { rows } = await pool.query(
       `UPDATE wholesale_suppliers
        SET name=$1, url=$2, api_type=$3, api_client_id=$4, api_client_secret_enc=$5, api_linked=$6
        WHERE id=$7 AND user_id=$8 RETURNING *`,
-      [name.trim(), url.trim(), api_type || null, api_client_id || null, secretEnc, apiLinked, req.params.id, req.user.id]
+      [name.trim(), url.trim(), api_type || null, finalClientId || null, secretEnc, apiLinked, req.params.id, req.user.id]
     );
     res.json(wsRow(rows[0]));
   } catch (e) { res.status(500).json({ error: e.message }); }

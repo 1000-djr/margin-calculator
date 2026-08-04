@@ -9373,9 +9373,10 @@ function editWholesaleSupplier(id) {
     sec.style.display = 'flex';
     document.getElementById('wsApiToggleIcon').textContent = '▼';
     document.getElementById('wsApiType').value = s.api_type;
-    document.getElementById('wsApiClientId').value = s.api_client_id_masked
-      ? s.api_client_id_masked.replace('****', '') // masked라 일부만 표시됨 - 수정 시 전체 다시 입력 유도
-      : '';
+    document.getElementById('wsApiClientId').value = '';
+    document.getElementById('wsApiClientId').placeholder = s.api_client_id_masked
+      ? s.api_client_id_masked + ' (수정 시 비우면 유지)'
+      : 'client_id';
     document.getElementById('wsApiClientSecret').value = '';
     onWsApiTypeChange();
   } else {
