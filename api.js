@@ -4090,47 +4090,84 @@ router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
   res.json(result);
 });
 
-// ─── 다중 도매처 가격 비교 조회 ────────────────────────────────────────────────
-router.get('/supplier/compare', requireAuth, async (req, res) => {
+// ─── 서버측 단위 추출 ─────────────────────────────────────────────────────────
+function extractUnit(name) {
+  const m = name && name.match(/(\d+(?:\.\d+)?\s*(?:kg|g|개|봉|박스|팩|묶음|세트))\s*$/i);
+  return m ? m[1].replace(/\s+/g, '') : '';
+}
+
+// ─── 도매처 상품 동기화 (API → DB) ────────────────────────────────────────────
+router.post('/supplier/sync', requireAuth, async (req, res) => {
   try {
-    const q = (req.query.q || '').trim();
     const { rows: suppliers } = await pool.query(
       'SELECT * FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type IS NOT NULL',
       [req.user.id]
     );
-    if (!suppliers.length) return res.json({ products: [], suppliers: [] });
-    const results = await Promise.allSettled(suppliers.map(async (s) => {
-      const cfg = getSupplierApiConfig(s);
-      if (!cfg || cfg.type !== 'adminplus') return [];
-      const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
-      let items = [], cursor = null, pages = 0;
-      do {
-        const params = { limit: 500, status: 'active' };
-        if (cursor) params.cursor = cursor;
-        const data = await adminplusGetProducts(token, params);
-        items = items.concat(data.items || []);
-        cursor = data.has_more ? data.next_cursor : null;
-        pages++;
-      } while (cursor && pages < 50);
-      return items.map(p => ({
-        supplier_id: s.id, supplier_name: s.name,
-        product_code: p.product_code, name: p.name, price: p.price,
-        taxable: p.taxable, image: p.image, stock: p.stock,
-        delivery_policy: p.delivery_policy, order_cutoff_time: p.order_cutoff_time,
-      }));
-    }));
-    let products = [];
-    const supplierStatus = [];
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled') {
-        products = products.concat(r.value);
-        supplierStatus.push({ name: suppliers[i].name, ok: true });
-      } else {
-        supplierStatus.push({ name: suppliers[i].name, ok: false, error: String(r.reason?.message || r.reason) });
-      }
+    if (!suppliers.length) return res.json({ synced: 0, suppliers: [], synced_at: null });
+    const status = [];
+    let total = 0;
+    for (const s of suppliers) {
+      try {
+        const cfg = getSupplierApiConfig(s);
+        if (!cfg || cfg.type !== 'adminplus') { status.push({ name: s.name, ok: false, error: '미지원 타입' }); continue; }
+        const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+        let items = [], cursor = null, pages = 0;
+        do {
+          const params = { limit: 500, status: 'active' };
+          if (cursor) params.cursor = cursor;
+          const data = await adminplusGetProducts(token, params);
+          items = items.concat(data.items || []);
+          cursor = data.has_more ? data.next_cursor : null;
+          pages++;
+        } while (cursor && pages < 50);
+        // 이 도매처 기존 캐시 삭제 후 재삽입
+        await pool.query('DELETE FROM supplier_products WHERE user_id=$1 AND supplier_id=$2', [req.user.id, s.id]);
+        for (const p of items) {
+          const unit = extractUnit(p.name || '');
+          const dp = p.delivery_policy ? JSON.stringify(p.delivery_policy) : null;
+          await pool.query(
+            `INSERT INTO supplier_products (user_id,supplier_id,product_code,name,price,taxable,image,stock,delivery_policy,order_cutoff_time,unit,synced_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
+             ON CONFLICT (user_id,supplier_id,product_code) DO UPDATE SET
+               name=EXCLUDED.name, price=EXCLUDED.price, taxable=EXCLUDED.taxable, image=EXCLUDED.image,
+               stock=EXCLUDED.stock, delivery_policy=EXCLUDED.delivery_policy,
+               order_cutoff_time=EXCLUDED.order_cutoff_time, unit=EXCLUDED.unit, synced_at=NOW()`,
+            [req.user.id, s.id, String(p.product_code), p.name, p.price, p.taxable,
+             p.image, String(p.stock || ''), dp, p.order_cutoff_time, unit]
+          );
+          total++;
+        }
+        status.push({ name: s.name, ok: true, count: items.length });
+      } catch(e) { status.push({ name: s.name, ok: false, error: String(e.message) }); }
+    }
+    res.json({ synced: total, suppliers: status, synced_at: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 가격 비교 조회 (DB 캐시 기반, 즉시 응답) ───────────────────────────────
+router.get('/supplier/compare', requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const params = [req.user.id];
+    let sql = `SELECT sp.*, ws.name AS supplier_name
+               FROM supplier_products sp
+               JOIN wholesale_suppliers ws ON ws.id = sp.supplier_id
+               WHERE sp.user_id = $1`;
+    if (q) { params.push('%' + q + '%'); sql += ` AND sp.name ILIKE $${params.length}`; }
+    sql += ' ORDER BY sp.name';
+    const { rows } = await pool.query(sql, params);
+    const { rows: sync } = await pool.query(
+      'SELECT MAX(synced_at) AS last FROM supplier_products WHERE user_id=$1', [req.user.id]
+    );
+    res.json({
+      products: rows.map(r => ({
+        supplier_id: r.supplier_id, supplier_name: r.supplier_name,
+        product_code: r.product_code, name: r.name, price: Number(r.price),
+        taxable: r.taxable, image: r.image, stock: r.stock,
+        delivery_policy: r.delivery_policy, order_cutoff_time: r.order_cutoff_time, unit: r.unit,
+      })),
+      last_synced: sync[0]?.last || null,
     });
-    if (q) products = products.filter(p => (p.name || '').includes(q));
-    res.json({ products, suppliers: supplierStatus });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

@@ -1858,7 +1858,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
     <!-- ── 가격 비교 패널 ── -->
     <div id="spanel-compare">
-      <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="card" style="padding:12px 14px;margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <input id="compareQ" type="text" placeholder="상품명 검색 (예: 감자)" onkeydown="if(event.key==='Enter')runCompare()"
           style="flex:1;min-width:140px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
         <select id="compareUnitFilter" onchange="applyCompareFilter()"
@@ -1866,7 +1866,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <option value="">단위 전체</option>
         </select>
         <button class="btn btn-primary btn-sm" style="font-weight:600;white-space:nowrap" onclick="runCompare()">🔍 검색</button>
+        <button id="syncSupplierBtn" class="btn btn-sm" style="white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);font-weight:500" onclick="syncSupplierProducts()">🔄 동기화</button>
       </div>
+      <div id="compareLastSync" style="font-size:11px;color:var(--text-dim);margin-bottom:8px;padding:0 2px"></div>
       <div id="compareStatus" style="font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0;display:none">조회 중...</div>
       <div id="compareSummary" style="font-size:12px;color:var(--text-dim);margin-bottom:10px"></div>
       <div id="compareList" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -10384,12 +10386,42 @@ function setSupplierSubTab(name) {
 // ── 가격 비교 ──────────────────────────────────────────────────────────────────
 let _compareAll = [];
 
+function _fmtSyncTime(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function syncSupplierProducts() {
+  const btn = document.getElementById('syncSupplierBtn');
+  const lastEl = document.getElementById('compareLastSync');
+  btn.disabled = true; btn.textContent = '동기화 중...';
+  try {
+    const r = await fetch('/api/supplier/sync', { method: 'POST' });
+    const j = await r.json();
+    if (!r.ok) { alert('동기화 실패: ' + (j.error || '')); return; }
+    const ok = (j.suppliers || []).filter(s => s.ok).map(s => `${s.name} ${s.count}건`).join(', ');
+    const fail = (j.suppliers || []).filter(s => !s.ok).map(s => `${s.name}(실패)`).join(', ');
+    const parts = [ok, fail].filter(Boolean).join(' · ');
+    const ts = _fmtSyncTime(j.synced_at);
+    lastEl.innerHTML = `✅ 동기화 완료 ${ts ? '· ' + ts : ''} · ${parts || j.synced + '건'}`;
+    // 동기화 후 현재 검색 재실행
+    await runCompare();
+  } catch(e) {
+    alert('동기화 오류: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 동기화';
+  }
+}
+
 async function runCompare() {
   const q = (document.getElementById('compareQ').value || '').trim();
   const statusEl = document.getElementById('compareStatus');
   const summaryEl = document.getElementById('compareSummary');
+  const lastEl = document.getElementById('compareLastSync');
   const listEl = document.getElementById('compareList');
-  statusEl.style.display = 'block'; statusEl.textContent = '조회 중...';
+  statusEl.style.display = 'block'; statusEl.textContent = '검색 중...';
   summaryEl.textContent = '';
   listEl.innerHTML = '';
   document.getElementById('compareUnitFilter').innerHTML = '<option value="">단위 전체</option>';
@@ -10399,12 +10431,19 @@ async function runCompare() {
     const j = await r.json();
     statusEl.style.display = 'none';
     if (!r.ok) { summaryEl.textContent = j.error || '오류 발생'; return; }
+    // DB에서 unit이 이미 계산됨. 없으면 클라이언트 fallback
     _compareAll = (j.products || []).map(p => {
-      p._unit = _extractUnitFromName(p.name || '').unit;
+      p._unit = p.unit || _extractUnitFromName(p.name || '').unit;
       return p;
     });
+    // 마지막 동기화 시각
+    if (j.last_synced) {
+      lastEl.textContent = '마지막 동기화: ' + _fmtSyncTime(j.last_synced);
+    } else if (!_compareAll.length) {
+      lastEl.innerHTML = '<span style="color:var(--yellow)">⚠️ 먼저 🔄 동기화 버튼을 눌러 상품을 가져오세요.</span>';
+    }
     // 도매처별 색상 미리 배정
-    (j.suppliers || []).filter(s => s.ok).forEach(s => _supplierColor(s.name));
+    [...new Set(_compareAll.map(p => p.supplier_name))].forEach(n => _supplierColor(n));
     // 단위 드롭다운 구성 (kg 숫자 오름차순)
     const units = [...new Set(_compareAll.map(p => p._unit).filter(Boolean))].sort((a, b) => {
       const ka = _unitSortKey(a), kb = _unitSortKey(b);
@@ -10414,15 +10453,12 @@ async function runCompare() {
     });
     const sel = document.getElementById('compareUnitFilter');
     units.forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; sel.appendChild(o); });
-    // 실패 도매처 경고
-    const failed = (j.suppliers || []).filter(s => !s.ok);
-    const okCount = (j.suppliers || []).filter(s => s.ok).length;
-    let warn = failed.length ? ` · ⚠️ ${failed.map(s => s.name).join(', ')} 조회 실패` : '';
-    summaryEl.innerHTML = `<span style="color:var(--text-dim)">검색 결과 <b style="color:var(--text)">${_compareAll.length.toLocaleString()}건</b> · ${okCount}개 도매처${warn}</span>`;
+    const supplierCount = new Set(_compareAll.map(p => p.supplier_name)).size;
+    summaryEl.innerHTML = `<span style="color:var(--text-dim)">검색 결과 <b style="color:var(--text)">${_compareAll.length.toLocaleString()}건</b> · ${supplierCount}개 도매처</span>`;
     applyCompareFilter();
   } catch(e) {
     statusEl.style.display = 'none';
-    summaryEl.textContent = '네트워크 오류: ' + e.message;
+    summaryEl.textContent = '오류: ' + e.message;
   }
 }
 

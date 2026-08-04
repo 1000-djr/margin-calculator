@@ -511,6 +511,29 @@ async function initDB() {
     await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_linked BOOLEAN DEFAULT FALSE`);
   } catch(e) { console.warn('[db] wholesale_suppliers API 컬럼 추가 실패:', e.message); }
 
+  // 도매처 상품 캐시 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS supplier_products (
+      id               SERIAL PRIMARY KEY,
+      user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      supplier_id      INTEGER REFERENCES wholesale_suppliers(id) ON DELETE CASCADE,
+      product_code     TEXT,
+      name             TEXT,
+      price            NUMERIC(12,2),
+      taxable          TEXT,
+      image            TEXT,
+      stock            TEXT,
+      delivery_policy  JSONB,
+      order_cutoff_time TEXT,
+      unit             TEXT,
+      synced_at        TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id, supplier_id, product_code)
+    );
+  `);
+  try {
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sp_user_name ON supplier_products(user_id, name)`);
+  } catch(e) { console.warn('[db] idx_sp_user_name 생성 실패:', e.message); }
+
   // 트래픽 슬롯 관리 테이블
   await pool.query(`
     CREATE TABLE IF NOT EXISTS traffic_slots (
