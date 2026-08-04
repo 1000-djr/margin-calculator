@@ -4090,7 +4090,50 @@ router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
   res.json(result);
 });
 
-// ─── 도매처(더그린) 상품 전체 조회 ────────────────────────────────────────────
+// ─── 다중 도매처 가격 비교 조회 ────────────────────────────────────────────────
+router.get('/supplier/compare', requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    const { rows: suppliers } = await pool.query(
+      'SELECT * FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type IS NOT NULL',
+      [req.user.id]
+    );
+    if (!suppliers.length) return res.json({ products: [], suppliers: [] });
+    const results = await Promise.allSettled(suppliers.map(async (s) => {
+      const cfg = getSupplierApiConfig(s);
+      if (!cfg || cfg.type !== 'adminplus') return [];
+      const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+      let items = [], cursor = null, pages = 0;
+      do {
+        const params = { limit: 500, status: 'active' };
+        if (cursor) params.cursor = cursor;
+        const data = await adminplusGetProducts(token, params);
+        items = items.concat(data.items || []);
+        cursor = data.has_more ? data.next_cursor : null;
+        pages++;
+      } while (cursor && pages < 50);
+      return items.map(p => ({
+        supplier_id: s.id, supplier_name: s.name,
+        product_code: p.product_code, name: p.name, price: p.price,
+        taxable: p.taxable, image: p.image, stock: p.stock,
+        delivery_policy: p.delivery_policy, order_cutoff_time: p.order_cutoff_time,
+      }));
+    }));
+    let products = [];
+    const supplierStatus = [];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled') {
+        products = products.concat(r.value);
+        supplierStatus.push({ name: suppliers[i].name, ok: true });
+      } else {
+        supplierStatus.push({ name: suppliers[i].name, ok: false, error: String(r.reason?.message || r.reason) });
+      }
+    });
+    if (q) products = products.filter(p => (p.name || '').includes(q));
+    res.json({ products, suppliers: supplierStatus });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 도매처 상품 전체 조회 (DB 도매처 기반) ───────────────────────────────────
 router.get('/supplier/:supplierId/products', requireAuth, async (req, res) => {
   try {

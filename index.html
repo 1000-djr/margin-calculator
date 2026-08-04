@@ -1850,32 +1850,57 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ 도매처(더그린) 탭 ══════════════════════════════════════════════ -->
   <div class="panel" id="tab-supplier">
-    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
-      <span id="supplierTabTitle">도매처 상품</span>
-      <div style="display:flex;gap:8px;align-items:center">
-        <span id="supplierCount" style="font-size:12px;color:var(--text-dim)"></span>
-        <button class="btn btn-primary btn-sm" style="font-weight:600" onclick="loadSupplierProducts()">🔄 불러오기</button>
+    <!-- 하위 탭 토글 -->
+    <div style="display:flex;gap:4px;margin-bottom:18px;background:var(--surface3);border-radius:10px;padding:3px;width:fit-content">
+      <button id="stab-compare" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('compare')">🔍 가격 비교</button>
+      <button id="stab-browse" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('browse')">📦 상품 보기</button>
+    </div>
+
+    <!-- ── 가격 비교 패널 ── -->
+    <div id="spanel-compare">
+      <div class="card" style="padding:12px 14px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="compareQ" type="text" placeholder="상품명 검색 (예: 감자)" onkeydown="if(event.key==='Enter')runCompare()"
+          style="flex:1;min-width:140px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+        <select id="compareUnitFilter" onchange="applyCompareFilter()"
+          style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
+          <option value="">단위 전체</option>
+        </select>
+        <button class="btn btn-primary btn-sm" style="font-weight:600;white-space:nowrap" onclick="runCompare()">🔍 검색</button>
       </div>
+      <div id="compareStatus" style="font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0;display:none">조회 중...</div>
+      <div id="compareSummary" style="font-size:12px;color:var(--text-dim);margin-bottom:10px"></div>
+      <div id="compareList" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
-    <div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
-      <label style="font-size:12px;font-weight:600;color:var(--text-dim);white-space:nowrap">도매처 선택</label>
-      <select id="supplierSelect" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans);outline:none" onchange="onSupplierSelectChange()">
-        <option value="">-- 불러오는 중 --</option>
-      </select>
+
+    <!-- ── 상품 보기 패널 ── -->
+    <div id="spanel-browse" style="display:none">
+      <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+        <span id="supplierTabTitle">도매처 상품</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span id="supplierCount" style="font-size:12px;color:var(--text-dim)"></span>
+          <button class="btn btn-primary btn-sm" style="font-weight:600" onclick="loadSupplierProducts()">🔄 불러오기</button>
+        </div>
+      </div>
+      <div class="card" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;font-weight:600;color:var(--text-dim);white-space:nowrap">도매처 선택</label>
+        <select id="supplierSelect" style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans);outline:none" onchange="onSupplierSelectChange()">
+          <option value="">-- 불러오는 중 --</option>
+        </select>
+      </div>
+      <div id="supplierNoLinked" style="display:none;font-size:13px;color:var(--text-dim);text-align:center;padding:30px 0">
+        API 연동된 도매처가 없습니다.<br>
+        <span style="font-size:12px">도매처 관리(헤더 🏪 버튼)에서 API를 연동하세요.</span>
+      </div>
+      <div class="card" style="padding:10px 14px;margin-bottom:16px">
+        <input id="supplierSearch" type="text" placeholder="상품명 검색..." oninput="filterSupplierProducts()"
+          style="width:100%;background:transparent;border:none;outline:none;font-size:14px;color:var(--text);font-family:var(--sans)">
+      </div>
+      <div id="supplierStatus" style="font-size:13px;color:var(--text-dim);text-align:center;padding:40px 0;display:none">
+        불러오는 중...
+      </div>
+      <div id="supplierError" style="font-size:13px;color:var(--red);text-align:center;padding:20px 0;display:none"></div>
+      <div id="supplierGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px"></div>
     </div>
-    <div id="supplierNoLinked" style="display:none;font-size:13px;color:var(--text-dim);text-align:center;padding:30px 0">
-      API 연동된 도매처가 없습니다.<br>
-      <span style="font-size:12px">도매처 관리(헤더 🏪 버튼)에서 API를 연동하세요.</span>
-    </div>
-    <div class="card" style="padding:10px 14px;margin-bottom:16px">
-      <input id="supplierSearch" type="text" placeholder="상품명 검색..." oninput="filterSupplierProducts()"
-        style="width:100%;background:transparent;border:none;outline:none;font-size:14px;color:var(--text);font-family:var(--sans)">
-    </div>
-    <div id="supplierStatus" style="font-size:13px;color:var(--text-dim);text-align:center;padding:40px 0;display:none">
-      불러오는 중...
-    </div>
-    <div id="supplierError" style="font-size:13px;color:var(--red);text-align:center;padding:20px 0;display:none"></div>
-    <div id="supplierGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px"></div>
   </div>
 
 <!-- ══ 도매처 → B2B 매입가 저장 모달 ══════════════════════════════════ -->
@@ -2646,7 +2671,7 @@ function _activateTabUI(name) {
   if (name === 'traffic')  { loadTrafficSlots(); }
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
-  if (name === 'supplier') { initSupplierTab(); }
+  if (name === 'supplier') { setSupplierSubTab('compare'); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -10336,6 +10361,134 @@ function renderAdPlacements() {
 // ── 도매처 탭 ─────────────────────────────────────────────────────────────────
 let _supplierAll = [];
 let _currentSupplierName = '';
+
+// 하위 탭 팔레트 (도매처 id → 색)
+const _supplierColors = ['#0071e3','#34c759','#ff9f0a','#ff453a','#bf5af2','#32ade6','#30d158'];
+const _supplierColorMap = {};
+function _supplierColor(id) {
+  if (!_supplierColorMap[id]) {
+    const keys = Object.keys(_supplierColorMap);
+    _supplierColorMap[id] = _supplierColors[keys.length % _supplierColors.length];
+  }
+  return _supplierColorMap[id];
+}
+
+function setSupplierSubTab(name) {
+  document.getElementById('spanel-compare').style.display = name === 'compare' ? '' : 'none';
+  document.getElementById('spanel-browse').style.display  = name === 'browse'  ? '' : 'none';
+  document.getElementById('stab-compare').classList.toggle('active', name === 'compare');
+  document.getElementById('stab-browse').classList.toggle('active', name === 'browse');
+  if (name === 'browse') initSupplierTab();
+}
+
+// ── 가격 비교 ──────────────────────────────────────────────────────────────────
+let _compareAll = [];
+
+async function runCompare() {
+  const q = (document.getElementById('compareQ').value || '').trim();
+  const statusEl = document.getElementById('compareStatus');
+  const summaryEl = document.getElementById('compareSummary');
+  const listEl = document.getElementById('compareList');
+  statusEl.style.display = 'block'; statusEl.textContent = '조회 중...';
+  summaryEl.textContent = '';
+  listEl.innerHTML = '';
+  document.getElementById('compareUnitFilter').innerHTML = '<option value="">단위 전체</option>';
+  try {
+    const url = '/api/supplier/compare' + (q ? '?q=' + encodeURIComponent(q) : '');
+    const r = await fetch(url);
+    const j = await r.json();
+    statusEl.style.display = 'none';
+    if (!r.ok) { summaryEl.textContent = j.error || '오류 발생'; return; }
+    _compareAll = (j.products || []).map(p => {
+      p._unit = _extractUnitFromName(p.name || '').unit;
+      return p;
+    });
+    // 도매처별 색상 미리 배정
+    (j.suppliers || []).filter(s => s.ok).forEach(s => _supplierColor(s.name));
+    // 단위 드롭다운 구성
+    const units = [...new Set(_compareAll.map(p => p._unit).filter(Boolean))].sort();
+    const sel = document.getElementById('compareUnitFilter');
+    units.forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; sel.appendChild(o); });
+    // 실패 도매처 경고
+    const failed = (j.suppliers || []).filter(s => !s.ok);
+    const okCount = (j.suppliers || []).filter(s => s.ok).length;
+    let warn = failed.length ? ` · ⚠️ ${failed.map(s => s.name).join(', ')} 조회 실패` : '';
+    summaryEl.innerHTML = `<span style="color:var(--text-dim)">검색 결과 <b style="color:var(--text)">${_compareAll.length.toLocaleString()}건</b> · ${okCount}개 도매처${warn}</span>`;
+    applyCompareFilter();
+  } catch(e) {
+    statusEl.style.display = 'none';
+    summaryEl.textContent = '네트워크 오류: ' + e.message;
+  }
+}
+
+function applyCompareFilter() {
+  const unit = document.getElementById('compareUnitFilter').value;
+  let list = unit ? _compareAll.filter(p => p._unit === unit) : _compareAll;
+  list = [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ko'));
+  renderCompareList(list);
+}
+
+function renderCompareList(list) {
+  const el = document.getElementById('compareList');
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);font-size:13px;padding:40px 0">검색 결과가 없습니다.</div>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    const code = (p.product_code || '').replace(/"/g, '');
+    const mapKey = 'cmp_' + code + '_' + p.supplier_id;
+    window._supplierProductMap[mapKey] = { ...p, _supplierNameOverride: p.supplier_name };
+    const price = p.price != null ? Number(p.price).toLocaleString() + '원' : '-';
+    const isExempt = p.taxable === '비과세';
+    const taxBadge = isExempt
+      ? '<span style="background:#E8F5E9;color:#2E7D32;padding:1px 6px;border-radius:5px;font-size:10px">면세</span>'
+      : '<span style="background:#F5F5F7;color:#6E6E73;padding:1px 6px;border-radius:5px;font-size:10px">과세</span>';
+    const color = _supplierColor(p.supplier_name);
+    const supBadge = `<span style="background:${color}1a;color:${color};border:1px solid ${color}40;padding:1px 7px;border-radius:5px;font-size:10px;font-weight:600">${escHtml(p.supplier_name)}</span>`;
+    let stockColor = 'var(--text-dim)';
+    let stockLabel = '';
+    if (p.stock === 'unlimited') stockLabel = '재고 충분';
+    else if (p.stock === 'soldout') { stockLabel = '품절'; stockColor = 'var(--red)'; }
+    else if (p.stock != null) stockLabel = '재고 ' + p.stock + '개';
+    const img = p.image
+      ? `<img src="${p.image}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const imgPlaceholder = `<div style="width:52px;height:52px;background:var(--surface2);border-radius:8px;flex-shrink:0;display:${p.image ? 'none' : 'flex'};align-items:center;justify-content:center;font-size:20px">📦</div>`;
+    return `<div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:12px">
+      ${img}${imgPlaceholder}
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">${supBadge}${taxBadge}${stockLabel ? `<span style="font-size:10px;color:${stockColor}">${stockLabel}</span>` : ''}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name || '')}</div>
+        ${p.order_cutoff_time ? `<div style="font-size:10px;color:var(--text-dim)">마감 ${escHtml(p.order_cutoff_time)}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <div style="font-size:18px;font-weight:700;color:var(--accent);white-space:nowrap">${price}</div>
+        <button onclick="openSupplierB2BModalDirect('${mapKey}')" style="padding:5px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-size:11px;font-weight:500;color:var(--text-sub);cursor:pointer;font-family:var(--sans);white-space:nowrap">+ 매입가</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openSupplierB2BModalDirect(mapKey) {
+  const p = window._supplierProductMap[mapKey];
+  if (!p) return;
+  const { product_name, unit } = _extractUnitFromName(p.name || '');
+  const supplierName = p._supplierNameOverride || _currentSupplierName || '';
+  document.getElementById('sb2bProductName').value = product_name;
+  document.getElementById('sb2bUnit').value = unit;
+  document.getElementById('sb2bSupplier').value = supplierName;
+  document.getElementById('sb2bCost').value = p.price != null ? p.price : '';
+  document.getElementById('sb2bStartDate').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('sb2bEndDate').value = '';
+  document.getElementById('sb2bError').style.display = 'none';
+  document.getElementById('sb2bError').textContent = '';
+  const desc = document.getElementById('sb2bModalDesc');
+  if (desc) desc.textContent = (supplierName || '도매처') + ' 상품 정보를 B2B 매입가에 등록합니다.';
+  const btn = document.getElementById('sb2bSaveBtn');
+  btn.textContent = '저장'; btn.disabled = false;
+  btn.dataset.code = mapKey;
+  document.getElementById('supplierB2BBackdrop').style.display = 'flex';
+}
 
 async function initSupplierTab() {
   // API 연동된 도매처 목록을 드롭다운에 채움
