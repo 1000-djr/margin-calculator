@@ -1868,7 +1868,20 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn btn-primary btn-sm" style="font-weight:600;white-space:nowrap" onclick="runCompare()">🔍 검색</button>
         <button id="syncSupplierBtn" class="btn btn-sm" style="white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);font-weight:500" onclick="syncSupplierProducts()">🔄 동기화</button>
       </div>
-      <div id="compareLastSync" style="font-size:11px;color:var(--text-dim);margin-bottom:8px;padding:0 2px"></div>
+      <div id="compareLastSync" style="font-size:11px;color:var(--text-dim);margin-bottom:4px;padding:0 2px"></div>
+      <!-- 가격 변동 이력 섹션 -->
+      <div style="margin-bottom:12px">
+        <button onclick="togglePriceHistory()" style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--text-sub);padding:0;font-family:var(--sans);display:flex;align-items:center;gap:4px">
+          <span id="priceHistoryToggleIcon">▶</span> 📈 최근 가격 변동
+          <select id="priceHistoryDays" onclick="event.stopPropagation()" onchange="loadPriceHistory()" style="margin-left:6px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;background:var(--surface);color:var(--text);font-family:var(--sans)">
+            <option value="7">7일</option>
+            <option value="30">30일</option>
+          </select>
+        </button>
+        <div id="priceHistoryPanel" style="display:none;margin-top:8px;border:0.5px solid var(--border);border-radius:10px;overflow:hidden">
+          <div id="priceHistoryList" style="font-size:12px;color:var(--text-dim);padding:14px;text-align:center">불러오는 중...</div>
+        </div>
+      </div>
       <div id="compareStatus" style="font-size:13px;color:var(--text-dim);text-align:center;padding:8px 0;display:none">조회 중...</div>
       <div id="compareSummary" style="font-size:12px;color:var(--text-dim);margin-bottom:10px"></div>
       <div id="compareList" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -10385,6 +10398,47 @@ function setSupplierSubTab(name) {
 
 // ── 가격 비교 ──────────────────────────────────────────────────────────────────
 let _compareAll = [];
+
+let _priceHistoryOpen = false;
+
+function togglePriceHistory() {
+  _priceHistoryOpen = !_priceHistoryOpen;
+  document.getElementById('priceHistoryPanel').style.display = _priceHistoryOpen ? 'block' : 'none';
+  document.getElementById('priceHistoryToggleIcon').textContent = _priceHistoryOpen ? '▼' : '▶';
+  if (_priceHistoryOpen) loadPriceHistory();
+}
+
+async function loadPriceHistory() {
+  const days = document.getElementById('priceHistoryDays').value;
+  const listEl = document.getElementById('priceHistoryList');
+  listEl.textContent = '불러오는 중...';
+  try {
+    const r = await fetch('/api/supplier/price-history?days=' + days);
+    const items = await r.json();
+    if (!items.length) {
+      listEl.innerHTML = `<div style="padding:14px;text-align:center;color:var(--text-dim)">최근 ${days}일간 가격 변동이 없습니다.</div>`;
+      return;
+    }
+    listEl.innerHTML = items.map((h, idx) => {
+      const color = _supplierColor(h.supplier_name);
+      const isUp = h.diff > 0;
+      const diffStr = (isUp ? '▲ +' : '▼ ') + Math.abs(h.diff).toLocaleString() + '원';
+      const diffColor = isUp ? 'var(--red)' : '#2E7D32';
+      const ts = _fmtSyncTime(h.changed_at);
+      const isLast = idx === items.length - 1;
+      const border = isLast ? '' : 'border-bottom:0.5px solid var(--border);';
+      return `<div style="${border}padding:8px 12px;display:flex;align-items:center;gap:8px">
+        <span style="width:60px;flex-shrink:0;text-align:center;background:${color}18;color:${color};border:1px solid ${color}38;padding:2px 0;border-radius:5px;font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(h.supplier_name)}</span>
+        <div style="flex:1;min-width:0;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(h.name)}</div>
+        <span style="font-size:11px;color:var(--text-dim);white-space:nowrap;flex-shrink:0">${h.old_price.toLocaleString()} → ${h.new_price.toLocaleString()}원</span>
+        <span style="font-size:12px;font-weight:700;color:${diffColor};white-space:nowrap;flex-shrink:0;min-width:60px;text-align:right">${diffStr}</span>
+        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap;flex-shrink:0">${ts}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    listEl.textContent = '오류: ' + e.message;
+  }
+}
 
 function _fmtSyncTime(iso) {
   if (!iso) return null;

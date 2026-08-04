@@ -534,6 +534,23 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sp_user_name ON supplier_products(user_id, name)`);
   } catch(e) { console.warn('[db] idx_sp_user_name 생성 실패:', e.message); }
 
+  // 도매처 상품 가격 변동 이력
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS supplier_price_history (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      supplier_id  INTEGER REFERENCES wholesale_suppliers(id) ON DELETE CASCADE,
+      product_code TEXT,
+      name         TEXT,
+      old_price    NUMERIC(12,2),
+      new_price    NUMERIC(12,2),
+      changed_at   TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  try {
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sph_user ON supplier_price_history(user_id, changed_at DESC)`);
+  } catch(e) { console.warn('[db] idx_sph_user 생성 실패:', e.message); }
+
   // 트래픽 슬롯 관리 테이블
   await pool.query(`
     CREATE TABLE IF NOT EXISTS traffic_slots (

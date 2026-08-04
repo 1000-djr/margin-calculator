@@ -4120,11 +4120,23 @@ router.post('/supplier/sync', requireAuth, async (req, res) => {
           cursor = data.has_more ? data.next_cursor : null;
           pages++;
         } while (cursor && pages < 50);
-        // 이 도매처 기존 캐시 삭제 후 재삽입
-        await pool.query('DELETE FROM supplier_products WHERE user_id=$1 AND supplier_id=$2', [req.user.id, s.id]);
+        // 각 상품: 기존 가격과 비교해 변동 이력 기록 후 upsert
         for (const p of items) {
           const unit = extractUnit(p.name || '');
           const dp = p.delivery_policy ? JSON.stringify(p.delivery_policy) : null;
+          const newPrice = Number(p.price);
+          // 기존 가격 조회 (변동 감지용)
+          const { rows: prev } = await pool.query(
+            'SELECT price FROM supplier_products WHERE user_id=$1 AND supplier_id=$2 AND product_code=$3',
+            [req.user.id, s.id, String(p.product_code)]
+          );
+          const oldPrice = prev.length ? Number(prev[0].price) : null;
+          if (oldPrice !== null && oldPrice !== newPrice) {
+            await pool.query(
+              'INSERT INTO supplier_price_history (user_id,supplier_id,product_code,name,old_price,new_price) VALUES ($1,$2,$3,$4,$5,$6)',
+              [req.user.id, s.id, String(p.product_code), p.name, oldPrice, newPrice]
+            );
+          }
           await pool.query(
             `INSERT INTO supplier_products (user_id,supplier_id,product_code,name,price,taxable,image,stock,delivery_policy,order_cutoff_time,unit,synced_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW())
@@ -4137,10 +4149,42 @@ router.post('/supplier/sync', requireAuth, async (req, res) => {
           );
           total++;
         }
+        // 이번 동기화에서 사라진 상품 정리
+        const codes = items.map(p => String(p.product_code));
+        if (codes.length) {
+          await pool.query(
+            `DELETE FROM supplier_products WHERE user_id=$1 AND supplier_id=$2 AND product_code <> ALL($3)`,
+            [req.user.id, s.id, codes]
+          );
+        }
         status.push({ name: s.name, ok: true, count: items.length });
       } catch(e) { status.push({ name: s.name, ok: false, error: String(e.message) }); }
     }
     res.json({ synced: total, suppliers: status, synced_at: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 가격 변동 이력 조회 ────────────────────────────────────────────────────
+router.get('/supplier/price-history', requireAuth, async (req, res) => {
+  try {
+    const days = Math.min(parseInt(req.query.days) || 7, 90);
+    const { rows } = await pool.query(
+      `SELECT h.*, ws.name AS supplier_name
+       FROM supplier_price_history h
+       JOIN wholesale_suppliers ws ON ws.id = h.supplier_id
+       WHERE h.user_id=$1 AND h.changed_at >= NOW() - INTERVAL '1 day' * $2
+       ORDER BY h.changed_at DESC LIMIT 500`,
+      [req.user.id, days]
+    );
+    res.json(rows.map(r => ({
+      supplier_name: r.supplier_name,
+      product_code:  r.product_code,
+      name:          r.name,
+      old_price:     Number(r.old_price),
+      new_price:     Number(r.new_price),
+      diff:          Number(r.new_price) - Number(r.old_price),
+      changed_at:    r.changed_at,
+    })));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
