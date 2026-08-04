@@ -10203,22 +10203,34 @@ function renderSupplierCards(list) {
   if (!list.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text-dim);padding:40px 0;font-size:13px">검색 결과가 없습니다.</div>'; return; }
   grid.innerHTML = list.map(p => {
     const price = p.price != null ? Number(p.price).toLocaleString() + '원' : '-';
-    const taxBadge = p.taxable === false || p.taxable === 0
-      ? '<span style="background:var(--yellow-light);color:var(--yellow);font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;border:1px solid rgba(183,149,11,0.2)">면세</span>'
-      : '<span style="background:var(--green-light);color:var(--green);font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;border:1px solid rgba(29,131,72,0.2)">과세</span>';
-    const stock = p.stock != null ? `재고 ${Number(p.stock).toLocaleString()}` : '';
+    // 1. 과세/면세: API는 '비과세' / '과세' 문자열로 옴
+    const isExempt = p.taxable === '비과세';
+    const taxBadge = isExempt
+      ? '<span style="background:#E8F5E9;color:#2E7D32;padding:2px 8px;border-radius:6px;font-size:11px">면세</span>'
+      : '<span style="background:#F5F5F7;color:#6E6E73;padding:2px 8px;border-radius:6px;font-size:11px">과세</span>';
+    // 2. 재고: 'unlimited' / 'soldout' / 숫자
+    let stockLabel = '', stockStyle = 'font-size:11px;color:var(--text-dim)';
+    if (p.stock === 'unlimited') stockLabel = '재고 충분';
+    else if (p.stock === 'soldout') { stockLabel = '품절'; stockStyle = 'font-size:11px;color:var(--red);font-weight:600'; }
+    else if (p.stock != null) stockLabel = '재고 ' + p.stock + '개';
     const cutoff = p.order_cutoff_time ? `마감 ${p.order_cutoff_time}` : '';
     const img = p.image
       ? `<img src="${p.image}" alt="" style="width:100%;height:140px;object-fit:cover;border-radius:8px 8px 0 0;display:block" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';
     const placeholder = `<div style="width:100%;height:140px;background:var(--surface2);border-radius:8px 8px 0 0;display:${p.image ? 'none' : 'flex'};align-items:center;justify-content:center;font-size:28px;color:var(--border)">📦</div>`;
-    const delivery = p.delivery_policy ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px">${p.delivery_policy}</div>` : '';
+    // 3. delivery_policy: { shipping_company, policy, details } 객체
+    const dp = (p.delivery_policy && typeof p.delivery_policy === 'object') ? p.delivery_policy : {};
+    const deliveryText = [dp.shipping_company, dp.policy].filter(Boolean).join(' · ');
+    const detailsFirst = dp.details ? String(dp.details).split('\n')[0] : '';
+    const delivery = deliveryText
+      ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px">${deliveryText}${detailsFirst ? ' <span title="${dp.details}">(' + detailsFirst + ')</span>' : ''}</div>`
+      : '';
     return `<div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column">
       ${img}${placeholder}
       <div style="padding:12px 14px;flex:1;display:flex;flex-direction:column;gap:6px">
         <div style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${p.name || '(이름 없음)'}</div>
         <div style="font-size:18px;font-weight:700;color:var(--accent);margin-top:2px">${price}</div>
-        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${taxBadge}${stock ? `<span style="font-size:11px;color:var(--text-dim)">${stock}</span>` : ''}${cutoff ? `<span style="font-size:11px;color:var(--text-dim)">· ${cutoff}</span>` : ''}</div>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">${taxBadge}${stockLabel ? `<span style="${stockStyle}">${stockLabel}</span>` : ''}${cutoff ? `<span style="font-size:11px;color:var(--text-dim)">· ${cutoff}</span>` : ''}</div>
         ${delivery}
       </div>
     </div>`;
