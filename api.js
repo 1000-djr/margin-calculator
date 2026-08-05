@@ -81,6 +81,14 @@ async function adminplusGetProducts(token, params = {}) {
   return j.data;
 }
 
+async function adminplusGetBalance(token) {
+  const r = await fetch('https://api.adminplus.co.kr/v1/seller/balance', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  });
+  const j = await r.json();
+  return { http: r.status, success: j.success, message: j.message, data: j.data };
+}
+
 // ─── 도매처 API 설정 추출 헬퍼 ────────────────────────────────────────────────
 function getSupplierApiConfig(supplier) {
   if (!supplier.api_linked || !supplier.api_type) return null;
@@ -4088,6 +4096,34 @@ router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
   } catch(e) { result.error = e.message; }
 
   res.json(result);
+});
+
+// ─── 어드민플러스 예치금/적립금 잔액 조회 테스트 ────────────────────────────────
+router.get('/admin/adminplus-balance-test', requireRealAdmin, async (req, res) => {
+  try {
+    const { rows: suppliers } = await pool.query(
+      `SELECT * FROM wholesale_suppliers WHERE api_linked=true AND api_type='adminplus'`
+    );
+    const results = [];
+    for (const s of suppliers) {
+      try {
+        const cfg = getSupplierApiConfig(s);
+        const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+        const bal = await adminplusGetBalance(token);
+        results.push({
+          supplier: s.name,
+          http: bal.http,
+          success: bal.success,
+          message: bal.message,
+          deposit_balance: bal.data?.deposit_balance ?? null,
+          point_balance: bal.data?.point_balance ?? null,
+        });
+      } catch(e) {
+        results.push({ supplier: s.name, error: String(e.message) });
+      }
+    }
+    res.json({ results });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── 서버측 단위 추출 ─────────────────────────────────────────────────────────
