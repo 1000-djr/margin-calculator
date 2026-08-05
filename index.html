@@ -2081,6 +2081,66 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
+<!-- ══ 발주처 변경 모달 ══════════════════════════════════════════════════ -->
+<div id="dispatchReassignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeDispatchReassign()">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:480px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,0.25);max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
+    <div style="font-size:17px;font-weight:700;margin-bottom:4px">🔄 발주처 변경</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:18px">이 상품의 발주처를 다른 도매처로 변경합니다</div>
+
+    <!-- 현재 상품 정보 -->
+    <div style="background:var(--surface2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px">
+      <div style="color:var(--text-dim);font-size:11px;margin-bottom:4px">현재 발주처 · 상품</div>
+      <div style="font-weight:600;color:var(--text)" id="drCurSupplier"></div>
+      <div style="color:var(--text-sub);margin-top:2px"><span id="drCurProduct"></span> <span style="color:var(--text-dim);font-size:12px">· <span id="drCurOption"></span></span></div>
+    </div>
+
+    <!-- 새 발주처 선택 -->
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">새 발주처</label>
+      <select id="drNewSupplier" onchange="onDrSupplierChange()" style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--surface);color:var(--text)">
+        <option value="">— 도매처 선택 —</option>
+      </select>
+    </div>
+
+    <!-- 새 상품명 -->
+    <div id="drNewProductWrap" style="display:none;margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">도매처 상품명</label>
+      <!-- API 연동 도매처: 검색 -->
+      <div id="drProductSearchRow">
+        <input id="drNewProductSearch" type="text" placeholder="상품명 검색…" oninput="onDrProductSearch()"
+          style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--surface);color:var(--text);box-sizing:border-box">
+        <div id="drNewProductResult" style="border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;max-height:160px;overflow-y:auto;background:var(--surface)"></div>
+      </div>
+      <!-- 엑셀 도매처: 직접 입력 -->
+      <div id="drProductDirectRow" style="display:none">
+        <input id="drNewProductDirect" type="text" placeholder="도매처 상품명 직접 입력"
+          style="width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px;background:var(--surface);color:var(--text);box-sizing:border-box">
+      </div>
+    </div>
+
+    <!-- 적용 범위 -->
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:8px">적용 범위</label>
+      <div style="display:flex;gap:16px">
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="radio" name="drScope" id="drScopeOnce" value="once" checked> 이번만
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+          <input type="radio" name="drScope" id="drScopeAlways" value="always"> 앞으로도 (매칭 저장)
+        </label>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:5px">
+        <b>이번만</b>: 현재 조회 결과에만 적용 &nbsp;|&nbsp; <b>앞으로도</b>: 발주 매칭에 저장되어 다음 조회부터 자동 적용
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="closeDispatchReassign()" class="btn btn-sm" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-sub)">취소</button>
+      <button onclick="applyDispatchReassign()" class="btn btn-sm" style="background:var(--blue);color:#fff;border:none">적용</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 도매처 → B2B 매입가 저장 모달 ══════════════════════════════════ -->
 <div id="supplierB2BBackdrop" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:2000;align-items:center;justify-content:center" onclick="closeSupplierB2BModal(event)">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:460px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,0.2)" onclick="event.stopPropagation()">
@@ -10804,10 +10864,11 @@ async function deleteOrderMapping(id) {
 
 // ── 발주 탭 ──────────────────────────────────────────────────────────────────
 let _dispatchSenderOpen = false;
-let _dispatchData   = null;  // 마지막 loadDispatch() 응답 저장
-let _orderForms     = {};    // GET /api/order-forms 결과
-let _dispatchFromDt = '';    // 실제 조회용 from (날짜 or datetime)
-let _dispatchToDt   = '';    // 실제 조회용 to   (날짜 or datetime)
+let _dispatchData      = null;  // 마지막 loadDispatch() 응답 저장
+let _dispatchOverrides = {};    // { option_id: { supplier_id, supplier_name, form_key, product_name, option_name } }
+let _orderForms        = {};    // GET /api/order-forms 결과
+let _dispatchFromDt    = '';    // 실제 조회용 from (날짜 or datetime)
+let _dispatchToDt      = '';    // 실제 조회용 to   (날짜 or datetime)
 
 function setDispatchQuickDate(type) {
   const now = new Date();
@@ -10923,6 +10984,7 @@ async function loadDispatch() {
     const r = await fetch('/api/orders/for-dispatch?' + params);
     const j = await r.json();
     _dispatchData = j;
+    _dispatchOverrides = {};  // 새 조회마다 오버라이드 초기화
     summaryEl.textContent = `미발주 ${j.total}건 · 도매처 ${j.groups.length}곳 · 미매칭 ${j.unmatched.length}건`;
     renderDispatchResult(j);
   } catch(e) {
@@ -10930,31 +10992,99 @@ async function loadDispatch() {
   }
 }
 
+// 오버라이드 적용하여 groups 재구성
+function applyOverrides(data) {
+  if (!data || !Object.keys(_dispatchOverrides).length) return data ? data.groups : [];
+  // deep copy groups
+  const groupMap = {};  // supplier_id (string) -> group
+  for (const g of data.groups) {
+    const key = String(g.supplier_id);
+    groupMap[key] = { ...g, orders: [] };
+  }
+  for (const g of data.groups) {
+    for (const o of g.orders) {
+      const ov = _dispatchOverrides[o.option_id];
+      if (ov) {
+        // 이 옵션은 다른 발주처로 변경됨
+        const newKey = String(ov.supplier_id);
+        if (!groupMap[newKey]) {
+          groupMap[newKey] = { supplier_id: ov.supplier_id, supplier_name: ov.supplier_name, form_key: ov.form_key, orders: [] };
+        }
+        // 주문 복사 + 도매처 상품 정보 교체
+        groupMap[newKey].orders.push({
+          ...o,
+          supplier_product_name: ov.product_name || o.supplier_product_name,
+          supplier_option_name:  ov.option_name  || '',
+          _overridden: true,
+        });
+      } else {
+        const origKey = String(g.supplier_id);
+        groupMap[origKey].orders.push(o);
+      }
+    }
+  }
+  return Object.values(groupMap).filter(g => g.orders.length > 0);
+}
+
 function renderDispatchResult({ groups, unmatched }) {
   const el = document.getElementById('dispatchResult');
   let html = '';
 
+  const effectiveGroups = applyOverrides({ groups });
+
   // 도매처별 카드
-  for (const g of groups) {
-    const color   = _supplierColor(g.supplier_name || '');
-    const orders  = g.orders;
-    const preview = orders.slice(0, 5);
-    const more    = orders.length - preview.length;
-    const rows    = preview.map(o => `
-      <tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:9px 12px;font-size:13px;color:var(--text)">${escHtml(o.product_name)}${o.option_name ? ` <span style="color:var(--text-dim);font-size:12px">· ${escHtml(o.option_name)}</span>` : ''}</td>
-        <td style="padding:9px 12px;font-size:13px;color:var(--text-sub)">${escHtml(o.supplier_product_name || '—')}${o.supplier_option_name ? ` <span style="font-size:12px">· ${escHtml(o.supplier_option_name)}</span>` : ''}</td>
-        <td style="padding:9px 12px;font-size:13px;text-align:center;font-weight:600">${o.quantity}</td>
-        <td style="padding:9px 12px;font-size:12px;color:var(--text-dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(o.recipient_address || '')}">${escHtml(o.recipient_name || '')}${o.recipient_address ? ' · ' + escHtml(o.recipient_address.slice(0, 15)) + '…' : ''}</td>
-      </tr>`).join('');
-    const moreRow = more > 0 ? `<tr><td colspan="4" style="padding:8px 12px;font-size:12px;color:var(--text-dim);text-align:center">… 외 ${more}건</td></tr>` : '';
-    html += `<div style="border:1.5px solid ${color}38;border-radius:12px;overflow:hidden">
+  for (const g of effectiveGroups) {
+    const color  = _supplierColor(g.supplier_name || '');
+    const orders = g.orders;
+
+    // option_id 기준으로 상품 묶음 생성
+    const subMap = {};  // option_id -> { label, productName, optionName, supplierProductName, orders[] }
+    for (const o of orders) {
+      const key = o.option_id || ('__noopt_' + (o.product_name || ''));
+      if (!subMap[key]) subMap[key] = {
+        option_id: o.option_id || '',
+        product_name: o.product_name || '',
+        option_name: o.option_name || '',
+        supplier_product_name: o.supplier_product_name || '',
+        supplier_option_name: o.supplier_option_name || '',
+        overridden: !!o._overridden,
+        orders: [],
+      };
+      subMap[key].orders.push(o);
+    }
+    const subGroups = Object.values(subMap);
+
+    // 총 수량 합산 테이블
+    const subRows = subGroups.map(sg => {
+      const totalQty = sg.orders.reduce((s, o) => s + (Number(o.quantity) || 0), 0);
+      const previewRecips = sg.orders.slice(0, 3).map(o =>
+        `${escHtml(o.recipient_name || '')}${o.recipient_address ? ' · ' + escHtml(o.recipient_address.slice(0, 10)) + '…' : ''}`
+      ).join(' / ');
+      const moreRecips = sg.orders.length > 3 ? ` 외 ${sg.orders.length - 3}명` : '';
+      const ovTag = sg.overridden ? `<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:4px;padding:1px 5px;margin-left:4px">변경됨</span>` : '';
+      const optEsc = escHtml(sg.option_id);
+      const sidEsc = String(g.supplier_id);
+      return `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:9px 12px;font-size:13px;color:var(--text)">
+            ${escHtml(sg.product_name)}${sg.option_name ? ` <span style="color:var(--text-dim);font-size:12px">· ${escHtml(sg.option_name)}</span>` : ''}${ovTag}
+          </td>
+          <td style="padding:9px 12px;font-size:13px;color:var(--text-sub)">${escHtml(sg.supplier_product_name || '—')}${sg.supplier_option_name ? ` <span style="font-size:12px">· ${escHtml(sg.supplier_option_name)}</span>` : ''}</td>
+          <td style="padding:9px 12px;font-size:13px;text-align:center;font-weight:600">${totalQty}<span style="font-size:11px;color:var(--text-dim);font-weight:400"> (${sg.orders.length}건)</span></td>
+          <td style="padding:9px 12px;font-size:12px;color:var(--text-dim);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${previewRecips}${moreRecips}</td>
+          <td style="padding:6px 10px;text-align:center">
+            <button onclick="openDispatchReassign('${sidEsc}','${optEsc}')" style="font-size:11px;padding:4px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text-sub);cursor:pointer;white-space:nowrap">발주처 변경</button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    html += `<div style="border:1.5px solid ${color}38;border-radius:12px;overflow:hidden;margin-bottom:14px">
       <div style="padding:14px 18px;background:${color}0A;display:flex;align-items:center;gap:10px">
         <span style="font-size:15px;font-weight:700;color:${color}">${escHtml(g.supplier_name)}</span>
-        <span style="font-size:13px;color:var(--text-dim)">${orders.length}건</span>
+        <span style="font-size:13px;color:var(--text-dim)">${orders.length}건 · ${subGroups.length}종</span>
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
           ${g.form_key
-            ? `<button onclick="downloadDispatchExcel(${g.supplier_id})" class="btn btn-sm" style="font-size:12px;padding:6px 14px;background:var(--surface);border:1px solid ${color}38;color:${color};white-space:nowrap">📥 발주서 다운로드</button>`
+            ? `<button onclick="downloadDispatchExcel('${String(g.supplier_id)}')" class="btn btn-sm" style="font-size:12px;padding:6px 14px;background:var(--surface);border:1px solid ${color}38;color:${color};white-space:nowrap">📥 발주서 다운로드</button>`
             : `<span style="font-size:11px;color:var(--text-dim)">양식 미지정 — 도매처 관리에서 설정</span>`
           }
         </div>
@@ -10966,9 +11096,10 @@ function renderDispatchResult({ groups, unmatched }) {
             <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:left">도매처 상품명</th>
             <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:center">수량</th>
             <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:left">수령인</th>
+            <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:center">변경</th>
           </tr>
         </thead>
-        <tbody>${rows}${moreRow}</tbody>
+        <tbody>${subRows}</tbody>
       </table>
     </div>`;
   }
@@ -11042,7 +11173,8 @@ function _buildDispatchWorkbook(group, sender) {
 
 async function downloadDispatchExcel(supplierId) {
   if (!_dispatchData) return alert('먼저 조회해 주세요.');
-  const group = _dispatchData.groups.find(g => String(g.supplier_id) === String(supplierId));
+  const effectiveGroups = applyOverrides(_dispatchData);
+  const group = effectiveGroups.find(g => String(g.supplier_id) === String(supplierId));
   if (!group) return alert('해당 도매처 데이터가 없습니다.');
   if (!group.form_key) return alert('발주 양식이 지정되지 않았습니다.\n도매처 관리 탭에서 발주 양식을 설정하세요.');
   const sender = _getDispatchSender();
@@ -11058,9 +11190,17 @@ async function downloadDispatchExcel(supplierId) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ order_ids: ids, supplier_id: group.supplier_id }),
     });
-    // 목록에서 해당 그룹 제거
-    _dispatchData.groups = _dispatchData.groups.filter(g => String(g.supplier_id) !== String(supplierId));
-    _dispatchData.total  = (_dispatchData.total || 0) - group.orders.length;
+    // 원본 _dispatchData에서 해당 주문 ID들 제거 (오버라이드로 이동된 것 포함)
+    const doneSet = new Set(ids.map(String));
+    for (const g of _dispatchData.groups) {
+      g.orders = g.orders.filter(o => !doneSet.has(String(o.id)));
+    }
+    _dispatchData.groups = _dispatchData.groups.filter(g => g.orders.length > 0);
+    _dispatchData.total  = _dispatchData.groups.reduce((s, g) => s + g.orders.length, 0);
+    // 오버라이드에서도 해당 옵션 제거
+    for (const [optId, ov] of Object.entries(_dispatchOverrides)) {
+      if (String(ov.supplier_id) === String(supplierId)) delete _dispatchOverrides[optId];
+    }
     const summaryEl = document.getElementById('dispatchSummary');
     if (summaryEl) summaryEl.textContent = `미발주 ${_dispatchData.total}건 · 도매처 ${_dispatchData.groups.length}곳 · 미매칭 ${_dispatchData.unmatched.length}건`;
     renderDispatchResult(_dispatchData);
@@ -11071,8 +11211,9 @@ async function downloadAllDispatch() {
   if (!_dispatchData || !_dispatchData.groups.length) return alert('발주할 주문이 없습니다. 먼저 조회해 주세요.');
   const sender = _getDispatchSender();
   if (!sender.name || !sender.phone) return alert('보내는사람 정보를 먼저 설정하세요.');
-  const groups = _dispatchData.groups.filter(g => g.form_key);
-  const noForm = _dispatchData.groups.filter(g => !g.form_key);
+  const allEffective = applyOverrides(_dispatchData);
+  const groups = allEffective.filter(g => g.form_key);
+  const noForm = allEffective.filter(g => !g.form_key);
   if (!groups.length) return alert('발주 양식이 지정된 도매처가 없습니다.\n도매처 관리 탭에서 각 도매처의 발주 양식을 설정하세요.');
   if (noForm.length) {
     const names = noForm.map(g => g.supplier_name).join(', ');
@@ -11107,15 +11248,156 @@ async function downloadAllDispatch() {
         body: JSON.stringify({ order_ids: g.orders.map(o => o.id), supplier_id: g.supplier_id }),
       });
     }
-    // 발주완료된 그룹 제거
-    const doneIds = new Set(groups.map(g => String(g.supplier_id)));
-    _dispatchData.groups = _dispatchData.groups.filter(g => !doneIds.has(String(g.supplier_id)));
-    _dispatchData.total  = _dispatchData.unmatched.length +
-      _dispatchData.groups.reduce((s, g) => s + g.orders.length, 0);
+    // 원본 _dispatchData에서 발주 완료된 주문 ID들 제거 (오버라이드 포함)
+    const allDoneIds = new Set(groups.flatMap(g => g.orders.map(o => String(o.id))));
+    for (const og of _dispatchData.groups) {
+      og.orders = og.orders.filter(o => !allDoneIds.has(String(o.id)));
+    }
+    _dispatchData.groups = _dispatchData.groups.filter(g => g.orders.length > 0);
+    _dispatchOverrides = {};
+    _dispatchData.total = _dispatchData.groups.reduce((s, g) => s + g.orders.length, 0);
     const summaryEl = document.getElementById('dispatchSummary');
     if (summaryEl) summaryEl.textContent = `미발주 ${_dispatchData.total}건 · 도매처 ${_dispatchData.groups.length}곳 · 미매칭 ${_dispatchData.unmatched.length}건`;
     renderDispatchResult(_dispatchData);
   } catch(e) {}
+}
+
+// ── 발주처 변경 모달 ─────────────────────────────────────────────────────────
+let _reassignState = null;  // { supplierId, optionId, subGroup }
+
+function openDispatchReassign(supplierId, optionId) {
+  if (!_dispatchData) return;
+  // 현재 상품 정보 찾기 (오버라이드 적용 상태에서)
+  const effectiveGroups = applyOverrides(_dispatchData);
+  const curGroup = effectiveGroups.find(g => String(g.supplier_id) === String(supplierId));
+  if (!curGroup) return;
+  const subMap = {};
+  for (const o of curGroup.orders) {
+    const key = o.option_id || ('__noopt_' + o.product_name);
+    if (!subMap[key]) subMap[key] = { option_id: o.option_id || '', product_name: o.product_name || '', option_name: o.option_name || '', supplier_product_name: o.supplier_product_name || '', supplier_option_name: o.supplier_option_name || '', orders: [] };
+    subMap[key].orders.push(o);
+  }
+  const sg = subMap[optionId] || subMap['__noopt_' + optionId];
+  if (!sg) return;
+  _reassignState = { supplierId, optionId, subGroup: sg, curGroup };
+
+  // 도매처 목록 (form_key 있는 것만, 현재 도매처 제외)
+  const suppOpts = (wholesaleSuppliers || [])
+    .filter(s => s.form_key && String(s.id) !== String(supplierId))
+    .map(s => `<option value="${s.id}" data-linked="${s.api_linked ? 1 : 0}" data-fk="${escHtml(s.form_key || '')}">${escHtml(s.name)}${s.api_linked ? '' : ' (엑셀)'}</option>`)
+    .join('');
+
+  const modal = document.getElementById('dispatchReassignModal');
+  document.getElementById('drCurSupplier').textContent = curGroup.supplier_name;
+  document.getElementById('drCurProduct').textContent  = sg.supplier_product_name || sg.product_name;
+  document.getElementById('drCurOption').textContent   = sg.supplier_option_name  || sg.option_name || '—';
+  document.getElementById('drNewSupplier').innerHTML   = '<option value="">— 도매처 선택 —</option>' + suppOpts;
+  document.getElementById('drNewProductWrap').style.display = 'none';
+  document.getElementById('drNewProductSearch').value = '';
+  document.getElementById('drNewProductResult').innerHTML = '';
+  document.getElementById('drNewProductDirect').value = '';
+  document.getElementById('drScopeOnce').checked = true;
+  modal.style.display = 'flex';
+}
+
+function closeDispatchReassign() {
+  document.getElementById('dispatchReassignModal').style.display = 'none';
+  _reassignState = null;
+}
+
+function onDrSupplierChange() {
+  const sel = document.getElementById('drNewSupplier');
+  const opt = sel.options[sel.selectedIndex];
+  const wrap = document.getElementById('drNewProductWrap');
+  if (!sel.value) { wrap.style.display = 'none'; return; }
+  const linked = opt?.dataset.linked === '1';
+  wrap.style.display = '';
+  document.getElementById('drProductSearchRow').style.display = linked ? '' : 'none';
+  document.getElementById('drProductDirectRow').style.display = linked ? 'none' : '';
+  document.getElementById('drNewProductSearch').value = '';
+  document.getElementById('drNewProductResult').innerHTML = '';
+  document.getElementById('drNewProductDirect').value = '';
+}
+
+let _drSearchTimer = null;
+async function onDrProductSearch() {
+  clearTimeout(_drSearchTimer);
+  _drSearchTimer = setTimeout(async () => {
+    const supplierId = document.getElementById('drNewSupplier').value;
+    const q = document.getElementById('drNewProductSearch').value.trim();
+    const resultEl = document.getElementById('drNewProductResult');
+    if (!supplierId || !q) { resultEl.innerHTML = ''; return; }
+    try {
+      const r = await fetch(`/api/order-mappings/search-supplier-product?supplier_id=${encodeURIComponent(supplierId)}&q=${encodeURIComponent(q)}`);
+      const j = await r.json();
+      if (!j.products || !j.products.length) { resultEl.innerHTML = '<div style="padding:6px 10px;font-size:12px;color:var(--text-dim)">검색 결과 없음</div>'; return; }
+      resultEl.innerHTML = j.products.map(p => `
+        <div onclick="selectDrProduct(${JSON.stringify(p.id)},${JSON.stringify(p.name)},${JSON.stringify(p.option_name||'')})"
+          style="padding:7px 10px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text)"
+          onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          ${escHtml(p.name)}${p.option_name ? ' · <span style="color:var(--text-dim);font-size:12px">' + escHtml(p.option_name) + '</span>' : ''}
+        </div>`).join('');
+    } catch(e) { resultEl.innerHTML = '<div style="padding:6px 10px;font-size:12px;color:var(--red)">검색 실패</div>'; }
+  }, 300);
+}
+
+function selectDrProduct(id, name, optName) {
+  document.getElementById('drNewProductSearch').value = name + (optName ? ' · ' + optName : '');
+  document.getElementById('drNewProductResult').innerHTML = '';
+  document.getElementById('drNewProductSearch').dataset.selectedName    = name;
+  document.getElementById('drNewProductSearch').dataset.selectedOptName = optName || '';
+}
+
+async function applyDispatchReassign() {
+  if (!_reassignState) return;
+  const { supplierId: origSuppId, optionId, subGroup } = _reassignState;
+  const newSuppEl = document.getElementById('drNewSupplier');
+  const newSuppId = newSuppEl.value;
+  if (!newSuppId) return alert('새 발주처를 선택하세요.');
+  const newSuppOpt = newSuppEl.options[newSuppEl.selectedIndex];
+  const newSuppName = newSuppOpt.textContent.replace(' (엑셀)', '').trim();
+  const newFormKey  = newSuppOpt.dataset.fk || '';
+  const linked      = newSuppOpt.dataset.linked === '1';
+  const scopeOnce   = document.getElementById('drScopeOnce').checked;
+
+  let newProductName = '';
+  let newOptionName  = '';
+  if (linked) {
+    newProductName = document.getElementById('drNewProductSearch').dataset.selectedName || document.getElementById('drNewProductSearch').value.trim();
+    newOptionName  = document.getElementById('drNewProductSearch').dataset.selectedOptName || '';
+  } else {
+    newProductName = document.getElementById('drNewProductDirect').value.trim();
+  }
+
+  if (scopeOnce) {
+    // 이번만: 클라이언트 오버라이드에 저장 후 재렌더
+    _dispatchOverrides[optionId] = {
+      supplier_id: newSuppId,
+      supplier_name: newSuppName,
+      form_key: newFormKey,
+      product_name: newProductName,
+      option_name: newOptionName,
+    };
+    closeDispatchReassign();
+    renderDispatchResult(_dispatchData);
+  } else {
+    // 앞으로도: 서버 order-mappings upsert 후 재조회
+    if (!newProductName) return alert('도매처 상품명을 입력하세요.');
+    try {
+      const body = {
+        option_id: optionId,
+        registered_name: subGroup.product_name,
+        option_name: subGroup.option_name,
+        supplier_id: newSuppId,
+        supplier_product_name: newProductName,
+        supplier_option_name: newOptionName,
+      };
+      const r = await fetch('/api/order-mappings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) { const j = await r.json(); throw new Error(j.error || '저장 실패'); }
+      closeDispatchReassign();
+      await loadDispatch();
+    } catch(e) { alert('저장 실패: ' + e.message); }
+  }
 }
 
 function prefillOrderMapping(btn) {
