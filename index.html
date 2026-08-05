@@ -2001,7 +2001,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
               style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
           </div>
 
-          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;flex-wrap:wrap">
+            <button id="omBackDispatchBtn" onclick="backToDispatch()" class="btn btn-ghost" style="display:none;font-size:14px;padding:9px 18px;margin-right:auto;color:var(--accent)">← 발주로 돌아가기</button>
             <button id="omCancelBtn" onclick="cancelOmEdit()" class="btn btn-ghost" style="display:none;font-size:15px;padding:10px 22px">취소</button>
             <button id="omSaveBtn" onclick="saveOrderMapping()" class="btn btn-primary" style="font-size:15px;padding:10px 22px">저장</button>
           </div>
@@ -10711,7 +10712,13 @@ async function saveOrderMapping() {
     });
     if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
     cancelOmEdit();
-    await loadOrderMappings();
+    if (window._omFromDispatch) {
+      window._omFromDispatch = false;
+      setSupplierSubTab('dispatch');
+      loadDispatch();
+    } else {
+      await loadOrderMappings();
+    }
   } catch(e) { alert('저장 실패: ' + e.message); }
   finally { btn.disabled = false; btn.textContent = '저장'; }
 }
@@ -10745,6 +10752,7 @@ function cancelOmEdit() {
   document.getElementById('omProductResults').style.display = 'none';
   document.getElementById('omSelectedProduct').style.display = 'none';
   document.getElementById('omCancelBtn').style.display = 'none';
+  document.getElementById('omBackDispatchBtn').style.display = 'none';
   document.getElementById('omSaveBtn').textContent = '저장';
 }
 
@@ -11048,14 +11056,23 @@ async function downloadAllDispatch() {
 }
 
 function prefillOrderMapping(btn) {
-  const optionId   = btn.dataset.oid  || '';
+  const optionId    = btn.dataset.oid  || '';
   const productName = btn.dataset.prod || '';
   const optionName  = btn.dataset.opt  || '';
+  window._omFromDispatch = true;
   setSupplierSubTab('order');
   document.getElementById('omOptionId').value       = optionId;
   document.getElementById('omRegisteredName').value = productName;
   document.getElementById('omOptionName').value     = optionName;
+  document.getElementById('omBackDispatchBtn').style.display = '';
   document.getElementById('omSupplierId').focus();
+}
+
+function backToDispatch() {
+  window._omFromDispatch = false;
+  cancelOmEdit();
+  setSupplierSubTab('dispatch');
+  loadDispatch();
 }
 
 // 하위 탭 팔레트 (도매처 id → 색)
