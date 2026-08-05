@@ -1107,7 +1107,7 @@ router.get('/orders/for-dispatch', requireAuth, async (req, res) => {
     let q = `
       SELECT o.id, o.order_number, o.order_date, o.product_name, o.option_name, o.option_id,
              o.quantity, o.recipient_name_masked AS recipient_name, o.recipient_phone_masked AS recipient_phone,
-             o.recipient_address_masked AS recipient_address, o.recipient_zipcode,
+             o.recipient_address_masked AS recipient_address, o.recipient_zipcode, o.delivery_msg,
              om.supplier_id, om.supplier_product_name, om.supplier_option_name,
              ws.name AS supplier_name, ws.form_key AS supplier_form_key
       FROM orders o
@@ -1310,7 +1310,7 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
 
   // 100건씩 멀티행 배치 INSERT (건별 쿼리 대비 ~100배 빠름)
   const BATCH = 100;
-  const COLS  = 25; // INSERT 컬럼 수 (우편번호 포함)
+  const COLS  = 26; // INSERT 컬럼 수 (우편번호 + 배송메시지 포함)
   let inserted = 0;
 
   try {
@@ -1322,7 +1322,7 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
 
       for (const o of batch) {
         placeholders.push(
-          `($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},$${p+15},$${p+16},$${p+17},$${p+18},$${p+19},$${p+20},$${p+21},$${p+22},$${p+23},$${p+24})`
+          `($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},$${p+15},$${p+16},$${p+17},$${p+18},$${p+19},$${p+20},$${p+21},$${p+22},$${p+23},$${p+24},$${p+25})`
         );
         params.push(
           req.user.id,                                                          // $1  user_id
@@ -1350,6 +1350,7 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
           o['수취인전화번호'] || '',                                             // $23 recipient_phone_masked
           o['수취인 주소'] || o['수취인주소'] || '',                              // $24 recipient_address_masked
           o['우편번호'] || '',                                                   // $25 recipient_zipcode
+          o['배송메세지'] || o['배송메시지'] || '',                               // $26 delivery_msg
         );
         p += COLS;
       }
@@ -1361,7 +1362,7 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
           quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
           confirmed_date,payment_location,delivery_type,buyer_masked,
           recipient_name_masked,recipient_phone_masked,recipient_address_masked,
-          recipient_zipcode)
+          recipient_zipcode,delivery_msg)
          VALUES ${placeholders.join(',')}
          ON CONFLICT (user_id, order_number) DO NOTHING`,
         params
@@ -3760,6 +3761,7 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
         const phoneOrig     = sheet.receiver?.safeNumber || sheet.receiver?.phone || '';
         const addrOrig      = sheet.receiver?.addr1 || '';
         const zipcodeOrig   = sheet.receiver?.postCode || sheet.receiver?.zipCode || sheet.receiver?.remotePostCode || '';
+        const deliveryMsg   = sheet.parcelPrintMessage || sheet.deliveryMessage || sheet.shippingMessage || '';
 
         try {
           const upsertRes = await pool.query(
@@ -3768,9 +3770,9 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
               product_name, option_name, display_name, display_product_id, option_id,
               payment_amount, shipping_fee, quantity, unit_price,
               buyer_masked, recipient_name_masked, recipient_phone_masked, recipient_address_masked,
-              recipient_zipcode,
+              recipient_zipcode, delivery_msg,
               is_excluded, exclusion_type
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,FALSE,'normal')
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,FALSE,'normal')
             ON CONFLICT (user_id, order_number) DO UPDATE SET
               display_product_id = CASE
                 WHEN orders.display_product_id IS NULL OR orders.display_product_id = ''
@@ -3786,7 +3788,7 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
               req.user.id, orderNumber, bundleNumber, orderDate,
               productName, optionName, displayName, displayProductId, optionId,
               paymentAmt, shippingFee, qty, unitPrice,
-              buyerOrig, recipientOrig, phoneOrig, addrOrig, zipcodeOrig,
+              buyerOrig, recipientOrig, phoneOrig, addrOrig, zipcodeOrig, deliveryMsg,
             ]
           );
           if (upsertRes.rowCount > 0 && upsertRes.rows[0]?.is_insert) inserted++;

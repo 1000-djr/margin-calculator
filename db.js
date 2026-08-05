@@ -699,6 +699,10 @@ async function initDB() {
       ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_supplier_id  INTEGER     DEFAULT NULL;
     `);
   } catch(e) { console.warn('[db] orders 발주 컬럼 마이그레이션 스킵:', e.message); }
+  // orders 배송메시지
+  try {
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_msg TEXT DEFAULT NULL`);
+  } catch(e) { console.warn('[db] orders delivery_msg 컬럼 마이그레이션 스킵:', e.message); }
 
   // users 보내는사람 정보 컬럼
   try {
