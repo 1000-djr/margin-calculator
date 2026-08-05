@@ -1805,6 +1805,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <button id="stab-browse" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('browse')">📦 상품 보기</button>
       <button id="stab-manage" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('manage')">⚙️ 도매처 관리</button>
       <button id="stab-order" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('order')">📋 발주 매칭</button>
+      <button id="stab-dispatch" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('dispatch')">🚚 발주</button>
     </div>
 
     <!-- ── 가격 비교 패널 ── -->
@@ -1999,6 +2000,56 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <div id="orderMappingList" style="display:flex;flex-direction:column;gap:10px"></div>
         </div>
       </div>
+    </div>
+
+    <!-- ── 발주 패널 ── -->
+    <div id="spanel-dispatch" style="display:none">
+
+      <!-- 보내는사람 설정 (접이식) -->
+      <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div id="dispatchSenderSummary" onclick="toggleDispatchSender()"
+             style="padding:14px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--surface2)">
+          <span id="dispatchSenderLabel" style="flex:1;font-size:14px;font-weight:600;color:var(--text)">📮 보내는사람 설정 로드 중...</span>
+          <span id="dispatchSenderToggleIcon" style="font-size:12px;color:var(--text-dim)">▼ 펼치기</span>
+        </div>
+        <div id="dispatchSenderForm" style="display:none;padding:18px 20px;display:none;flex-direction:column;gap:12px;background:var(--surface)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">업체명</div>
+              <input id="dsSenderName" type="text" placeholder="예: TCG헬스케어"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
+            </div>
+            <div>
+              <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">전화번호</div>
+              <input id="dsSenderPhone" type="text" placeholder="예: 070-0000-0000"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
+            </div>
+          </div>
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">주소</div>
+            <input id="dsSenderAddress" type="text" placeholder="예: 경기도 성남시 분당구 ..."
+              style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button onclick="saveDispatchSender()" class="btn btn-primary" style="font-size:14px;padding:9px 20px">저장</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 기간 조회 -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <input id="dispatchFrom" type="date" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+        <span style="color:var(--text-dim)">~</span>
+        <input id="dispatchTo" type="date" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+        <button onclick="loadDispatch()" class="btn btn-primary" style="font-size:14px;padding:9px 20px">조회</button>
+        <span id="dispatchSummary" style="font-size:13px;color:var(--text-dim)"></span>
+        <div style="margin-left:auto">
+          <button onclick="alert('준비 중입니다.')" class="btn btn-sm" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">📦 전체 발주서 다운로드</button>
+        </div>
+      </div>
+
+      <!-- 결과 영역 -->
+      <div id="dispatchResult" style="display:flex;flex-direction:column;gap:16px"></div>
     </div>
   </div>
 
@@ -10683,6 +10734,145 @@ async function deleteOrderMapping(id) {
   } catch(e) { alert('삭제 실패: ' + e.message); }
 }
 
+// ── 발주 탭 ──────────────────────────────────────────────────────────────────
+let _dispatchSenderOpen = false;
+
+async function initDispatchTab() {
+  // 기본 날짜: 최근 7일
+  const today = new Date();
+  const from  = new Date(today); from.setDate(today.getDate() - 6);
+  const fmt = d => d.toISOString().slice(0, 10);
+  const fromEl = document.getElementById('dispatchFrom');
+  const toEl   = document.getElementById('dispatchTo');
+  if (!fromEl.value) fromEl.value = fmt(from);
+  if (!toEl.value)   toEl.value   = fmt(today);
+  await loadDispatchSender();
+}
+
+async function loadDispatchSender() {
+  try {
+    const r = await fetch('/api/order-sender');
+    const j = await r.json();
+    document.getElementById('dsSenderName').value    = j.sender_name    || '';
+    document.getElementById('dsSenderPhone').value   = j.sender_phone   || '';
+    document.getElementById('dsSenderAddress').value = j.sender_address || '';
+    const label = document.getElementById('dispatchSenderLabel');
+    if (j.sender_name) {
+      label.textContent = `📮 ${j.sender_name}${j.sender_phone ? ' · ' + j.sender_phone : ''}${j.sender_address ? ' · ' + j.sender_address.slice(0, 20) + '…' : ''}`;
+    } else {
+      label.textContent = '📮 보내는사람 미설정 — 클릭해서 입력';
+    }
+  } catch(e) {
+    document.getElementById('dispatchSenderLabel').textContent = '📮 보내는사람 설정';
+  }
+}
+
+function toggleDispatchSender() {
+  _dispatchSenderOpen = !_dispatchSenderOpen;
+  const form = document.getElementById('dispatchSenderForm');
+  const icon = document.getElementById('dispatchSenderToggleIcon');
+  form.style.display = _dispatchSenderOpen ? 'flex' : 'none';
+  icon.textContent   = _dispatchSenderOpen ? '▲ 접기' : '▼ 펼치기';
+}
+
+async function saveDispatchSender() {
+  const body = {
+    sender_name:    document.getElementById('dsSenderName').value.trim(),
+    sender_phone:   document.getElementById('dsSenderPhone').value.trim(),
+    sender_address: document.getElementById('dsSenderAddress').value.trim(),
+  };
+  try {
+    const r = await fetch('/api/order-sender', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error((await r.json()).error);
+    await loadDispatchSender();
+    // 저장 후 접기
+    _dispatchSenderOpen = true; toggleDispatchSender();
+  } catch(e) { alert('저장 실패: ' + e.message); }
+}
+
+async function loadDispatch() {
+  const from = document.getElementById('dispatchFrom').value;
+  const to   = document.getElementById('dispatchTo').value;
+  const resultEl  = document.getElementById('dispatchResult');
+  const summaryEl = document.getElementById('dispatchSummary');
+  resultEl.innerHTML  = '<div style="text-align:center;color:var(--text-dim);padding:30px;font-size:14px">조회 중...</div>';
+  summaryEl.textContent = '';
+  try {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to)   params.set('to',   to);
+    const r = await fetch('/api/orders/for-dispatch?' + params);
+    const j = await r.json();
+    summaryEl.textContent = `미발주 ${j.total}건 · 도매처 ${j.groups.length}곳 · 미매칭 ${j.unmatched.length}건`;
+    renderDispatchResult(j);
+  } catch(e) {
+    resultEl.innerHTML = `<div style="color:var(--red);font-size:14px">조회 실패: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderDispatchResult({ groups, unmatched }) {
+  const el = document.getElementById('dispatchResult');
+  let html = '';
+
+  // 도매처별 카드
+  for (const g of groups) {
+    const color   = _supplierColor(g.supplier_name || '');
+    const orders  = g.orders;
+    const preview = orders.slice(0, 5);
+    const more    = orders.length - preview.length;
+    const rows    = preview.map(o => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:9px 12px;font-size:13px;color:var(--text)">${escHtml(o.product_name)}${o.option_name ? ` <span style="color:var(--text-dim);font-size:12px">· ${escHtml(o.option_name)}</span>` : ''}</td>
+        <td style="padding:9px 12px;font-size:13px;color:var(--text-sub)">${escHtml(o.supplier_product_name || '—')}${o.supplier_option_name ? ` <span style="font-size:12px">· ${escHtml(o.supplier_option_name)}</span>` : ''}</td>
+        <td style="padding:9px 12px;font-size:13px;text-align:center;font-weight:600">${o.quantity}</td>
+        <td style="padding:9px 12px;font-size:12px;color:var(--text-dim);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(o.recipient_address || '')}">${escHtml(o.recipient_name || '')}${o.recipient_address ? ' · ' + escHtml(o.recipient_address.slice(0, 15)) + '…' : ''}</td>
+      </tr>`).join('');
+    const moreRow = more > 0 ? `<tr><td colspan="4" style="padding:8px 12px;font-size:12px;color:var(--text-dim);text-align:center">… 외 ${more}건</td></tr>` : '';
+    html += `<div style="border:1.5px solid ${color}38;border-radius:12px;overflow:hidden">
+      <div style="padding:14px 18px;background:${color}0A;display:flex;align-items:center;gap:10px">
+        <span style="font-size:15px;font-weight:700;color:${color}">${escHtml(g.supplier_name)}</span>
+        <span style="font-size:13px;color:var(--text-dim)">${orders.length}건</span>
+        <div style="margin-left:auto">
+          <button onclick="alert('준비 중입니다.')" class="btn btn-sm" style="font-size:12px;padding:6px 14px;background:var(--surface);border:1px solid ${color}38;color:${color};white-space:nowrap">📥 발주서 다운로드</button>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--surface2);border-bottom:1px solid var(--border)">
+            <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:left">쿠팡 상품명</th>
+            <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:left">도매처 상품명</th>
+            <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:center">수량</th>
+            <th style="padding:8px 12px;font-size:12px;font-weight:600;color:var(--text-dim);text-align:left">수령인</th>
+          </tr>
+        </thead>
+        <tbody>${rows}${moreRow}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // 미매칭 카드
+  if (unmatched.length) {
+    const rows = unmatched.map(o => `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--text)">${escHtml(o.product_name)}${o.option_name ? ` · <span style="font-weight:400">${escHtml(o.option_name)}</span>` : ''}</div>
+          <div style="font-size:12px;color:var(--text-dim);font-family:var(--mono)">옵션ID: ${escHtml(o.option_id || '-')} · 수량: ${o.quantity}</div>
+        </div>
+        <span style="font-size:12px;color:var(--text-dim)">발주처를 지정하세요</span>
+        <button onclick="setSupplierSubTab('order')" class="btn btn-sm" style="font-size:12px;padding:6px 12px;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub)">발주 매칭에서 지정 →</button>
+      </div>`).join('');
+    html += `<div style="border:1.5px solid #FF9F0A;border-radius:12px;overflow:hidden">
+      <div style="padding:14px 18px;background:#FFF9E6;display:flex;align-items:center;gap:8px">
+        <span style="font-size:15px;font-weight:700;color:#b45309">⚠️ 발주처 미매칭</span>
+        <span style="font-size:13px;color:var(--text-dim)">${unmatched.length}건 — 발주 매칭 탭에서 도매처를 지정하면 여기서 자동 분류됩니다</span>
+      </div>
+      <div>${rows}</div>
+    </div>`;
+  }
+
+  el.innerHTML = html || '<div style="text-align:center;color:var(--text-dim);padding:40px;font-size:14px">해당 기간 미발주 주문이 없습니다</div>';
+}
+
 // 하위 탭 팔레트 (도매처 id → 색)
 const _supplierColors = ['#0071e3','#34c759','#ff9f0a','#ff453a','#bf5af2','#32ade6','#30d158'];
 const _supplierColorMap = {};
@@ -10695,17 +10885,14 @@ function _supplierColor(id) {
 }
 
 function setSupplierSubTab(name) {
-  document.getElementById('spanel-compare').style.display = name === 'compare' ? '' : 'none';
-  document.getElementById('spanel-browse').style.display  = name === 'browse'  ? '' : 'none';
-  document.getElementById('spanel-manage').style.display  = name === 'manage'  ? '' : 'none';
-  document.getElementById('spanel-order').style.display   = name === 'order'   ? '' : 'none';
-  document.getElementById('stab-compare').classList.toggle('active', name === 'compare');
-  document.getElementById('stab-browse').classList.toggle('active', name === 'browse');
-  document.getElementById('stab-manage').classList.toggle('active', name === 'manage');
-  document.getElementById('stab-order').classList.toggle('active', name === 'order');
-  if (name === 'browse') initSupplierTab();
-  if (name === 'manage') loadWholesaleSuppliers();
-  if (name === 'order')  initOrderMappingTab();
+  ['compare','browse','manage','order','dispatch'].forEach(t => {
+    document.getElementById('spanel-' + t).style.display = name === t ? '' : 'none';
+    document.getElementById('stab-' + t).classList.toggle('active', name === t);
+  });
+  if (name === 'browse')   initSupplierTab();
+  if (name === 'manage')   loadWholesaleSuppliers();
+  if (name === 'order')    initOrderMappingTab();
+  if (name === 'dispatch') initDispatchTab();
 }
 
 // ── 가격 비교 ──────────────────────────────────────────────────────────────────

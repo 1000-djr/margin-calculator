@@ -1098,6 +1098,34 @@ router.get('/orders/stats', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 미발주 주문 도매처별 분류 ────────────────────────────────────────────────
+router.get('/orders/for-dispatch', requireAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const params = [req.user.id];
+    let q = `
+      SELECT o.id, o.order_number, o.order_date, o.product_name, o.option_name, o.option_id,
+             o.quantity, o.recipient_name_masked AS recipient_name, o.recipient_phone_masked AS recipient_phone,
+             o.recipient_address_masked AS recipient_address, o.recipient_zipcode,
+             om.supplier_id, om.supplier_product_name, om.supplier_option_name, ws.name AS supplier_name
+      FROM orders o
+      LEFT JOIN order_mappings om ON om.user_id=o.user_id AND om.option_id=o.option_id
+      LEFT JOIN wholesale_suppliers ws ON ws.id=om.supplier_id
+      WHERE o.user_id=$1 AND o.ordered_at IS NULL AND o.is_excluded IS NOT TRUE`;
+    if (from) { params.push(from); q += ` AND SUBSTRING(o.order_date,1,10) >= $${params.length}`; }
+    if (to)   { params.push(to);   q += ` AND SUBSTRING(o.order_date,1,10) <= $${params.length}`; }
+    q += ' ORDER BY om.supplier_id NULLS LAST, o.product_name';
+    const { rows } = await pool.query(q, params);
+    const groups = {}; const unmatched = [];
+    for (const r of rows) {
+      if (!r.supplier_id) { unmatched.push(r); continue; }
+      if (!groups[r.supplier_id]) groups[r.supplier_id] = { supplier_id: r.supplier_id, supplier_name: r.supplier_name, orders: [] };
+      groups[r.supplier_id].orders.push(r);
+    }
+    res.json({ groups: Object.values(groups), unmatched, total: rows.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/orders/option-first-date', requireAuth, async (req, res) => {
   try {
     const optionId = String(req.query.option_id || '').trim();
