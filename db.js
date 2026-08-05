@@ -683,6 +683,11 @@ async function initDB() {
     `);
   } catch(e) { console.warn('[db] account_shares 마이그레이션 스킵:', e.message); }
 
+  // orders 우편번호 컬럼 (발주서용)
+  try {
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS recipient_zipcode VARCHAR(20) DEFAULT NULL`);
+  } catch(e) { console.warn('[db] orders recipient_zipcode 마이그레이션 스킵:', e.message); }
+
   // orders 발주 상태 컬럼
   try {
     await pool.query(`
