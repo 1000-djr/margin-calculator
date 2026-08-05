@@ -10437,11 +10437,11 @@ function renderSupplierBalances(balances, lastFetched) {
     const pt = Number(b.point_balance);
     const depColor = dep < 500000 ? 'var(--red)' : 'var(--text)';
     const depWarn = dep < 500000 ? ' ⚠️' : '';
-    return `<div style="border:1px solid ${color}38;border-radius:10px;padding:10px 16px;background:${color}08;min-width:160px">
-      <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(b.supplier_name)}</div>
-      <div style="font-size:14px;font-weight:700;color:${depColor};white-space:nowrap">${dep.toLocaleString()}원${depWarn}</div>
-      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">예치금</div>
-      ${pt > 0 ? `<div style="font-size:12px;font-weight:600;color:var(--text-sub);margin-top:4px;white-space:nowrap">${pt.toLocaleString()}원 <span style="font-size:10px;color:var(--text-dim)">적립금</span></div>` : ''}
+    return `<div style="border:1px solid ${color}38;border-radius:10px;padding:14px 18px;background:${color}08;min-width:180px">
+      <div style="font-size:13px;font-weight:700;color:${color};margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(b.supplier_name)}</div>
+      <div style="font-size:20px;font-weight:700;color:${depColor};white-space:nowrap">${dep.toLocaleString()}원${depWarn}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:2px">예치금</div>
+      ${pt > 0 ? `<div style="font-size:14px;font-weight:600;color:var(--text-sub);margin-top:4px;white-space:nowrap">${pt.toLocaleString()}원 <span style="font-size:11px;color:var(--text-dim)">적립금</span></div>` : ''}
     </div>`;
   }).join('');
 }
