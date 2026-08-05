@@ -10599,15 +10599,17 @@ function renderSupplierBalances(balances, lastFetched) {
 // ── 발주 매칭 ──────────────────────────────────────────────────────────────
 let _orderMappings = [];
 let _editingOmId = null;
-let _omAllSuppliers = []; // form_key 있는 모든 도매처 (API 연동 여부 무관)
+let _omAllSuppliers = []; // 발주 가능한 모든 도매처 (API 연동 또는 발주양식 지정)
+let _omSupplierMap  = {}; // id → 도매처 객체 빠른 조회용
 
 async function initOrderMappingTab() {
-  // 발주 양식 지정된 모든 도매처를 드롭다운에 (API 연동 + 엑셀 발주처 모두)
+  // API 연동됐거나 발주양식 지정된 모든 도매처를 드롭다운에
   try {
     const r = await fetch('/api/wholesale-suppliers');
     const list = await r.json();
-    _omAllSuppliers = Array.isArray(list) ? list.filter(s => s.form_key) : [];
-  } catch(e) { _omAllSuppliers = []; }
+    _omAllSuppliers = Array.isArray(list) ? list.filter(s => s.api_linked || s.form_key) : [];
+    _omSupplierMap  = Object.fromEntries(_omAllSuppliers.map(s => [String(s.id), s]));
+  } catch(e) { _omAllSuppliers = []; _omSupplierMap = {}; }
   const sel = document.getElementById('omSupplierId');
   sel.innerHTML = '<option value="">-- 도매처 선택 --</option>';
   _omAllSuppliers.forEach(s => {
@@ -10713,7 +10715,10 @@ async function saveOrderMapping() {
   const registered_name = document.getElementById('omRegisteredName').value.trim();
   const option_name = document.getElementById('omOptionName').value.trim();
   const supplier_id = document.getElementById('omSupplierId').value || null;
-  const supplier_product_name = document.getElementById('omSupplierProductName').value.trim();
+  const selSupplier = supplier_id ? _omSupplierMap[String(supplier_id)] : null;
+  const supplier_product_name = selSupplier && !selSupplier.api_linked
+    ? (document.getElementById('omDirectProductName').value || '').trim()   // 엑셀 발주처: 직접입력칸
+    : document.getElementById('omSupplierProductName').value.trim();          // API 도매처: 검색 선택값
   const supplier_option_name = document.getElementById('omSupplierOptionName').value.trim();
   if (!option_id || !registered_name) return alert('옵션 ID와 등록상품명은 필수입니다.');
   const btn = document.getElementById('omSaveBtn');
@@ -10748,7 +10753,7 @@ function editOrderMapping(id) {
   document.getElementById('omSupplierProductName').value = m.supplier_product_name || '';
   document.getElementById('omSupplierOptionName').value = m.supplier_option_name || '';
   // 도매처 타입에 따라 UI 분기
-  const selSupplier = _omAllSuppliers.find(s => String(s.id) === String(m.supplier_id));
+  const selSupplier = m.supplier_id ? _omSupplierMap[String(m.supplier_id)] : null;
   const isLinked = selSupplier?.api_linked;
   if (m.supplier_id && isLinked) {
     document.getElementById('omProductSearchWrap').style.display = '';
