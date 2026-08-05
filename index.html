@@ -1988,6 +1988,13 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <div id="omProductResults" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;display:none;max-height:220px;overflow-y:auto"></div>
           </div>
 
+          <div id="omDirectInputWrap" style="display:none">
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">도매처 상품명 직접 입력</div>
+            <input id="omDirectProductName" type="text" placeholder="발주서에 넣을 도매처 상품명"
+              oninput="document.getElementById('omSupplierProductName').value=this.value.trim()"
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+          </div>
+
           <div id="omSelectedProduct" style="display:none;padding:10px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;font-size:13px;color:#1e40af">
             <div style="font-size:11px;font-weight:600;margin-bottom:3px;color:#1e40af">선택된 도매처 상품</div>
             <div id="omSelectedProductName" style="font-weight:600"></div>
@@ -10592,21 +10599,22 @@ function renderSupplierBalances(balances, lastFetched) {
 // ── 발주 매칭 ──────────────────────────────────────────────────────────────
 let _orderMappings = [];
 let _editingOmId = null;
-let _omLinkedSuppliers = [];
+let _omAllSuppliers = []; // form_key 있는 모든 도매처 (API 연동 여부 무관)
 
 async function initOrderMappingTab() {
-  // 연동 도매처 드롭다운 채우기
+  // 발주 양식 지정된 모든 도매처를 드롭다운에 (API 연동 + 엑셀 발주처 모두)
   try {
     const r = await fetch('/api/wholesale-suppliers');
     const list = await r.json();
-    _omLinkedSuppliers = Array.isArray(list) ? list.filter(s => s.api_linked) : [];
-  } catch(e) { _omLinkedSuppliers = []; }
+    _omAllSuppliers = Array.isArray(list) ? list.filter(s => s.form_key) : [];
+  } catch(e) { _omAllSuppliers = []; }
   const sel = document.getElementById('omSupplierId');
   sel.innerHTML = '<option value="">-- 도매처 선택 --</option>';
-  _omLinkedSuppliers.forEach(s => {
+  _omAllSuppliers.forEach(s => {
     const opt = document.createElement('option');
     opt.value = s.id;
-    opt.textContent = s.name;
+    opt.dataset.linked = s.api_linked ? '1' : '0';
+    opt.textContent = s.name + (s.api_linked ? '' : ' (엑셀)');
     sel.appendChild(opt);
   });
   await loadOrderMappings();
@@ -10650,11 +10658,19 @@ function renderOrderMappingList() {
 }
 
 function onOmSupplierChange() {
-  const val = document.getElementById('omSupplierId').value;
-  document.getElementById('omProductSearchWrap').style.display = val ? '' : 'none';
-  document.getElementById('omProductResults').style.display = 'none';
-  document.getElementById('omSelectedProduct').style.display = 'none';
-  document.getElementById('omSupplierProductName').value = '';
+  const sel = document.getElementById('omSupplierId');
+  const val = sel.value;
+  const selectedOpt = sel.options[sel.selectedIndex];
+  const isLinked = val && selectedOpt?.dataset.linked === '1';
+  // API 연동 도매처: 상품 검색 UI
+  document.getElementById('omProductSearchWrap').style.display  = (val && isLinked)  ? '' : 'none';
+  // 엑셀 발주처: 직접 입력 UI
+  document.getElementById('omDirectInputWrap').style.display    = (val && !isLinked) ? '' : 'none';
+  // 공통 초기화
+  document.getElementById('omProductResults').style.display     = 'none';
+  document.getElementById('omSelectedProduct').style.display    = 'none';
+  document.getElementById('omSupplierProductName').value        = '';
+  document.getElementById('omDirectProductName').value          = '';
 }
 
 async function searchOmProduct() {
@@ -10731,12 +10747,27 @@ function editOrderMapping(id) {
   document.getElementById('omSupplierId').value = m.supplier_id || '';
   document.getElementById('omSupplierProductName').value = m.supplier_product_name || '';
   document.getElementById('omSupplierOptionName').value = m.supplier_option_name || '';
-  if (m.supplier_product_name) {
-    document.getElementById('omSelectedProductName').textContent = m.supplier_product_name;
-    document.getElementById('omSelectedProductPrice').textContent = '';
-    document.getElementById('omSelectedProduct').style.display = '';
+  // 도매처 타입에 따라 UI 분기
+  const selSupplier = _omAllSuppliers.find(s => String(s.id) === String(m.supplier_id));
+  const isLinked = selSupplier?.api_linked;
+  if (m.supplier_id && isLinked) {
+    document.getElementById('omProductSearchWrap').style.display = '';
+    document.getElementById('omDirectInputWrap').style.display = 'none';
+    if (m.supplier_product_name) {
+      document.getElementById('omSelectedProductName').textContent = m.supplier_product_name;
+      document.getElementById('omSelectedProductPrice').textContent = '';
+      document.getElementById('omSelectedProduct').style.display = '';
+    }
+  } else if (m.supplier_id && !isLinked) {
+    document.getElementById('omProductSearchWrap').style.display = 'none';
+    document.getElementById('omDirectInputWrap').style.display = '';
+    document.getElementById('omDirectProductName').value = m.supplier_product_name || '';
+    document.getElementById('omSelectedProduct').style.display = 'none';
+  } else {
+    document.getElementById('omProductSearchWrap').style.display = 'none';
+    document.getElementById('omDirectInputWrap').style.display = 'none';
+    document.getElementById('omSelectedProduct').style.display = 'none';
   }
-  document.getElementById('omProductSearchWrap').style.display = m.supplier_id ? '' : 'none';
   document.getElementById('omCancelBtn').style.display = '';
   document.getElementById('omSaveBtn').textContent = '수정 저장';
 }
@@ -10746,7 +10777,9 @@ function cancelOmEdit() {
   ['omOptionId','omRegisteredName','omOptionName','omSupplierOptionName'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('omSupplierId').value = '';
   document.getElementById('omSupplierProductName').value = '';
+  document.getElementById('omDirectProductName').value = '';
   document.getElementById('omProductSearchWrap').style.display = 'none';
+  document.getElementById('omDirectInputWrap').style.display = 'none';
   document.getElementById('omProductResults').style.display = 'none';
   document.getElementById('omSelectedProduct').style.display = 'none';
   document.getElementById('omCancelBtn').style.display = 'none';
