@@ -510,6 +510,10 @@ async function initDB() {
     await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_client_secret_enc TEXT`);
     await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS api_linked BOOLEAN DEFAULT FALSE`);
   } catch(e) { console.warn('[db] wholesale_suppliers API 컬럼 추가 실패:', e.message); }
+  // 발주 양식 키 (마이그레이션)
+  try {
+    await pool.query(`ALTER TABLE wholesale_suppliers ADD COLUMN IF NOT EXISTS form_key TEXT`);
+  } catch(e) { console.warn('[db] wholesale_suppliers form_key 컬럼 추가 실패:', e.message); }
 
   // 도매처 상품 캐시 테이블
   await pool.query(`

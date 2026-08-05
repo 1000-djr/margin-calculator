@@ -7,6 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root {
   --bg: #f5f5f7;
@@ -1885,6 +1886,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
             <input id="wsUrl" type="url" placeholder="https://..." maxlength="500"
               style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
           </div>
+          <!-- 발주 양식 -->
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">발주 양식 <span style="font-weight:400;color:var(--text-dim)">(선택)</span></div>
+            <select id="wsFormKey" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+              <option value="">(없음)</option>
+              <option value="thegreen">더그린 양식</option>
+              <option value="neulpureun">늘푸른우리 양식</option>
+              <option value="ecofarm">에코앤팜 양식</option>
+              <option value="jungdaun">정다운 양식</option>
+              <option value="rang">랑 양식</option>
+            </select>
+          </div>
           <!-- API 연동 섹션 -->
           <div style="border-top:1px solid var(--border);padding-top:12px">
             <button type="button" onclick="toggleWsApiSection()" style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--accent);padding:0;font-family:var(--sans);display:flex;align-items:center;gap:4px">
@@ -2044,7 +2057,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button onclick="loadDispatch()" class="btn btn-primary" style="font-size:14px;padding:9px 20px">조회</button>
         <span id="dispatchSummary" style="font-size:13px;color:var(--text-dim)"></span>
         <div style="margin-left:auto">
-          <button onclick="alert('준비 중입니다.')" class="btn btn-sm" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">📦 전체 발주서 다운로드</button>
+          <button onclick="downloadAllDispatch()" class="btn btn-sm" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">📦 전체 발주서 다운로드</button>
         </div>
       </div>
 
@@ -9520,6 +9533,7 @@ function renderWholesaleList() {
            style="font-size:13px;color:var(--accent);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%"
            title="${escHtml(s.url)}">${escHtml((() => { try { return new URL(s.url).hostname; } catch(e) { return s.url; } })())}</a>
         ${s.api_client_id_masked ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${escHtml(s.api_type)} · ID: ${escHtml(s.api_client_id_masked)}</div>` : ''}
+        ${s.form_key ? `<div style="font-size:12px;color:#5856d6;margin-top:3px">📋 ${escHtml({thegreen:'더그린',neulpureun:'늘푸른우리',ecofarm:'에코앤팜',jungdaun:'정다운',rang:'랑'}[s.form_key] || s.form_key)} 양식</div>` : '<div style="font-size:12px;color:var(--text-dim);margin-top:3px">발주양식 미지정</div>'}
         <div id="ws-test-result-${s.id}" style="font-size:12px;margin-top:4px"></div>
       </div>
       ${testBtn}
@@ -9552,6 +9566,7 @@ function editWholesaleSupplier(id) {
   editingWsId = s.id;
   document.getElementById('wsName').value = s.name;
   document.getElementById('wsUrl').value  = s.url;
+  document.getElementById('wsFormKey').value = s.form_key || '';
   // API 필드 복원 (secret은 빈칸 - 수정 시 비우면 기존 유지)
   const sec = document.getElementById('wsApiSection');
   if (s.api_linked && s.api_type) {
@@ -9581,6 +9596,7 @@ function cancelWsEdit() {
   editingWsId = null;
   document.getElementById('wsName').value = '';
   document.getElementById('wsUrl').value  = '';
+  document.getElementById('wsFormKey').value = '';
   document.getElementById('wsApiType').value = '';
   document.getElementById('wsApiClientId').value = '';
   document.getElementById('wsApiClientSecret').value = '';
@@ -9600,7 +9616,8 @@ async function saveWholesaleSupplier() {
   const api_type = document.getElementById('wsApiType').value || '';
   const api_client_id = (document.getElementById('wsApiClientId').value || '').trim();
   const api_client_secret = (document.getElementById('wsApiClientSecret').value || '').trim();
-  const payload = { name, url, api_type, api_client_id, api_client_secret };
+  const form_key = document.getElementById('wsFormKey').value || '';
+  const payload = { name, url, api_type, api_client_id, api_client_secret, form_key };
   if (currentUser) {
     try {
       const method = currentId ? 'PUT' : 'POST';
@@ -10736,6 +10753,8 @@ async function deleteOrderMapping(id) {
 
 // ── 발주 탭 ──────────────────────────────────────────────────────────────────
 let _dispatchSenderOpen = false;
+let _dispatchData = null;   // 마지막 loadDispatch() 응답 저장
+let _orderForms = {};       // GET /api/order-forms 결과
 
 async function initDispatchTab() {
   // 기본 날짜: 최근 7일
@@ -10747,6 +10766,11 @@ async function initDispatchTab() {
   if (!fromEl.value) fromEl.value = fmt(from);
   if (!toEl.value)   toEl.value   = fmt(today);
   await loadDispatchSender();
+  // 발주 양식 로드
+  try {
+    const r = await fetch('/api/order-forms');
+    if (r.ok) { const j = await r.json(); _orderForms = j.forms || {}; }
+  } catch(e) {}
 }
 
 async function loadDispatchSender() {
@@ -10803,6 +10827,7 @@ async function loadDispatch() {
     if (to)   params.set('to',   to);
     const r = await fetch('/api/orders/for-dispatch?' + params);
     const j = await r.json();
+    _dispatchData = j;
     summaryEl.textContent = `미발주 ${j.total}건 · 도매처 ${j.groups.length}곳 · 미매칭 ${j.unmatched.length}건`;
     renderDispatchResult(j);
   } catch(e) {
@@ -10832,8 +10857,11 @@ function renderDispatchResult({ groups, unmatched }) {
       <div style="padding:14px 18px;background:${color}0A;display:flex;align-items:center;gap:10px">
         <span style="font-size:15px;font-weight:700;color:${color}">${escHtml(g.supplier_name)}</span>
         <span style="font-size:13px;color:var(--text-dim)">${orders.length}건</span>
-        <div style="margin-left:auto">
-          <button onclick="alert('준비 중입니다.')" class="btn btn-sm" style="font-size:12px;padding:6px 14px;background:var(--surface);border:1px solid ${color}38;color:${color};white-space:nowrap">📥 발주서 다운로드</button>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          ${g.form_key
+            ? `<button onclick="downloadDispatchExcel(${g.supplier_id})" class="btn btn-sm" style="font-size:12px;padding:6px 14px;background:var(--surface);border:1px solid ${color}38;color:${color};white-space:nowrap">📥 발주서 다운로드</button>`
+            : `<span style="font-size:11px;color:var(--text-dim)">양식 미지정 — 도매처 관리에서 설정</span>`
+          }
         </div>
       </div>
       <table style="width:100%;border-collapse:collapse">
@@ -10871,6 +10899,122 @@ function renderDispatchResult({ groups, unmatched }) {
   }
 
   el.innerHTML = html || '<div style="text-align:center;color:var(--text-dim);padding:40px;font-size:14px">해당 기간 미발주 주문이 없습니다</div>';
+}
+
+// ── 발주서 엑셀 생성 헬퍼 ────────────────────────────────────────────────────
+function _getDispatchSender() {
+  return {
+    name:    (document.getElementById('dsSenderName')?.value    || '').trim(),
+    phone:   (document.getElementById('dsSenderPhone')?.value   || '').trim(),
+    address: (document.getElementById('dsSenderAddress')?.value || '').trim(),
+  };
+}
+
+function _buildDispatchWorkbook(group, sender) {
+  const form = _orderForms[group.form_key];
+  if (!form) return null;
+  const cols = form.columns;
+  const header = cols.map(c => c.header);
+  const dataRows = group.orders.map(o => cols.map(c => {
+    switch (c.source) {
+      case 'recipient_name':    return o.recipient_name    || '';
+      case 'recipient_phone':   return o.recipient_phone   || '';
+      case 'recipient_address': return o.recipient_address || '';
+      case 'recipient_zipcode': return o.recipient_zipcode || '';
+      case 'product_name':      return o.supplier_product_name || o.product_name || '';
+      case 'option_name':       return o.supplier_option_name  || o.option_name  || '';
+      case 'qty':               return o.quantity || 1;
+      case 'delivery_msg':      return o.delivery_msg || '';
+      case 'sender_name':       return sender.name    || '';
+      case 'sender_phone':      return sender.phone   || '';
+      case 'sender_address':    return sender.address || '';
+      case 'order_number':      return o.order_number || '';
+      case 'empty':             return '';
+      default:                  return '';
+    }
+  }));
+  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, form.sheet || 'Sheet1');
+  return wb;
+}
+
+async function downloadDispatchExcel(supplierId) {
+  if (!_dispatchData) return alert('먼저 조회해 주세요.');
+  const group = _dispatchData.groups.find(g => String(g.supplier_id) === String(supplierId));
+  if (!group) return alert('해당 도매처 데이터가 없습니다.');
+  if (!group.form_key) return alert('발주 양식이 지정되지 않았습니다.\n도매처 관리 탭에서 발주 양식을 설정하세요.');
+  const sender = _getDispatchSender();
+  if (!sender.name || !sender.phone) return alert('보내는사람 정보를 먼저 설정하세요.');
+  const wb = _buildDispatchWorkbook(group, sender);
+  if (!wb) return alert('양식 데이터를 불러올 수 없습니다.');
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, `${group.supplier_name}_발주_${today}.xlsx`);
+  // 발주완료 기록
+  try {
+    const ids = group.orders.map(o => o.id);
+    await fetch('/api/orders/mark-dispatched', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_ids: ids, supplier_id: group.supplier_id }),
+    });
+    // 목록에서 해당 그룹 제거
+    _dispatchData.groups = _dispatchData.groups.filter(g => String(g.supplier_id) !== String(supplierId));
+    _dispatchData.total  = (_dispatchData.total || 0) - group.orders.length;
+    const summaryEl = document.getElementById('dispatchSummary');
+    if (summaryEl) summaryEl.textContent = `미발주 ${_dispatchData.total}건 · 도매처 ${_dispatchData.groups.length}곳 · 미매칭 ${_dispatchData.unmatched.length}건`;
+    renderDispatchResult(_dispatchData);
+  } catch(e) { /* 기록 실패해도 다운로드는 완료 */ }
+}
+
+async function downloadAllDispatch() {
+  if (!_dispatchData || !_dispatchData.groups.length) return alert('발주할 주문이 없습니다. 먼저 조회해 주세요.');
+  const sender = _getDispatchSender();
+  if (!sender.name || !sender.phone) return alert('보내는사람 정보를 먼저 설정하세요.');
+  const groups = _dispatchData.groups.filter(g => g.form_key);
+  const noForm = _dispatchData.groups.filter(g => !g.form_key);
+  if (!groups.length) return alert('발주 양식이 지정된 도매처가 없습니다.\n도매처 관리 탭에서 각 도매처의 발주 양식을 설정하세요.');
+  if (noForm.length) {
+    const names = noForm.map(g => g.supplier_name).join(', ');
+    if (!confirm(`${names} 도매처는 발주 양식이 없어 제외됩니다.\n나머지 ${groups.length}곳만 다운로드하시겠습니까?`)) return;
+  }
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  if (groups.length === 1) {
+    // 1곳이면 zip 없이 바로 xlsx
+    const g = groups[0];
+    const wb = _buildDispatchWorkbook(g, sender);
+    if (wb) XLSX.writeFile(wb, `${g.supplier_name}_발주_${today}.xlsx`);
+  } else {
+    // 여러 곳이면 JSZip으로 묶기
+    const zip = new JSZip();
+    for (const g of groups) {
+      const wb = _buildDispatchWorkbook(g, sender);
+      if (!wb) continue;
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      zip.file(`${g.supplier_name}_발주_${today}.xlsx`, buf);
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a'); a.href = url;
+    a.download = `전체발주서_${today}.zip`; a.click();
+    URL.revokeObjectURL(url);
+  }
+  // 전체 mark-dispatched
+  try {
+    for (const g of groups) {
+      await fetch('/api/orders/mark-dispatched', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_ids: g.orders.map(o => o.id), supplier_id: g.supplier_id }),
+      });
+    }
+    // 발주완료된 그룹 제거
+    const doneIds = new Set(groups.map(g => String(g.supplier_id)));
+    _dispatchData.groups = _dispatchData.groups.filter(g => !doneIds.has(String(g.supplier_id)));
+    _dispatchData.total  = _dispatchData.unmatched.length +
+      _dispatchData.groups.reduce((s, g) => s + g.orders.length, 0);
+    const summaryEl = document.getElementById('dispatchSummary');
+    if (summaryEl) summaryEl.textContent = `미발주 ${_dispatchData.total}건 · 도매처 ${_dispatchData.groups.length}곳 · 미매칭 ${_dispatchData.unmatched.length}건`;
+    renderDispatchResult(_dispatchData);
+  } catch(e) {}
 }
 
 // 하위 탭 팔레트 (도매처 id → 색)

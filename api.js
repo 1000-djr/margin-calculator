@@ -8,6 +8,7 @@ const express = require('express');
 const router  = express.Router();
 const { pool } = require('./db');
 const { calculateProfit } = require('./profit');
+const { ORDER_FORMS } = require('./orderForms');
 const crypto = require('crypto');
 const https  = require('https');
 const zlib   = require('zlib');
@@ -1107,7 +1108,8 @@ router.get('/orders/for-dispatch', requireAuth, async (req, res) => {
       SELECT o.id, o.order_number, o.order_date, o.product_name, o.option_name, o.option_id,
              o.quantity, o.recipient_name_masked AS recipient_name, o.recipient_phone_masked AS recipient_phone,
              o.recipient_address_masked AS recipient_address, o.recipient_zipcode,
-             om.supplier_id, om.supplier_product_name, om.supplier_option_name, ws.name AS supplier_name
+             om.supplier_id, om.supplier_product_name, om.supplier_option_name,
+             ws.name AS supplier_name, ws.form_key AS supplier_form_key
       FROM orders o
       LEFT JOIN order_mappings om ON om.user_id=o.user_id AND om.option_id=o.option_id
       LEFT JOIN wholesale_suppliers ws ON ws.id=om.supplier_id
@@ -1119,7 +1121,7 @@ router.get('/orders/for-dispatch', requireAuth, async (req, res) => {
     const groups = {}; const unmatched = [];
     for (const r of rows) {
       if (!r.supplier_id) { unmatched.push(r); continue; }
-      if (!groups[r.supplier_id]) groups[r.supplier_id] = { supplier_id: r.supplier_id, supplier_name: r.supplier_name, orders: [] };
+      if (!groups[r.supplier_id]) groups[r.supplier_id] = { supplier_id: r.supplier_id, supplier_name: r.supplier_name, form_key: r.supplier_form_key || null, orders: [] };
       groups[r.supplier_id].orders.push(r);
     }
     res.json({ groups: Object.values(groups), unmatched, total: rows.length });
@@ -3915,6 +3917,7 @@ function wsRow(r) {
     api_linked: !!r.api_linked,
     api_type: r.api_type || null,
     api_client_id_masked: masked,
+    form_key: r.form_key || null,
   };
 }
 
@@ -3929,7 +3932,7 @@ router.get('/wholesale-suppliers', requireAuth, async (req, res) => {
 });
 
 router.post('/wholesale-suppliers', requireAuth, async (req, res) => {
-  const { name, url, api_type, api_client_id, api_client_secret } = req.body;
+  const { name, url, api_type, api_client_id, api_client_secret, form_key } = req.body;
   if (!name || !url) return res.status(400).json({ error: '이름과 URL을 입력하세요' });
   try {
     let secretEnc = null, apiLinked = false;
@@ -3938,16 +3941,16 @@ router.post('/wholesale-suppliers', requireAuth, async (req, res) => {
       apiLinked = true;
     }
     const { rows } = await pool.query(
-      `INSERT INTO wholesale_suppliers (user_id,name,url,api_type,api_client_id,api_client_secret_enc,api_linked)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [req.user.id, name.trim(), url.trim(), api_type || null, api_client_id || null, secretEnc, apiLinked]
+      `INSERT INTO wholesale_suppliers (user_id,name,url,api_type,api_client_id,api_client_secret_enc,api_linked,form_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.user.id, name.trim(), url.trim(), api_type || null, api_client_id || null, secretEnc, apiLinked, form_key || null]
     );
     res.json(wsRow(rows[0]));
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.put('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
-  const { name, url, api_type, api_client_id, api_client_secret } = req.body;
+  const { name, url, api_type, api_client_id, api_client_secret, form_key } = req.body;
   if (!name || !url) return res.status(400).json({ error: '이름과 URL을 입력하세요' });
   try {
     // 기존 레코드 조회 (secret 유지 여부 판단)
@@ -3970,9 +3973,9 @@ router.put('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
     else if (api_type && finalClientId && secretEnc) { apiLinked = true; }
     const { rows } = await pool.query(
       `UPDATE wholesale_suppliers
-       SET name=$1, url=$2, api_type=$3, api_client_id=$4, api_client_secret_enc=$5, api_linked=$6
-       WHERE id=$7 AND user_id=$8 RETURNING *`,
-      [name.trim(), url.trim(), api_type || null, finalClientId || null, secretEnc, apiLinked, req.params.id, req.user.id]
+       SET name=$1, url=$2, api_type=$3, api_client_id=$4, api_client_secret_enc=$5, api_linked=$6, form_key=$7
+       WHERE id=$8 AND user_id=$9 RETURNING *`,
+      [name.trim(), url.trim(), api_type || null, finalClientId || null, secretEnc, apiLinked, form_key || null, req.params.id, req.user.id]
     );
     res.json(wsRow(rows[0]));
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -3982,6 +3985,25 @@ router.delete('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
   try {
     await pool.query('DELETE FROM wholesale_suppliers WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
     res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── 발주 양식 정의 반환 ───────────────────────────────────────────────────────
+router.get('/order-forms', requireAuth, (req, res) => {
+  res.json({ forms: ORDER_FORMS });
+});
+
+// ── 발주 완료 기록 ────────────────────────────────────────────────────────────
+router.post('/orders/mark-dispatched', requireAuth, async (req, res) => {
+  const { order_ids, supplier_id } = req.body;
+  if (!Array.isArray(order_ids) || !order_ids.length) return res.status(400).json({ error: 'order_ids 필요' });
+  try {
+    await pool.query(
+      `UPDATE orders SET ordered_at=NOW(), ordered_supplier_id=$1
+       WHERE id = ANY($2::int[]) AND user_id=$3`,
+      [supplier_id || null, order_ids.map(Number), req.user.id]
+    );
+    res.json({ ok: true, count: order_ids.length });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
