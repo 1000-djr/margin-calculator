@@ -10567,7 +10567,7 @@ function renderCompareGroups(list) {
       : '';
     let stockLabel = '', stockStyle = 'font-size:10px;color:var(--text-dim)';
     if (p.stock === 'soldout') { stockLabel = ' · 품절'; stockStyle = 'font-size:10px;color:var(--red)'; }
-    const border = isLast ? '' : 'border-bottom:0.5px solid var(--border);';
+    const border = isLast ? '' : 'border-bottom:1px solid var(--border);';
     return `<div style="${border}padding:8px 12px;display:flex;align-items:center;gap:8px">
       <span style="width:60px;flex-shrink:0;text-align:center;background:${color}18;color:${color};border:1px solid ${color}38;padding:2px 0;border-radius:5px;font-size:10px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.supplier_name)}</span>
       <div style="flex:1;min-width:0;font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(p.name || '')}${taxBadge}${stockLabel ? `<span style="${stockStyle}">${stockLabel}</span>` : ''}${p.order_cutoff_time ? `<span style="font-size:10px;color:var(--text-dim)"> · ${escHtml(p.order_cutoff_time)}</span>` : ''}</div>
@@ -10590,13 +10590,13 @@ function renderCompareGroups(list) {
 
     const makeCol = (col) => col.map((p, i) => makeRow(p, i === col.length - 1)).join('');
 
-    return `<div style="border:0.5px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
-      <div style="padding:10px 14px;background:var(--surface2);border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:8px">
+    return `<div style="border:1.5px solid #C7C7CC;border-radius:12px;overflow:hidden;margin-bottom:18px">
+      <div style="padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
         <span style="font-size:16px;font-weight:600;color:var(--text)">${escHtml(label)}</span>
         <span style="font-size:12px;color:var(--text-dim)">${items.length}건</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr">
-        <div style="border-right:0.5px solid var(--border)">${makeCol(leftCol)}</div>
+        <div style="border-right:1px solid var(--border)">${makeCol(leftCol)}</div>
         <div>${makeCol(rightCol)}</div>
       </div>
     </div>`;
