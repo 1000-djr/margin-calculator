@@ -1364,7 +1364,13 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
           recipient_name_masked,recipient_phone_masked,recipient_address_masked,
           recipient_zipcode,delivery_msg)
          VALUES ${placeholders.join(',')}
-         ON CONFLICT (user_id, order_number) DO NOTHING`,
+         ON CONFLICT (user_id, order_number) DO UPDATE SET
+           buyer_masked             = EXCLUDED.buyer_masked,
+           recipient_name_masked    = EXCLUDED.recipient_name_masked,
+           recipient_phone_masked   = EXCLUDED.recipient_phone_masked,
+           recipient_address_masked = EXCLUDED.recipient_address_masked,
+           recipient_zipcode        = EXCLUDED.recipient_zipcode,
+           delivery_msg             = EXCLUDED.delivery_msg`,
         params
       );
       inserted += r.rowCount;
@@ -3782,7 +3788,13 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
                 THEN EXCLUDED.option_id ELSE orders.option_id END,
               display_name = CASE
                 WHEN orders.display_name IS NULL OR orders.display_name = ''
-                THEN EXCLUDED.display_name ELSE orders.display_name END
+                THEN EXCLUDED.display_name ELSE orders.display_name END,
+              buyer_masked             = EXCLUDED.buyer_masked,
+              recipient_name_masked    = EXCLUDED.recipient_name_masked,
+              recipient_phone_masked   = EXCLUDED.recipient_phone_masked,
+              recipient_address_masked = EXCLUDED.recipient_address_masked,
+              recipient_zipcode        = EXCLUDED.recipient_zipcode,
+              delivery_msg             = EXCLUDED.delivery_msg
             RETURNING id, (xmax = 0) AS is_insert`,
             [
               req.user.id, orderNumber, bundleNumber, orderDate,
