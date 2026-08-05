@@ -4461,9 +4461,8 @@ function handleOrdersUpload(input) {
         ORDER_COLUMNS.forEach(col => {
           const i = colIdx[col];
           const raw = i >= 0 ? row[i] : '';
-          let val = DATE_COLS.has(col) ? formatOrderDate(raw) : String(raw ?? '').trim();
-          if (ORDER_MASK_COLS.has(col) && val) val = maskValue(col, val);
-          obj[col] = val;
+          // 서버에는 원본 전송 (개인정보는 서버에서 14일 후 자동 마스킹)
+          obj[col] = DATE_COLS.has(col) ? formatOrderDate(raw) : String(raw ?? '').trim();
         });
         return obj;
       }).filter(o => o['주문번호']);
@@ -4608,9 +4607,8 @@ function handleOrdersFilterUpload(input) {
         ORDER_COLUMNS.forEach(col => {
           const i = colIdx[col];
           const raw = i >= 0 ? row[i] : '';
-          let val = DATE_COLS.has(col) ? formatOrderDate(raw) : String(raw ?? '').trim();
-          if (ORDER_MASK_COLS.has(col) && val) val = maskValue(col, val);
-          obj[col] = val;
+          // 서버에는 원본 전송 (개인정보는 서버에서 14일 후 자동 마스킹)
+          obj[col] = DATE_COLS.has(col) ? formatOrderDate(raw) : String(raw ?? '').trim();
         });
         return obj;
       }).filter(o => o['주문번호']);
