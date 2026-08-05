@@ -10819,23 +10819,10 @@ function setDispatchQuickDate(type) {
   let fromDt, toDt, fromDisp, toDisp, cycleLabel = '';
 
   if (type === 'order_cycle') {
-    // 현재 속한 발주 사이클: 10시 기준
-    // 현재 10시 이전 → 어제 10:00:00 ~ 오늘 09:59:59
-    // 현재 10시 이후 → 오늘 10:00:00 ~ 내일 09:59:59
-    if (h < 10) {
-      const yst = new Date(y, mo, d - 1);
-      fromDt = fmtDt(yst.getFullYear(), yst.getMonth(), yst.getDate(), 10, 0, 0);
-      toDt   = fmtDt(y, mo, d, 9, 59, 59);
-      fromDisp = fmtDate(yst.getFullYear(), yst.getMonth(), yst.getDate());
-    } else {
-      const tmr = new Date(y, mo, d + 1);
-      fromDt = fmtDt(y, mo, d, 10, 0, 0);
-      toDt   = fmtDt(tmr.getFullYear(), tmr.getMonth(), tmr.getDate(), 9, 59, 59);
-      fromDisp = fmtDate(y, mo, d);
-    }
-    toDisp = fromDisp === fmtDate(y, mo, d)
-      ? fmtDate(new Date(y, mo, d + 1).getFullYear(), new Date(y, mo, d + 1).getMonth(), new Date(y, mo, d + 1).getDate())
-      : fmtDate(y, mo, d);
+    // 항상 어제 10:00:00 ~ 오늘 09:59:59 고정
+    const yst = new Date(y, mo, d - 1);
+    fromDt = fmtDt(yst.getFullYear(), yst.getMonth(), yst.getDate(), 10, 0, 0);
+    toDt   = fmtDt(y, mo, d, 9, 59, 59);
     cycleLabel = `${fromDt.slice(5,10).replace('-','/')} 10:00 ~ ${toDt.slice(5,10).replace('-','/')} 09:59`;
     document.getElementById('dispatchFrom').value = fromDt.slice(0, 10);
     document.getElementById('dispatchTo').value   = toDt.slice(0, 10);
