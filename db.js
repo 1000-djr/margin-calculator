@@ -566,6 +566,25 @@ async function initDB() {
     `);
   } catch(e) { console.warn('[db] supplier_balances 생성 실패:', e.message); }
 
+  // 발주 매칭 테이블 (쿠팡 옵션 → 도매처 + 도매처 상품명)
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS order_mappings (
+        id                   SERIAL PRIMARY KEY,
+        user_id              INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        option_id            VARCHAR(100),
+        registered_name      TEXT,
+        option_name          TEXT DEFAULT '',
+        supplier_id          INTEGER REFERENCES wholesale_suppliers(id) ON DELETE SET NULL,
+        supplier_product_name TEXT,
+        supplier_option_name TEXT DEFAULT '',
+        created_at           TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, option_id)
+      );
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_om_user ON order_mappings(user_id)`);
+  } catch(e) { console.warn('[db] order_mappings 생성 실패:', e.message); }
+
   // 트래픽 슬롯 관리 테이블
   await pool.query(`
     CREATE TABLE IF NOT EXISTS traffic_slots (

@@ -4358,6 +4358,69 @@ router.get('/supplier/:supplierId/products', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 발주 매칭 CRUD ──────────────────────────────────────────────────────────
+router.get('/order-mappings', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT om.*, ws.name AS supplier_name
+       FROM order_mappings om
+       LEFT JOIN wholesale_suppliers ws ON ws.id = om.supplier_id
+       WHERE om.user_id = $1
+       ORDER BY om.registered_name, om.option_name`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/order-mappings', requireAuth, async (req, res) => {
+  const { option_id, registered_name, option_name, supplier_id, supplier_product_name, supplier_option_name } = req.body;
+  if (!option_id || !registered_name) return res.status(400).json({ error: 'option_id, registered_name 필수' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO order_mappings
+         (user_id, option_id, registered_name, option_name, supplier_id, supplier_product_name, supplier_option_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (user_id, option_id) DO UPDATE SET
+         registered_name      = EXCLUDED.registered_name,
+         option_name          = EXCLUDED.option_name,
+         supplier_id          = EXCLUDED.supplier_id,
+         supplier_product_name = EXCLUDED.supplier_product_name,
+         supplier_option_name = EXCLUDED.supplier_option_name
+       RETURNING *`,
+      [req.user.id, option_id, registered_name, option_name || '', supplier_id || null,
+       supplier_product_name || '', supplier_option_name || '']
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/order-mappings/:id', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      'DELETE FROM order_mappings WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/order-mappings/search-supplier-product', requireAuth, async (req, res) => {
+  const { supplier_id, q } = req.query;
+  if (!supplier_id || !q) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT product_code, name, price, unit
+       FROM supplier_products
+       WHERE user_id=$1 AND supplier_id=$2 AND name ILIKE $3
+       ORDER BY name
+       LIMIT 20`,
+      [req.user.id, supplier_id, `%${q}%`]
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
 module.exports.fetchSupplierBalancesForUser = fetchSupplierBalancesForUser;

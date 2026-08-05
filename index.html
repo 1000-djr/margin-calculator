@@ -1804,6 +1804,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <button id="stab-compare" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('compare')">🔍 가격 비교</button>
       <button id="stab-browse" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('browse')">📦 상품 보기</button>
       <button id="stab-manage" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('manage')">⚙️ 도매처 관리</button>
+      <button id="stab-order" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('order')">📋 발주 매칭</button>
     </div>
 
     <!-- ── 가격 비교 패널 ── -->
@@ -1927,6 +1928,75 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div>
           <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px">등록된 도매처</div>
           <div id="wholesaleList" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 발주 매칭 패널 ── -->
+    <div id="spanel-order" style="display:none">
+      <div style="display:grid;grid-template-columns:460px 1fr;gap:28px;align-items:start">
+        <!-- 왼쪽: 추가/수정 폼 -->
+        <div style="display:flex;flex-direction:column;gap:14px;padding:22px 24px;background:var(--surface2);border:1px solid var(--border);border-radius:14px">
+          <div style="font-size:17px;font-weight:700;color:var(--text)">발주 매칭 추가 / 수정</div>
+
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">쿠팡 옵션 ID</div>
+            <input id="omOptionId" type="text" placeholder="예: 12345678"
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--mono)">
+          </div>
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">쿠팡 등록상품명</div>
+            <input id="omRegisteredName" type="text" placeholder="예: 국내산 감자 10kg"
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+          </div>
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">쿠팡 옵션명 <span style="font-weight:400;color:var(--text-dim)">(선택)</span></div>
+            <input id="omOptionName" type="text" placeholder="예: 10kg"
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+          </div>
+
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">발주처 (도매처)</div>
+            <select id="omSupplierId" onchange="onOmSupplierChange()"
+              style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+              <option value="">-- 도매처 선택 --</option>
+            </select>
+          </div>
+
+          <div id="omProductSearchWrap" style="display:none">
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">도매처 상품 검색</div>
+            <div style="display:flex;gap:8px;margin-bottom:6px">
+              <input id="omProductQ" type="text" placeholder="상품명 입력 후 검색"
+                onkeydown="if(event.key==='Enter')searchOmProduct()"
+                style="flex:1;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+              <button onclick="searchOmProduct()" class="btn btn-sm" style="font-size:13px;padding:7px 14px;white-space:nowrap;background:var(--surface);border:1px solid var(--border);color:var(--text-sub)">검색</button>
+            </div>
+            <div id="omProductResults" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;display:none;max-height:220px;overflow-y:auto"></div>
+          </div>
+
+          <div id="omSelectedProduct" style="display:none;padding:10px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;font-size:13px;color:#1e40af">
+            <div style="font-size:11px;font-weight:600;margin-bottom:3px;color:#1e40af">선택된 도매처 상품</div>
+            <div id="omSelectedProductName" style="font-weight:600"></div>
+            <div id="omSelectedProductPrice" style="font-size:12px;margin-top:2px"></div>
+          </div>
+          <input id="omSupplierProductName" type="hidden">
+
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">도매처 옵션명 <span style="font-weight:400;color:var(--text-dim)">(선택)</span></div>
+            <input id="omSupplierOptionName" type="text" placeholder="예: 10kg 박스"
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
+          </div>
+
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+            <button id="omCancelBtn" onclick="cancelOmEdit()" class="btn btn-ghost" style="display:none;font-size:15px;padding:10px 22px">취소</button>
+            <button id="omSaveBtn" onclick="saveOrderMapping()" class="btn btn-primary" style="font-size:15px;padding:10px 22px">저장</button>
+          </div>
+        </div>
+
+        <!-- 오른쪽: 매칭 목록 -->
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px">등록된 발주 매칭</div>
+          <div id="orderMappingList" style="display:flex;flex-direction:column;gap:10px"></div>
         </div>
       </div>
     </div>
@@ -10447,6 +10517,172 @@ function renderSupplierBalances(balances, lastFetched) {
   }).join('');
 }
 
+// ── 발주 매칭 ──────────────────────────────────────────────────────────────
+let _orderMappings = [];
+let _editingOmId = null;
+let _omLinkedSuppliers = [];
+
+async function initOrderMappingTab() {
+  // 연동 도매처 드롭다운 채우기
+  try {
+    const r = await fetch('/api/wholesale-suppliers');
+    const list = await r.json();
+    _omLinkedSuppliers = Array.isArray(list) ? list.filter(s => s.api_linked) : [];
+  } catch(e) { _omLinkedSuppliers = []; }
+  const sel = document.getElementById('omSupplierId');
+  sel.innerHTML = '<option value="">-- 도매처 선택 --</option>';
+  _omLinkedSuppliers.forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.name;
+    sel.appendChild(opt);
+  });
+  await loadOrderMappings();
+}
+
+async function loadOrderMappings() {
+  try {
+    const r = await fetch('/api/order-mappings');
+    _orderMappings = await r.json();
+  } catch(e) { _orderMappings = []; }
+  renderOrderMappingList();
+}
+
+function renderOrderMappingList() {
+  const el = document.getElementById('orderMappingList');
+  if (!el) return;
+  if (!_orderMappings.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text-dim);font-size:14px;padding:32px 0">등록된 발주 매칭이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = _orderMappings.map(m => {
+    const color = _supplierColor(m.supplier_name || '');
+    const supplierBadge = m.supplier_name
+      ? `<span style="background:${color}18;color:${color};border:1px solid ${color}38;font-size:12px;font-weight:600;padding:2px 9px;border-radius:10px;white-space:nowrap">${escHtml(m.supplier_name)}</span>`
+      : `<span style="background:var(--surface3);color:var(--text-dim);font-size:12px;padding:2px 9px;border-radius:10px">미지정</span>`;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+          ${escHtml(m.registered_name)}${m.option_name ? ` · <span style="font-weight:400;color:var(--text-sub)">${escHtml(m.option_name)}</span>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);font-family:var(--mono);margin-bottom:6px">옵션ID: ${escHtml(m.option_id)}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          ${supplierBadge}
+          ${m.supplier_product_name ? `<span style="font-size:13px;color:var(--text-sub)">→ ${escHtml(m.supplier_product_name)}${m.supplier_option_name ? ' · ' + escHtml(m.supplier_option_name) : ''}</span>` : ''}
+        </div>
+      </div>
+      <button onclick="editOrderMapping(${m.id})" class="btn btn-sm" style="font-size:13px;padding:7px 14px;border:1px solid var(--border);background:var(--surface);color:var(--text-sub);white-space:nowrap">수정</button>
+      <button onclick="deleteOrderMapping(${m.id})" class="btn btn-sm" style="font-size:13px;padding:7px 14px;background:var(--red-light);color:var(--red);border:1px solid rgba(192,57,43,0.2);white-space:nowrap">삭제</button>
+    </div>`;
+  }).join('');
+}
+
+function onOmSupplierChange() {
+  const val = document.getElementById('omSupplierId').value;
+  document.getElementById('omProductSearchWrap').style.display = val ? '' : 'none';
+  document.getElementById('omProductResults').style.display = 'none';
+  document.getElementById('omSelectedProduct').style.display = 'none';
+  document.getElementById('omSupplierProductName').value = '';
+}
+
+async function searchOmProduct() {
+  const supplierId = document.getElementById('omSupplierId').value;
+  const q = document.getElementById('omProductQ').value.trim();
+  const resEl = document.getElementById('omProductResults');
+  if (!supplierId || !q) return;
+  resEl.style.display = '';
+  resEl.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:var(--text-dim)">검색 중...</div>';
+  try {
+    const r = await fetch(`/api/order-mappings/search-supplier-product?supplier_id=${encodeURIComponent(supplierId)}&q=${encodeURIComponent(q)}`);
+    const list = await r.json();
+    if (!list.length) {
+      resEl.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:var(--text-dim)">검색 결과 없음</div>';
+      return;
+    }
+    resEl.innerHTML = list.map(p => `
+      <div onclick="selectOmProduct(${JSON.stringify(p).replace(/"/g,'&quot;')})"
+           style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
+           onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+        <span style="font-size:14px;color:var(--text)">${escHtml(p.name)}</span>
+        <span style="font-size:13px;color:var(--text-sub);white-space:nowrap;margin-left:8px">${p.price ? Number(p.price).toLocaleString()+'원' : '-'}${p.unit ? ' · '+escHtml(p.unit) : ''}</span>
+      </div>`).join('');
+  } catch(e) {
+    resEl.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:var(--red)">검색 실패</div>';
+  }
+}
+
+function selectOmProduct(p) {
+  document.getElementById('omSupplierProductName').value = p.name;
+  document.getElementById('omSelectedProductName').textContent = p.name;
+  document.getElementById('omSelectedProductPrice').textContent =
+    (p.price ? Number(p.price).toLocaleString()+'원' : '') + (p.unit ? ' · ' + p.unit : '');
+  document.getElementById('omSelectedProduct').style.display = '';
+  document.getElementById('omProductResults').style.display = 'none';
+}
+
+async function saveOrderMapping() {
+  const option_id = document.getElementById('omOptionId').value.trim();
+  const registered_name = document.getElementById('omRegisteredName').value.trim();
+  const option_name = document.getElementById('omOptionName').value.trim();
+  const supplier_id = document.getElementById('omSupplierId').value || null;
+  const supplier_product_name = document.getElementById('omSupplierProductName').value.trim();
+  const supplier_option_name = document.getElementById('omSupplierOptionName').value.trim();
+  if (!option_id || !registered_name) return alert('옵션 ID와 등록상품명은 필수입니다.');
+  const btn = document.getElementById('omSaveBtn');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    const r = await fetch('/api/order-mappings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ option_id, registered_name, option_name, supplier_id, supplier_product_name, supplier_option_name })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+    cancelOmEdit();
+    await loadOrderMappings();
+  } catch(e) { alert('저장 실패: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '저장'; }
+}
+
+function editOrderMapping(id) {
+  const m = _orderMappings.find(x => x.id === id);
+  if (!m) return;
+  _editingOmId = id;
+  document.getElementById('omOptionId').value = m.option_id || '';
+  document.getElementById('omRegisteredName').value = m.registered_name || '';
+  document.getElementById('omOptionName').value = m.option_name || '';
+  document.getElementById('omSupplierId').value = m.supplier_id || '';
+  document.getElementById('omSupplierProductName').value = m.supplier_product_name || '';
+  document.getElementById('omSupplierOptionName').value = m.supplier_option_name || '';
+  if (m.supplier_product_name) {
+    document.getElementById('omSelectedProductName').textContent = m.supplier_product_name;
+    document.getElementById('omSelectedProductPrice').textContent = '';
+    document.getElementById('omSelectedProduct').style.display = '';
+  }
+  document.getElementById('omProductSearchWrap').style.display = m.supplier_id ? '' : 'none';
+  document.getElementById('omCancelBtn').style.display = '';
+  document.getElementById('omSaveBtn').textContent = '수정 저장';
+}
+
+function cancelOmEdit() {
+  _editingOmId = null;
+  ['omOptionId','omRegisteredName','omOptionName','omSupplierOptionName'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('omSupplierId').value = '';
+  document.getElementById('omSupplierProductName').value = '';
+  document.getElementById('omProductSearchWrap').style.display = 'none';
+  document.getElementById('omProductResults').style.display = 'none';
+  document.getElementById('omSelectedProduct').style.display = 'none';
+  document.getElementById('omCancelBtn').style.display = 'none';
+  document.getElementById('omSaveBtn').textContent = '저장';
+}
+
+async function deleteOrderMapping(id) {
+  if (!confirm('이 발주 매칭을 삭제하시겠습니까?')) return;
+  try {
+    await fetch(`/api/order-mappings/${id}`, { method: 'DELETE' });
+    await loadOrderMappings();
+  } catch(e) { alert('삭제 실패: ' + e.message); }
+}
+
 // 하위 탭 팔레트 (도매처 id → 색)
 const _supplierColors = ['#0071e3','#34c759','#ff9f0a','#ff453a','#bf5af2','#32ade6','#30d158'];
 const _supplierColorMap = {};
@@ -10462,11 +10698,14 @@ function setSupplierSubTab(name) {
   document.getElementById('spanel-compare').style.display = name === 'compare' ? '' : 'none';
   document.getElementById('spanel-browse').style.display  = name === 'browse'  ? '' : 'none';
   document.getElementById('spanel-manage').style.display  = name === 'manage'  ? '' : 'none';
+  document.getElementById('spanel-order').style.display   = name === 'order'   ? '' : 'none';
   document.getElementById('stab-compare').classList.toggle('active', name === 'compare');
   document.getElementById('stab-browse').classList.toggle('active', name === 'browse');
   document.getElementById('stab-manage').classList.toggle('active', name === 'manage');
+  document.getElementById('stab-order').classList.toggle('active', name === 'order');
   if (name === 'browse') initSupplierTab();
   if (name === 'manage') loadWholesaleSuppliers();
+  if (name === 'order')  initOrderMappingTab();
 }
 
 // ── 가격 비교 ──────────────────────────────────────────────────────────────────
