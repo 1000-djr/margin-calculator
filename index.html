@@ -1869,50 +1869,48 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
     <!-- ── 도매처 관리 패널 ── -->
     <div id="spanel-manage" style="display:none">
-      <div style="display:grid;grid-template-columns:400px 1fr;gap:24px;align-items:start">
+      <div style="display:grid;grid-template-columns:440px 1fr;gap:28px;align-items:start">
         <!-- 왼쪽: 추가/수정 폼 -->
-        <div style="display:flex;flex-direction:column;gap:10px;padding:18px 20px;background:var(--surface2);border:1px solid var(--border);border-radius:14px">
-          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px">도매처 추가 / 수정</div>
-          <div style="display:flex;gap:8px">
-            <div style="flex:1">
-              <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">도매처명</div>
-              <input id="wsName" type="text" placeholder="예: 마켓봄" maxlength="100"
-                style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans)">
-            </div>
+        <div style="display:flex;flex-direction:column;gap:14px;padding:22px 24px;background:var(--surface2);border:1px solid var(--border);border-radius:14px">
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:2px">도매처 추가 / 수정</div>
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">도매처명</div>
+            <input id="wsName" type="text" placeholder="예: 마켓봄" maxlength="100"
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
           </div>
           <div>
-            <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">URL</div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">URL</div>
             <input id="wsUrl" type="url" placeholder="https://..." maxlength="500"
-              style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans)">
+              style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
           </div>
           <!-- API 연동 섹션 -->
-          <div style="border-top:1px solid var(--border);padding-top:10px">
-            <button type="button" onclick="toggleWsApiSection()" style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:600;color:var(--accent);padding:0;font-family:var(--sans);display:flex;align-items:center;gap:4px">
+          <div style="border-top:1px solid var(--border);padding-top:12px">
+            <button type="button" onclick="toggleWsApiSection()" style="background:none;border:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--accent);padding:0;font-family:var(--sans);display:flex;align-items:center;gap:4px">
               <span id="wsApiToggleIcon">▶</span> 🔗 API 연동 (선택)
             </button>
-            <div id="wsApiSection" style="display:none;margin-top:10px;flex-direction:column;gap:10px">
+            <div id="wsApiSection" style="display:none;margin-top:12px;flex-direction:column;gap:12px">
               <div>
-                <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">API 플랫폼</div>
-                <select id="wsApiType" onchange="onWsApiTypeChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--sans)">
+                <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">API 플랫폼</div>
+                <select id="wsApiType" onchange="onWsApiTypeChange()" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
                   <option value="">연동 안 함</option>
                   <option value="adminplus">어드민플러스</option>
                   <option value="" disabled>발주오라 (준비중)</option>
                 </select>
               </div>
-              <div id="wsApiAdminplusFields" style="display:none;flex-direction:column;gap:8px">
-                <div style="display:flex;gap:8px">
+              <div id="wsApiAdminplusFields" style="display:none;flex-direction:column;gap:10px">
+                <div style="display:flex;gap:10px">
                   <div style="flex:1">
-                    <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">Client ID</div>
+                    <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">Client ID</div>
                     <input id="wsApiClientId" type="text" placeholder="client_id"
-                      style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--mono)">
+                      style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--mono)">
                   </div>
                   <div style="flex:1">
-                    <div style="font-size:11px;color:var(--text-dim);font-weight:600;margin-bottom:4px">Client Secret <span style="font-weight:400;color:var(--text-dim)">(수정 시 비우면 유지)</span></div>
+                    <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">Client Secret <span style="font-weight:400;color:var(--text-dim)">(수정 시 비우면 유지)</span></div>
                     <input id="wsApiClientSecret" type="password" placeholder="client_secret"
-                      style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:13px;font-family:var(--mono)">
+                      style="width:100%;box-sizing:border-box;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--mono)">
                   </div>
                 </div>
-                <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 12px;font-size:11px;color:#1e40af;line-height:1.6">
+                <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;font-size:12px;color:#1e40af;line-height:1.7">
                   API 연동 시 상품·판매가를 자동으로 불러올 수 있습니다. 어드민플러스는 client_id/secret이 필요하며,
                   도매처 API 설정에서 우리 서버 IP(<b>162.220.234.240, 162.220.234.241, 152.55.180.240</b>)를 화이트리스트에 등록해야 합니다.
                 </div>
@@ -1921,14 +1919,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           </div>
           <!-- 버튼 -->
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
-            <button id="wsCancelBtn" onclick="cancelWsEdit()" class="btn btn-ghost btn-sm" style="display:none;white-space:nowrap">취소</button>
-            <button id="wsSaveBtn" onclick="saveWholesaleSupplier()" class="btn btn-primary btn-sm" style="white-space:nowrap">저장</button>
+            <button id="wsCancelBtn" onclick="cancelWsEdit()" class="btn btn-ghost btn-sm" style="display:none;font-size:15px;padding:10px 22px;white-space:nowrap">취소</button>
+            <button id="wsSaveBtn" onclick="saveWholesaleSupplier()" class="btn btn-primary" style="font-size:15px;padding:10px 22px;white-space:nowrap">저장</button>
           </div>
         </div>
         <!-- 오른쪽: 도매처 목록 -->
         <div>
-          <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px">등록된 도매처</div>
-          <div id="wholesaleList" style="display:flex;flex-direction:column;gap:8px"></div>
+          <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px">등록된 도매처</div>
+          <div id="wholesaleList" style="display:flex;flex-direction:column;gap:10px"></div>
         </div>
       </div>
     </div>
@@ -9386,26 +9384,26 @@ function renderWholesaleList() {
   }
   el.innerHTML = wholesaleSuppliers.map(s => {
     const apiBadge = s.api_linked
-      ? `<span style="background:#E8F5E9;color:#2E7D32;font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;border:1px solid #A5D6A7">🔗 연동</span>`
+      ? `<span style="background:#E8F5E9;color:#2E7D32;font-size:12px;font-weight:600;padding:3px 10px;border-radius:10px;border:1px solid #A5D6A7">🔗 연동</span>`
       : '';
     const testBtn = s.api_linked
-      ? `<button id="ws-test-${s.id}" onclick="testWholesaleApi('${s.id}')" class="btn btn-xs" style="background:var(--surface);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">연결 테스트</button>`
+      ? `<button id="ws-test-${s.id}" onclick="testWholesaleApi('${s.id}')" class="btn btn-sm" style="font-size:13px;padding:7px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">연결 테스트</button>`
       : '';
     return `
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border);border-radius:10px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px;display:flex;align-items:center;gap:6px">
+        <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px;display:flex;align-items:center;gap:8px">
           ${escHtml(s.name)} ${apiBadge}
         </div>
         <a href="${escHtml(s.url)}" target="_blank" rel="noopener"
-           style="font-size:11px;color:var(--accent);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%"
+           style="font-size:13px;color:var(--accent);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%"
            title="${escHtml(s.url)}">${escHtml((() => { try { return new URL(s.url).hostname; } catch(e) { return s.url; } })())}</a>
-        ${s.api_client_id_masked ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${escHtml(s.api_type)} · ID: ${escHtml(s.api_client_id_masked)}</div>` : ''}
-        <div id="ws-test-result-${s.id}" style="font-size:11px;margin-top:3px"></div>
+        ${s.api_client_id_masked ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${escHtml(s.api_type)} · ID: ${escHtml(s.api_client_id_masked)}</div>` : ''}
+        <div id="ws-test-result-${s.id}" style="font-size:12px;margin-top:4px"></div>
       </div>
       ${testBtn}
-      <button onclick="editWholesaleSupplier('${String(s.id)}')" class="btn btn-ghost btn-xs">수정</button>
-      <button onclick="deleteWholesaleSupplier('${String(s.id)}')" class="btn btn-xs" style="background:var(--red-light);color:var(--red);border:1px solid rgba(192,57,43,0.2)">삭제</button>
+      <button onclick="editWholesaleSupplier('${String(s.id)}')" class="btn btn-sm" style="font-size:13px;padding:7px 14px;border:1px solid var(--border);background:var(--surface);color:var(--text-sub)">수정</button>
+      <button onclick="deleteWholesaleSupplier('${String(s.id)}')" class="btn btn-sm" style="font-size:13px;padding:7px 14px;background:var(--red-light);color:var(--red);border:1px solid rgba(192,57,43,0.2)">삭제</button>
     </div>`;
   }).join('');
 }
