@@ -2050,11 +2050,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
 
       <!-- 기간 조회 -->
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-        <input id="dispatchFrom" type="date" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <div class="quick-date-pills">
+          <button id="dispatchQpToday" class="quick-pill" onclick="setDispatchQuickDate('today')">오늘</button>
+          <button id="dispatchQpWeek"  class="quick-pill active" onclick="setDispatchQuickDate('week')">최근 7일</button>
+          <button id="dispatchQpMonth" class="quick-pill" onclick="setDispatchQuickDate('month')">이번달</button>
+        </div>
+        <input id="dispatchFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
         <span style="color:var(--text-dim)">~</span>
-        <input id="dispatchTo" type="date" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
-        <button onclick="loadDispatch()" class="btn btn-primary" style="font-size:14px;padding:9px 20px">조회</button>
+        <input id="dispatchTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <button onclick="loadDispatch()" class="btn btn-primary" style="font-size:13px;padding:8px 18px">조회</button>
         <span id="dispatchSummary" style="font-size:13px;color:var(--text-dim)"></span>
         <div style="margin-left:auto">
           <button onclick="downloadAllDispatch()" class="btn btn-sm" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">📦 전체 발주서 다운로드</button>
@@ -10756,21 +10761,40 @@ let _dispatchSenderOpen = false;
 let _dispatchData = null;   // 마지막 loadDispatch() 응답 저장
 let _orderForms = {};       // GET /api/order-forms 결과
 
+function setDispatchQuickDate(type) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+  const pad = n => String(n).padStart(2, '0');
+  const fmt = (yr, mo, dy) => `${yr}-${pad(mo+1)}-${pad(dy)}`;
+  let from, to;
+  if (type === 'today') {
+    from = to = fmt(y, m, d);
+  } else if (type === 'week') {
+    const f = new Date(y, m, d - 6);
+    from = fmt(f.getFullYear(), f.getMonth(), f.getDate());
+    to   = fmt(y, m, d);
+  } else { // month
+    from = fmt(y, m, 1);
+    to   = fmt(y, m, d);
+  }
+  document.getElementById('dispatchFrom').value = from;
+  document.getElementById('dispatchTo').value   = to;
+  ['today','week','month'].forEach(t => {
+    document.getElementById('dispatchQp' + t.charAt(0).toUpperCase() + t.slice(1))
+      ?.classList.toggle('active', t === type);
+  });
+  loadDispatch();
+}
+
 async function initDispatchTab() {
-  // 기본 날짜: 최근 7일
-  const today = new Date();
-  const from  = new Date(today); from.setDate(today.getDate() - 6);
-  const fmt = d => d.toISOString().slice(0, 10);
-  const fromEl = document.getElementById('dispatchFrom');
-  const toEl   = document.getElementById('dispatchTo');
-  if (!fromEl.value) fromEl.value = fmt(from);
-  if (!toEl.value)   toEl.value   = fmt(today);
   await loadDispatchSender();
   // 발주 양식 로드
   try {
     const r = await fetch('/api/order-forms');
     if (r.ok) { const j = await r.json(); _orderForms = j.forms || {}; }
   } catch(e) {}
+  // 기본 '최근 7일' 프리셋으로 자동 조회
+  setDispatchQuickDate('week');
 }
 
 async function loadDispatchSender() {
