@@ -5,7 +5,7 @@
 
 const cron = require('node-cron');
 const { pool } = require('./db');
-const { syncSupplierProductsForUser, fetchSupplierBalancesForUser } = require('./api');
+const { syncSupplierProductsForUser, fetchSupplierBalancesForUser, maskOldOrders } = require('./api');
 
 async function runAllUsersSync() {
   const { rows } = await pool.query(
@@ -39,6 +39,13 @@ async function runAllUsersBalance() {
   console.log('[balance] 잔액 자동 조회 완료');
 }
 
+async function runMaskOldOrders() {
+  try {
+    const n = await maskOldOrders();
+    console.log(`[mask] ${new Date().toISOString()} 14일 경과 주문 마스킹 ${n}건`);
+  } catch(e) { console.error('[mask] 실패:', e.message); }
+}
+
 function start() {
   // 매일 04:00, 16:00 KST — 상품 동기화
   cron.schedule('0 4,16 * * *', runAllUsersSync, { timezone: 'Asia/Seoul' });
@@ -46,6 +53,9 @@ function start() {
   // 매일 09:00, 15:00 KST — 잔액 조회
   cron.schedule('0 9,15 * * *', runAllUsersBalance, { timezone: 'Asia/Seoul' });
   console.log('[scheduler] 도매처 잔액 자동 조회 등록: 매일 09:00, 15:00 KST');
+  // 매일 03:30 KST — 14일 경과 주문 수령인 마스킹
+  cron.schedule('30 3 * * *', runMaskOldOrders, { timezone: 'Asia/Seoul' });
+  console.log('[scheduler] 14일 경과 주문 마스킹 등록: 매일 03:30 KST');
 }
 
-module.exports = { start, runAllUsersSync, runAllUsersBalance };
+module.exports = { start, runAllUsersSync, runAllUsersBalance, runMaskOldOrders };

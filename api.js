@@ -4535,6 +4535,43 @@ router.post('/order-sender', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 14일 경과 주문 수령인 자동 마스킹 ───────────────────────────────────────
+async function maskOldOrders() {
+  const cutoffStr = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const { rows } = await pool.query(
+    `SELECT id, recipient_name_masked, recipient_phone_masked, recipient_address_masked
+     FROM orders
+     WHERE order_date IS NOT NULL AND order_date <> ''
+       AND SUBSTRING(order_date, 1, 10) <= $1
+       AND recipient_name_masked IS NOT NULL AND recipient_name_masked <> ''
+       AND POSITION('*' IN recipient_name_masked) = 0`,
+    [cutoffStr]
+  );
+  let count = 0;
+  for (const r of rows) {
+    await pool.query(
+      `UPDATE orders SET
+         recipient_name_masked    = $1,
+         recipient_phone_masked   = $2,
+         recipient_address_masked = $3,
+         recipient_zipcode        = '***'
+       WHERE id = $4`,
+      [
+        maskName(r.recipient_name_masked),
+        maskPhone(r.recipient_phone_masked),
+        maskAddr(r.recipient_address_masked),
+        r.id,
+      ]
+    );
+    count++;
+  }
+  return count;
+}
+
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
 module.exports.fetchSupplierBalancesForUser = fetchSupplierBalancesForUser;
+module.exports.maskName      = maskName;
+module.exports.maskPhone     = maskPhone;
+module.exports.maskAddr      = maskAddr;
+module.exports.maskOldOrders = maskOldOrders;
