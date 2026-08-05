@@ -89,6 +89,39 @@ async function adminplusGetBalance(token) {
   return { http: r.status, success: j.success, message: j.message, data: j.data };
 }
 
+// ─── 도매처 잔액 조회+저장 (스케줄러/수동 공용) ────────────────────────────────
+async function fetchSupplierBalancesForUser(userId) {
+  const { rows: suppliers } = await pool.query(
+    `SELECT * FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
+    [userId]
+  );
+  const out = [];
+  for (const s of suppliers) {
+    try {
+      const cfg = getSupplierApiConfig(s);
+      const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+      const bal = await adminplusGetBalance(token);
+      if (bal.success) {
+        const dep = bal.data?.deposit_balance ?? 0;
+        const pt = bal.data?.point_balance ?? 0;
+        await pool.query(
+          `INSERT INTO supplier_balances (user_id,supplier_id,deposit_balance,point_balance,fetched_at)
+           VALUES ($1,$2,$3,$4,NOW())
+           ON CONFLICT (user_id,supplier_id) DO UPDATE SET
+             deposit_balance=EXCLUDED.deposit_balance, point_balance=EXCLUDED.point_balance, fetched_at=NOW()`,
+          [userId, s.id, dep, pt]
+        );
+        out.push({ supplier: s.name, ok: true, deposit: dep, point: pt });
+      } else {
+        out.push({ supplier: s.name, ok: false, error: bal.message });
+      }
+    } catch(e) {
+      out.push({ supplier: s.name, ok: false, error: String(e.message) });
+    }
+  }
+  return out;
+}
+
 // ─── 도매처 API 설정 추출 헬퍼 ────────────────────────────────────────────────
 function getSupplierApiConfig(supplier) {
   if (!supplier.api_linked || !supplier.api_type) return null;
@@ -4126,6 +4159,39 @@ router.get('/admin/adminplus-balance-test', requireRealAdmin, async (req, res) =
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 도매처 잔액 조회 (저장된 값) ─────────────────────────────────────────────
+router.get('/supplier/balances', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT b.*, ws.name AS supplier_name FROM supplier_balances b
+       JOIN wholesale_suppliers ws ON ws.id=b.supplier_id
+       WHERE b.user_id=$1 ORDER BY b.supplier_id`,
+      [req.user.id]
+    );
+    const { rows: last } = await pool.query(
+      'SELECT MAX(fetched_at) AS last FROM supplier_balances WHERE user_id=$1',
+      [req.user.id]
+    );
+    res.json({
+      balances: rows.map(r => ({
+        supplier_id: r.supplier_id,
+        supplier_name: r.supplier_name,
+        deposit_balance: Number(r.deposit_balance),
+        point_balance: Number(r.point_balance),
+      })),
+      last_fetched: last[0]?.last || null,
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 도매처 잔액 수동 새로고침 ────────────────────────────────────────────────
+router.post('/supplier/balances/refresh', requireAuth, async (req, res) => {
+  try {
+    const r = await fetchSupplierBalancesForUser(req.user.id);
+    res.json({ ok: true, results: r, fetched_at: new Date().toISOString() });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 서버측 단위 추출 ─────────────────────────────────────────────────────────
 function extractUnit(name) {
   const m = name && name.match(/(\d+(?:\.\d+)?\s*(?:kg|g|개|봉|박스|팩|묶음|세트))\s*$/i);
@@ -4294,3 +4360,4 @@ router.get('/supplier/:supplierId/products', requireAuth, async (req, res) => {
 
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
+module.exports.fetchSupplierBalancesForUser = fetchSupplierBalancesForUser;

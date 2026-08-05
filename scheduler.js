@@ -5,7 +5,7 @@
 
 const cron = require('node-cron');
 const { pool } = require('./db');
-const { syncSupplierProductsForUser } = require('./api');
+const { syncSupplierProductsForUser, fetchSupplierBalancesForUser } = require('./api');
 
 async function runAllUsersSync() {
   const { rows } = await pool.query(
@@ -23,10 +23,29 @@ async function runAllUsersSync() {
   console.log('[sync] 자동 동기화 완료');
 }
 
-function start() {
-  // 매일 04:00, 16:00 KST
-  cron.schedule('0 4,16 * * *', runAllUsersSync, { timezone: 'Asia/Seoul' });
-  console.log('[scheduler] 도매처 자동 동기화 등록: 매일 04:00, 16:00 KST');
+async function runAllUsersBalance() {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT user_id FROM wholesale_suppliers WHERE api_linked=true AND api_type='adminplus'`
+  );
+  console.log(`[balance] ${new Date().toISOString()} 잔액 자동 조회 — 대상 ${rows.length}명`);
+  for (const { user_id } of rows) {
+    try {
+      const r = await fetchSupplierBalancesForUser(user_id);
+      console.log(`[balance] user ${user_id}: ${r.map(x => x.ok ? x.supplier + ' ' + x.deposit : x.supplier + ' 실패').join(', ')}`);
+    } catch(e) {
+      console.error(`[balance] user ${user_id} 실패:`, e.message);
+    }
+  }
+  console.log('[balance] 잔액 자동 조회 완료');
 }
 
-module.exports = { start, runAllUsersSync };
+function start() {
+  // 매일 04:00, 16:00 KST — 상품 동기화
+  cron.schedule('0 4,16 * * *', runAllUsersSync, { timezone: 'Asia/Seoul' });
+  console.log('[scheduler] 도매처 자동 동기화 등록: 매일 04:00, 16:00 KST');
+  // 매일 09:00, 15:00 KST — 잔액 조회
+  cron.schedule('0 9,15 * * *', runAllUsersBalance, { timezone: 'Asia/Seoul' });
+  console.log('[scheduler] 도매처 잔액 자동 조회 등록: 매일 09:00, 15:00 KST');
+}
+
+module.exports = { start, runAllUsersSync, runAllUsersBalance };

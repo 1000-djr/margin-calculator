@@ -551,6 +551,21 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sph_user ON supplier_price_history(user_id, changed_at DESC)`);
   } catch(e) { console.warn('[db] idx_sph_user 생성 실패:', e.message); }
 
+  // 도매처 예치금/적립금 잔액 캐시
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS supplier_balances (
+        id               SERIAL PRIMARY KEY,
+        user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        supplier_id      INTEGER REFERENCES wholesale_suppliers(id) ON DELETE CASCADE,
+        deposit_balance  NUMERIC(14,2),
+        point_balance    NUMERIC(14,2),
+        fetched_at       TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(user_id, supplier_id)
+      );
+    `);
+  } catch(e) { console.warn('[db] supplier_balances 생성 실패:', e.message); }
+
   // 트래픽 슬롯 관리 테이블
   await pool.query(`
     CREATE TABLE IF NOT EXISTS traffic_slots (

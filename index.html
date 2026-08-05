@@ -1850,6 +1850,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 
   <!-- ══ 도매처(더그린) 탭 ══════════════════════════════════════════════ -->
   <div class="panel" id="tab-supplier">
+    <!-- 도매처 잔액 영역 -->
+    <div id="supplierBalanceSection" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:13px;font-weight:600;color:var(--text-sub)">예치금 · 적립금</span>
+        <span id="supplierBalanceLastFetched" style="font-size:11px;color:var(--text-dim)"></span>
+        <button id="supplierBalanceRefreshBtn" onclick="refreshSupplierBalances()" style="padding:3px 10px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;background:var(--surface2);color:var(--text-sub);cursor:pointer;font-family:var(--sans)">🔄 새로고침</button>
+      </div>
+      <div id="supplierBalanceList" style="display:flex;flex-wrap:wrap;gap:10px">
+        <span style="font-size:12px;color:var(--text-dim)">불러오는 중...</span>
+      </div>
+    </div>
+
     <!-- 하위 탭 토글 -->
     <div style="display:flex;gap:4px;margin-bottom:18px;background:var(--surface3);border-radius:10px;padding:3px;width:fit-content">
       <button id="stab-compare" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('compare')">🔍 가격 비교</button>
@@ -2686,7 +2698,7 @@ function _activateTabUI(name) {
   if (name === 'traffic')  { loadTrafficSlots(); }
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
-  if (name === 'supplier') { setSupplierSubTab('compare'); }
+  if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -10376,6 +10388,63 @@ function renderAdPlacements() {
 // ── 도매처 탭 ─────────────────────────────────────────────────────────────────
 let _supplierAll = [];
 let _currentSupplierName = '';
+
+// ── 도매처 잔액 ──────────────────────────────────────────────────────────────
+async function loadSupplierBalances() {
+  try {
+    const r = await fetch('/api/supplier/balances');
+    const j = await r.json();
+    renderSupplierBalances(j.balances || [], j.last_fetched);
+  } catch(e) {
+    document.getElementById('supplierBalanceList').innerHTML =
+      '<span style="font-size:12px;color:var(--text-dim)">잔액 조회 실패</span>';
+  }
+}
+
+async function refreshSupplierBalances() {
+  const btn = document.getElementById('supplierBalanceRefreshBtn');
+  btn.disabled = true; btn.textContent = '조회 중...';
+  try {
+    await fetch('/api/supplier/balances/refresh', { method: 'POST' });
+    await loadSupplierBalances();
+  } catch(e) {
+    alert('잔액 새로고침 실패: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🔄 새로고침';
+  }
+}
+
+function renderSupplierBalances(balances, lastFetched) {
+  const listEl = document.getElementById('supplierBalanceList');
+  const lastEl = document.getElementById('supplierBalanceLastFetched');
+  if (lastFetched) {
+    const d = new Date(lastFetched);
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mi = String(d.getMinutes()).padStart(2,'0');
+    lastEl.textContent = `마지막 조회: ${mm}/${dd} ${hh}:${mi}`;
+  } else {
+    lastEl.textContent = '';
+  }
+  if (!balances.length) {
+    listEl.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">새로고침을 눌러 잔액을 조회하세요</span>';
+    return;
+  }
+  listEl.innerHTML = balances.map(b => {
+    const color = _supplierColor(b.supplier_name);
+    const dep = Number(b.deposit_balance);
+    const pt = Number(b.point_balance);
+    const depColor = dep < 500000 ? 'var(--red)' : 'var(--text)';
+    const depWarn = dep < 500000 ? ' ⚠️' : '';
+    return `<div style="border:1px solid ${color}38;border-radius:10px;padding:10px 16px;background:${color}08;min-width:160px">
+      <div style="font-size:11px;font-weight:700;color:${color};margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(b.supplier_name)}</div>
+      <div style="font-size:14px;font-weight:700;color:${depColor};white-space:nowrap">${dep.toLocaleString()}원${depWarn}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:2px">예치금</div>
+      ${pt > 0 ? `<div style="font-size:12px;font-weight:600;color:var(--text-sub);margin-top:4px;white-space:nowrap">${pt.toLocaleString()}원 <span style="font-size:10px;color:var(--text-dim)">적립금</span></div>` : ''}
+    </div>`;
+  }).join('');
+}
 
 // 하위 탭 팔레트 (도매처 id → 색)
 const _supplierColors = ['#0071e3','#34c759','#ff9f0a','#ff453a','#bf5af2','#32ade6','#30d158'];
