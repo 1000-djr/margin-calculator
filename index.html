@@ -2060,14 +2060,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <!-- 기간 조회 -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
         <div class="quick-date-pills">
-          <button id="dispatchQpToday" class="quick-pill active" onclick="setDispatchQuickDate('today')">오늘</button>
+          <button id="dispatchQpOrderCycle" class="quick-pill active" onclick="setDispatchQuickDate('order_cycle')">발주분</button>
+          <button id="dispatchQpToday" class="quick-pill" onclick="setDispatchQuickDate('today')">오늘</button>
           <button id="dispatchQpWeek"  class="quick-pill" onclick="setDispatchQuickDate('week')">최근 7일</button>
           <button id="dispatchQpMonth" class="quick-pill" onclick="setDispatchQuickDate('month')">이번달</button>
         </div>
+        <span id="dispatchCycleLabel" style="font-size:12px;color:var(--text-dim)"></span>
         <input id="dispatchFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
         <span style="color:var(--text-dim)">~</span>
         <input id="dispatchTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <button onclick="loadDispatch()" class="btn btn-primary" style="font-size:13px;padding:8px 18px">조회</button>
+        <button onclick="_dispatchFromDt='';_dispatchToDt='';loadDispatch()" class="btn btn-primary" style="font-size:13px;padding:8px 18px">조회</button>
         <span id="dispatchSummary" style="font-size:13px;color:var(--text-dim)"></span>
         <div style="margin-left:auto">
           <button onclick="downloadAllDispatch()" class="btn btn-sm" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">📦 전체 발주서 다운로드</button>
@@ -10802,30 +10804,67 @@ async function deleteOrderMapping(id) {
 
 // ── 발주 탭 ──────────────────────────────────────────────────────────────────
 let _dispatchSenderOpen = false;
-let _dispatchData = null;   // 마지막 loadDispatch() 응답 저장
-let _orderForms = {};       // GET /api/order-forms 결과
+let _dispatchData   = null;  // 마지막 loadDispatch() 응답 저장
+let _orderForms     = {};    // GET /api/order-forms 결과
+let _dispatchFromDt = '';    // 실제 조회용 from (날짜 or datetime)
+let _dispatchToDt   = '';    // 실제 조회용 to   (날짜 or datetime)
 
 function setDispatchQuickDate(type) {
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   const pad = n => String(n).padStart(2, '0');
-  const fmt = (yr, mo, dy) => `${yr}-${pad(mo+1)}-${pad(dy)}`;
-  let from, to;
-  if (type === 'today') {
-    from = to = fmt(y, m, d);
-  } else if (type === 'week') {
-    const f = new Date(y, m, d - 6);
-    from = fmt(f.getFullYear(), f.getMonth(), f.getDate());
-    to   = fmt(y, m, d);
-  } else { // month
-    from = fmt(y, m, 1);
-    to   = fmt(y, m, d);
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate(), h = now.getHours();
+  const fmtDate = (yr, m, dy) => `${yr}-${pad(m+1)}-${pad(dy)}`;
+  const fmtDt   = (yr, m, dy, hh, mm, ss) => `${fmtDate(yr,m,dy)} ${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+
+  let fromDt, toDt, fromDisp, toDisp, cycleLabel = '';
+
+  if (type === 'order_cycle') {
+    // 현재 속한 발주 사이클: 10시 기준
+    // 현재 10시 이전 → 어제 10:00:00 ~ 오늘 09:59:59
+    // 현재 10시 이후 → 오늘 10:00:00 ~ 내일 09:59:59
+    if (h < 10) {
+      const yst = new Date(y, mo, d - 1);
+      fromDt = fmtDt(yst.getFullYear(), yst.getMonth(), yst.getDate(), 10, 0, 0);
+      toDt   = fmtDt(y, mo, d, 9, 59, 59);
+      fromDisp = fmtDate(yst.getFullYear(), yst.getMonth(), yst.getDate());
+    } else {
+      const tmr = new Date(y, mo, d + 1);
+      fromDt = fmtDt(y, mo, d, 10, 0, 0);
+      toDt   = fmtDt(tmr.getFullYear(), tmr.getMonth(), tmr.getDate(), 9, 59, 59);
+      fromDisp = fmtDate(y, mo, d);
+    }
+    toDisp = fromDisp === fmtDate(y, mo, d)
+      ? fmtDate(new Date(y, mo, d + 1).getFullYear(), new Date(y, mo, d + 1).getMonth(), new Date(y, mo, d + 1).getDate())
+      : fmtDate(y, mo, d);
+    cycleLabel = `${fromDt.slice(5,10).replace('-','/')} 10:00 ~ ${toDt.slice(5,10).replace('-','/')} 09:59`;
+    document.getElementById('dispatchFrom').value = fromDt.slice(0, 10);
+    document.getElementById('dispatchTo').value   = toDt.slice(0, 10);
+  } else {
+    let from, to;
+    if (type === 'today') {
+      from = to = fmtDate(y, mo, d);
+    } else if (type === 'week') {
+      const f = new Date(y, mo, d - 6);
+      from = fmtDate(f.getFullYear(), f.getMonth(), f.getDate());
+      to   = fmtDate(y, mo, d);
+    } else { // month
+      from = fmtDate(y, mo, 1);
+      to   = fmtDate(y, mo, d);
+    }
+    fromDt = from; toDt = to;
+    document.getElementById('dispatchFrom').value = from;
+    document.getElementById('dispatchTo').value   = to;
   }
-  document.getElementById('dispatchFrom').value = from;
-  document.getElementById('dispatchTo').value   = to;
-  ['today','week','month'].forEach(t => {
-    document.getElementById('dispatchQp' + t.charAt(0).toUpperCase() + t.slice(1))
-      ?.classList.toggle('active', t === type);
+
+  _dispatchFromDt = fromDt;
+  _dispatchToDt   = toDt;
+  const labelEl = document.getElementById('dispatchCycleLabel');
+  if (labelEl) labelEl.textContent = cycleLabel;
+
+  ['order_cycle','today','week','month'].forEach(t => {
+    const btnId = 'dispatchQp' + (t === 'order_cycle' ? 'OrderCycle'
+      : t.charAt(0).toUpperCase() + t.slice(1));
+    document.getElementById(btnId)?.classList.toggle('active', t === type);
   });
   loadDispatch();
 }
@@ -10837,8 +10876,8 @@ async function initDispatchTab() {
     const r = await fetch('/api/order-forms');
     if (r.ok) { const j = await r.json(); _orderForms = j.forms || {}; }
   } catch(e) {}
-  // 기본 '최근 7일' 프리셋으로 자동 조회
-  setDispatchQuickDate('today');
+  // 기본 '발주분' 프리셋으로 자동 조회
+  setDispatchQuickDate('order_cycle');
 }
 
 async function loadDispatchSender() {
@@ -10883,8 +10922,9 @@ async function saveDispatchSender() {
 }
 
 async function loadDispatch() {
-  const from = document.getElementById('dispatchFrom').value;
-  const to   = document.getElementById('dispatchTo').value;
+  // 프리셋에서 설정된 datetime 값 우선, 없으면 date input 값 사용
+  const from = _dispatchFromDt || document.getElementById('dispatchFrom').value;
+  const to   = _dispatchToDt   || document.getElementById('dispatchTo').value;
   const resultEl  = document.getElementById('dispatchResult');
   const summaryEl = document.getElementById('dispatchSummary');
   resultEl.innerHTML  = '<div style="text-align:center;color:var(--text-dim);padding:30px;font-size:14px">조회 중...</div>';

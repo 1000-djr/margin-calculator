@@ -1114,8 +1114,9 @@ router.get('/orders/for-dispatch', requireAuth, async (req, res) => {
       LEFT JOIN order_mappings om ON om.user_id=o.user_id AND om.option_id=o.option_id
       LEFT JOIN wholesale_suppliers ws ON ws.id=om.supplier_id
       WHERE o.user_id=$1 AND o.ordered_at IS NULL AND o.is_excluded IS NOT TRUE`;
-    if (from) { params.push(from); q += ` AND SUBSTRING(o.order_date,1,10) >= $${params.length}`; }
-    if (to)   { params.push(to);   q += ` AND SUBSTRING(o.order_date,1,10) <= $${params.length}`; }
+    // from/to가 시간 포함('YYYY-MM-DD HH:MM:SS')이면 앞19자 비교, 날짜만이면 앞10자 비교
+    if (from) { params.push(from); q += ` AND SUBSTRING(o.order_date,1,${from.length > 10 ? 19 : 10}) >= $${params.length}`; }
+    if (to)   { params.push(to);   q += ` AND SUBSTRING(o.order_date,1,${to.length   > 10 ? 19 : 10}) <= $${params.length}`; }
     q += ' ORDER BY om.supplier_id NULLS LAST, o.product_name';
     const { rows } = await pool.query(q, params);
     const groups = {}; const unmatched = [];
