@@ -2060,8 +2060,8 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       <!-- 기간 조회 -->
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
         <div class="quick-date-pills">
-          <button id="dispatchQpToday" class="quick-pill" onclick="setDispatchQuickDate('today')">오늘</button>
-          <button id="dispatchQpWeek"  class="quick-pill active" onclick="setDispatchQuickDate('week')">최근 7일</button>
+          <button id="dispatchQpToday" class="quick-pill active" onclick="setDispatchQuickDate('today')">오늘</button>
+          <button id="dispatchQpWeek"  class="quick-pill" onclick="setDispatchQuickDate('week')">최근 7일</button>
           <button id="dispatchQpMonth" class="quick-pill" onclick="setDispatchQuickDate('month')">이번달</button>
         </div>
         <input id="dispatchFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
@@ -10838,7 +10838,7 @@ async function initDispatchTab() {
     if (r.ok) { const j = await r.json(); _orderForms = j.forms || {}; }
   } catch(e) {}
   // 기본 '최근 7일' 프리셋으로 자동 조회
-  setDispatchQuickDate('week');
+  setDispatchQuickDate('today');
 }
 
 async function loadDispatchSender() {
