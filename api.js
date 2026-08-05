@@ -3752,10 +3752,12 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
         const unitPrice    = qty > 0 ? Math.round(paymentAmt / qty) : paymentAmt;
         const bundleNumber = String(sheet.shipmentBoxId || '');
 
-        const buyerMasked     = maskName(sheet.orderer?.name || '');
-        const recipientMasked = maskName(sheet.receiver?.name || '');
-        const phoneMasked     = maskPhone(sheet.receiver?.safeNumber || sheet.receiver?.phone || '');
-        const addrMasked      = maskAddr(sheet.receiver?.addr1 || '');
+        // 발주용: 원본 저장 (개인정보는 14일 후 자동 마스킹 스케줄러에서 처리)
+        const buyerOrig     = sheet.orderer?.name || '';
+        const recipientOrig = sheet.receiver?.name || '';
+        const phoneOrig     = sheet.receiver?.safeNumber || sheet.receiver?.phone || '';
+        const addrOrig      = sheet.receiver?.addr1 || '';
+        const zipcodeOrig   = sheet.receiver?.postCode || sheet.receiver?.zipCode || sheet.receiver?.remotePostCode || '';
 
         try {
           const upsertRes = await pool.query(
@@ -3764,8 +3766,9 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
               product_name, option_name, display_name, display_product_id, option_id,
               payment_amount, shipping_fee, quantity, unit_price,
               buyer_masked, recipient_name_masked, recipient_phone_masked, recipient_address_masked,
+              recipient_zipcode,
               is_excluded, exclusion_type
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,FALSE,'normal')
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,FALSE,'normal')
             ON CONFLICT (user_id, order_number) DO UPDATE SET
               display_product_id = CASE
                 WHEN orders.display_product_id IS NULL OR orders.display_product_id = ''
@@ -3781,7 +3784,7 @@ router.post('/orders/sync', requireAuth, async (req, res) => {
               req.user.id, orderNumber, bundleNumber, orderDate,
               productName, optionName, displayName, displayProductId, optionId,
               paymentAmt, shippingFee, qty, unitPrice,
-              buyerMasked, recipientMasked, phoneMasked, addrMasked,
+              buyerOrig, recipientOrig, phoneOrig, addrOrig, zipcodeOrig,
             ]
           );
           if (upsertRes.rowCount > 0 && upsertRes.rows[0]?.is_insert) inserted++;
