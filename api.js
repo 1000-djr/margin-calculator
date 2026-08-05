@@ -4200,6 +4200,25 @@ router.get('/admin/adminplus-test', requireRealAdmin, async (req, res) => {
   res.json(result);
 });
 
+// ─── 주문 수령인 저장값 디버그 (임시) ────────────────────────────────────────
+router.get('/admin/order-recipient-debug', requireRealAdmin, async (req, res) => {
+  try {
+    const on = req.query.order_number;
+    let rows;
+    if (on) {
+      ({ rows } = await pool.query(
+        'SELECT order_number, recipient_name_masked, recipient_phone_masked, recipient_address_masked, recipient_zipcode, delivery_msg, created_at FROM orders WHERE order_number=$1',
+        [on]
+      ));
+    } else {
+      ({ rows } = await pool.query(
+        'SELECT order_number, recipient_name_masked, recipient_phone_masked, recipient_address_masked, recipient_zipcode, delivery_msg, created_at FROM orders ORDER BY created_at DESC LIMIT 5'
+      ));
+    }
+    res.json({ rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 어드민플러스 예치금/적립금 잔액 조회 테스트 ────────────────────────────────
 router.get('/admin/adminplus-balance-test', requireRealAdmin, async (req, res) => {
   try {
