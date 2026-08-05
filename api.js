@@ -4464,15 +4464,18 @@ router.delete('/order-mappings/:id', requireAuth, async (req, res) => {
 
 router.get('/order-mappings/search-supplier-product', requireAuth, async (req, res) => {
   const { supplier_id, q } = req.query;
-  if (!supplier_id || !q) return res.json([]);
+  const tokens = (q || '').trim().split(/\s+/).filter(Boolean);
+  if (!supplier_id || !tokens.length) return res.json([]);
   try {
+    const conds  = tokens.map((_, i) => `name ILIKE $${i + 3}`).join(' AND ');
+    const params = [req.user.id, supplier_id, ...tokens.map(t => `%${t}%`)];
     const { rows } = await pool.query(
       `SELECT product_code, name, price, unit
        FROM supplier_products
-       WHERE user_id=$1 AND supplier_id=$2 AND name ILIKE $3
+       WHERE user_id=$1 AND supplier_id=$2 AND ${conds}
        ORDER BY name
        LIMIT 20`,
-      [req.user.id, supplier_id, `%${q}%`]
+      params
     );
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
