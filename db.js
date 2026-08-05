@@ -683,6 +683,23 @@ async function initDB() {
     `);
   } catch(e) { console.warn('[db] account_shares 마이그레이션 스킵:', e.message); }
 
+  // orders 발주 상태 컬럼
+  try {
+    await pool.query(`
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_at           TIMESTAMPTZ DEFAULT NULL;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS ordered_supplier_id  INTEGER     DEFAULT NULL;
+    `);
+  } catch(e) { console.warn('[db] orders 발주 컬럼 마이그레이션 스킵:', e.message); }
+
+  // users 보내는사람 정보 컬럼
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sender_name    TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sender_phone   TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sender_address TEXT;
+    `);
+  } catch(e) { console.warn('[db] users sender 컬럼 마이그레이션 스킵:', e.message); }
+
   console.log('[db] Tables ready');
 }
 

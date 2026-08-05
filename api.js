@@ -4421,6 +4421,29 @@ router.get('/order-mappings/search-supplier-product', requireAuth, async (req, r
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 발주 보내는사람 설정 ──────────────────────────────────────────────────────
+router.get('/order-sender', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT sender_name, sender_phone, sender_address FROM users WHERE id=$1',
+      [req.user.id]
+    );
+    const u = rows[0] || {};
+    res.json({ sender_name: u.sender_name || '', sender_phone: u.sender_phone || '', sender_address: u.sender_address || '' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/order-sender', requireAuth, async (req, res) => {
+  const { sender_name, sender_phone, sender_address } = req.body;
+  try {
+    await pool.query(
+      'UPDATE users SET sender_name=$1, sender_phone=$2, sender_address=$3 WHERE id=$4',
+      [sender_name || '', sender_phone || '', sender_address || '', req.user.id]
+    );
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
 module.exports.fetchSupplierBalancesForUser = fetchSupplierBalancesForUser;
