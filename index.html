@@ -10919,6 +10919,7 @@ function setDispatchQuickDate(type) {
 
 async function initDispatchTab() {
   await loadDispatchSender();
+  await loadWholesaleSuppliers();  // 발주처 변경 드롭다운용 (form_key 포함)
   // 발주 양식 로드
   try {
     const r = await fetch('/api/order-forms');
