@@ -10904,15 +10904,21 @@ function renderDispatchResult({ groups, unmatched }) {
 
   // 미매칭 카드
   if (unmatched.length) {
-    const rows = unmatched.map(o => `
+    const rows = unmatched.map(o => {
+      const dataOid  = escHtml(o.option_id    || '');
+      const dataProd = escHtml(o.product_name || '');
+      const dataOpt  = escHtml(o.option_name  || '');
+      return `
       <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border)">
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:600;color:var(--text)">${escHtml(o.product_name)}${o.option_name ? ` · <span style="font-weight:400">${escHtml(o.option_name)}</span>` : ''}</div>
           <div style="font-size:12px;color:var(--text-dim);font-family:var(--mono)">옵션ID: ${escHtml(o.option_id || '-')} · 수량: ${o.quantity}</div>
         </div>
         <span style="font-size:12px;color:var(--text-dim)">발주처를 지정하세요</span>
-        <button onclick="setSupplierSubTab('order')" class="btn btn-sm" style="font-size:12px;padding:6px 12px;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub)">발주 매칭에서 지정 →</button>
-      </div>`).join('');
+        <button onclick="prefillOrderMapping(this)" data-oid="${dataOid}" data-prod="${dataProd}" data-opt="${dataOpt}"
+          class="btn btn-sm" style="font-size:12px;padding:6px 12px;white-space:nowrap;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub)">발주 매칭에서 지정 →</button>
+      </div>`;
+    }).join('');
     html += `<div style="border:1.5px solid #FF9F0A;border-radius:12px;overflow:hidden">
       <div style="padding:14px 18px;background:#FFF9E6;display:flex;align-items:center;gap:8px">
         <span style="font-size:15px;font-weight:700;color:#b45309">⚠️ 발주처 미매칭</span>
@@ -11039,6 +11045,17 @@ async function downloadAllDispatch() {
     if (summaryEl) summaryEl.textContent = `미발주 ${_dispatchData.total}건 · 도매처 ${_dispatchData.groups.length}곳 · 미매칭 ${_dispatchData.unmatched.length}건`;
     renderDispatchResult(_dispatchData);
   } catch(e) {}
+}
+
+function prefillOrderMapping(btn) {
+  const optionId   = btn.dataset.oid  || '';
+  const productName = btn.dataset.prod || '';
+  const optionName  = btn.dataset.opt  || '';
+  setSupplierSubTab('order');
+  document.getElementById('omOptionId').value       = optionId;
+  document.getElementById('omRegisteredName').value = productName;
+  document.getElementById('omOptionName').value     = optionName;
+  document.getElementById('omSupplierId').focus();
 }
 
 // 하위 탭 팔레트 (도매처 id → 색)
