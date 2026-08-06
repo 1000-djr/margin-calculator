@@ -90,6 +90,15 @@ async function adminplusGetBalance(token) {
   return { http: r.status, success: j.success, message: j.message, data: j.data };
 }
 
+async function adminplusGetOrders(token, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  const url = 'https://api.adminplus.co.kr/v1/seller/orders' + (qs ? '?' + qs : '');
+  const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } });
+  const text = await r.text();
+  let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  return { status: r.status, data };
+}
+
 // ─── 도매처 잔액 조회+저장 (스케줄러/수동 공용) ────────────────────────────────
 async function fetchSupplierBalancesForUser(userId) {
   const { rows: suppliers } = await pool.query(
@@ -4568,6 +4577,24 @@ async function maskOldOrders() {
   }
   return count;
 }
+
+// ─── 어드민플러스 발주 주문 송장 조회 테스트 ─────────────────────────────────────
+router.get('/admin/adminplus-invoice-test', requireRealAdmin, async (req, res) => {
+  try {
+    const supplierId = req.query.supplier_id;
+    if (!supplierId) return res.status(400).json({ error: 'supplier_id 필요' });
+    const { rows } = await pool.query(
+      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND api_linked=true AND api_type='adminplus'`,
+      [supplierId]
+    );
+    if (!rows.length) return res.status(400).json({ error: '도매처 API 설정 없음 (id 불일치 또는 미연결)' });
+    const cfg = getSupplierApiConfig(rows[0]);
+    if (!cfg) return res.status(400).json({ error: '도매처 API 설정 파싱 실패' });
+    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+    const result = await adminplusGetOrders(token, { limit: '5' });
+    res.json({ status: result.status, sample: result.data });
+  } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
+});
 
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
