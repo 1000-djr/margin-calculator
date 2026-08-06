@@ -99,6 +99,56 @@ async function adminplusGetOrders(token, params = {}) {
   return { status: r.status, data };
 }
 
+// 전화번호 정규화: 숫자만 추출
+function normalizePhone(p) { return p ? String(p).replace(/\D/g, '') : ''; }
+
+// 도매처 송장 전체 수집 (커서 페이지네이션, 발송완료 건만)
+async function fetchSupplierInvoices(userId, supplierId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2 AND api_linked=true AND api_type='adminplus'`,
+    [supplierId, userId]
+  );
+  if (!rows.length) throw new Error(`도매처 API 설정 없음 (supplier_id=${supplierId})`);
+  const cfg = getSupplierApiConfig(rows[0]);
+  if (!cfg) throw new Error('도매처 API 설정 파싱 실패');
+  const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+
+  const invoices = [];
+  let cursor = null;
+  let page = 0;
+  const MAX_PAGES = 50;
+
+  while (page < MAX_PAGES) {
+    const params = { limit: '100' };
+    if (cursor) params.cursor = cursor;
+    const result = await adminplusGetOrders(token, params);
+    if (result.status !== 200 || !result.data?.success) break;
+
+    const orders = result.data?.data?.orders || result.data?.orders || [];
+    for (const order of orders) {
+      const products = order.order_producs || order.order_products || [];
+      for (const p of products) {
+        if (!p.tracking_number) continue;
+        invoices.push({
+          customer_order_code: order.customer_order_code || '',
+          receiver_phone: normalizePhone(order.receiver_hp || order.receiver_phone || ''),
+          receiver_name: order.receiver_name || '',
+          receiver_address: order.receiver_address || '',
+          product_name: p.product_name || '',
+          shipping_company: p.shipping_company || '',
+          tracking_number: p.tracking_number,
+        });
+      }
+    }
+
+    const hasMore = result.data?.data?.has_more ?? result.data?.has_more ?? false;
+    cursor = result.data?.data?.next_cursor ?? result.data?.next_cursor ?? null;
+    if (!hasMore || !cursor) break;
+    page++;
+  }
+  return invoices;
+}
+
 // ─── 도매처 잔액 조회+저장 (스케줄러/수동 공용) ────────────────────────────────
 async function fetchSupplierBalancesForUser(userId) {
   const { rows: suppliers } = await pool.query(
@@ -4577,6 +4627,94 @@ async function maskOldOrders() {
   }
   return count;
 }
+
+// ─── 도매처 송장 수집+매칭 ────────────────────────────────────────────────────────
+router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
+  try {
+    const { from, to, dryRun = false } = req.body;
+    if (!from || !to) return res.status(400).json({ error: 'from, to 필요 (ordered_at 기간)' });
+
+    // 1. 대상 주문: 해당 기간 발주, 송장 미입력
+    const { rows: orders } = await pool.query(
+      `SELECT id, order_number, recipient_phone_masked, ordered_supplier_id
+       FROM orders
+       WHERE user_id=$1
+         AND ordered_at IS NOT NULL
+         AND ordered_at >= $2::date
+         AND ordered_at < ($3::date + INTERVAL '1 day')
+         AND (tracking_number IS NULL OR tracking_number = '')
+         AND ordered_supplier_id IS NOT NULL`,
+      [req.user.id, from, to]
+    );
+    if (!orders.length) return res.json({ matched: 0, unmatched: [], total: 0, message: '대상 주문 없음' });
+
+    // 2. 도매처별 송장 수집
+    const supplierIds = [...new Set(orders.map(o => o.ordered_supplier_id))];
+    const invoiceMap = {};  // supplierId -> invoices[]
+    const supplierErrors = {};
+    for (const sid of supplierIds) {
+      try {
+        invoiceMap[sid] = await fetchSupplierInvoices(req.user.id, sid);
+      } catch(e) {
+        supplierErrors[sid] = e.message;
+        invoiceMap[sid] = [];
+      }
+    }
+
+    // 3. 매칭
+    const matched = [];
+    const unmatched = [];
+    for (const order of orders) {
+      const invoices = invoiceMap[order.ordered_supplier_id] || [];
+      const ourPhone = normalizePhone(order.recipient_phone_masked);
+      const ourOrderNum = (order.order_number || '').trim();
+
+      // 1차: 쿠팡 주문번호 매칭
+      let hit = ourOrderNum
+        ? invoices.find(inv => inv.customer_order_code && inv.customer_order_code.trim() === ourOrderNum)
+        : null;
+
+      // 2차: 안심번호 매칭
+      if (!hit && ourPhone) {
+        hit = invoices.find(inv => inv.receiver_phone && inv.receiver_phone === ourPhone);
+      }
+
+      if (hit) {
+        if (!dryRun) {
+          await pool.query(
+            `UPDATE orders SET courier=$1, tracking_number=$2 WHERE id=$3 AND user_id=$4`,
+            [hit.shipping_company, hit.tracking_number, order.id, req.user.id]
+          );
+        }
+        matched.push({
+          order_id: order.id,
+          order_number: order.order_number,
+          match_by: hit.customer_order_code?.trim() === ourOrderNum ? 'order_number' : 'phone',
+          shipping_company: hit.shipping_company,
+          tracking_number: hit.tracking_number,
+          product_name: hit.product_name,
+        });
+      } else {
+        unmatched.push({
+          order_id: order.id,
+          order_number: order.order_number,
+          supplier_id: order.ordered_supplier_id,
+          supplier_error: supplierErrors[order.ordered_supplier_id] || null,
+        });
+      }
+    }
+
+    res.json({
+      dryRun: !!dryRun,
+      total: orders.length,
+      matched: matched.length,
+      unmatched_count: unmatched.length,
+      matched_list: matched,
+      unmatched: unmatched,
+      supplier_errors: supplierErrors,
+    });
+  } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
+});
 
 // ─── 어드민플러스 발주 주문 송장 조회 테스트 ─────────────────────────────────────
 router.get('/admin/adminplus-invoice-test', requireRealAdmin, async (req, res) => {
