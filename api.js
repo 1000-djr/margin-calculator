@@ -4612,13 +4612,11 @@ async function maskOldOrders() {
     await pool.query(
       `UPDATE orders SET
          recipient_name_masked    = $1,
-         recipient_phone_masked   = $2,
-         recipient_address_masked = $3,
+         recipient_address_masked = $2,
          recipient_zipcode        = '***'
-       WHERE id = $4`,
+       WHERE id = $3`,
       [
         maskName(r.recipient_name_masked),
-        maskPhone(r.recipient_phone_masked),
         maskAddr(r.recipient_address_masked),
         r.id,
       ]
