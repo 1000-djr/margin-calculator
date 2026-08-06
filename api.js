@@ -4662,6 +4662,9 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
     }
 
     // 3. 매칭
+    const invoiceCountBySupplier = {};
+    for (const sid of supplierIds) invoiceCountBySupplier[sid] = (invoiceMap[sid] || []).length;
+
     const matched = [];
     const unmatched = [];
     for (const order of orders) {
@@ -4695,10 +4698,18 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
           product_name: hit.product_name,
         });
       } else {
+        const invCount = invoiceCountBySupplier[order.ordered_supplier_id] || 0;
+        const supInvoices = invoiceMap[order.ordered_supplier_id] || [];
         unmatched.push({
           order_id: order.id,
-          order_number: order.order_number,
+          order_number: order.order_number || '(비어있음)',
           supplier_id: order.ordered_supplier_id,
+          our_phone_norm: ourPhone || '(전화없음)',
+          has_order_number: !!ourOrderNum,
+          supplier_invoice_count: invCount,
+          reason: invCount === 0
+            ? (supplierErrors[order.ordered_supplier_id] ? 'API오류' : '수집송장0건(미발송추정)')
+            : '송장있으나 매칭실패(포맷불일치 의심)',
           supplier_error: supplierErrors[order.ordered_supplier_id] || null,
         });
       }
@@ -4712,6 +4723,7 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
       matched_list: matched,
       unmatched: unmatched,
       supplier_errors: supplierErrors,
+      invoice_count_by_supplier: invoiceCountBySupplier,
     });
   } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
 });
