@@ -4634,7 +4634,8 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
 
     // 1. 대상 주문: 해당 기간 발주, 송장 미입력
     const { rows: orders } = await pool.query(
-      `SELECT id, order_number, recipient_phone_masked, ordered_supplier_id
+      `SELECT id, order_number, recipient_phone_masked, ordered_supplier_id,
+              bundle_number, product_name, option_name, option_id, quantity
        FROM orders
        WHERE user_id=$1
          AND ordered_at IS NOT NULL
@@ -4690,14 +4691,31 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
         matched.push({
           order_id: order.id,
           order_number: order.order_number,
+          bundle_number: order.bundle_number || '',
+          product_name: order.product_name || '',
+          option_name: order.option_name || '',
+          option_id: order.option_id || '',
+          quantity: order.quantity || 1,
           match_by: hit.customer_order_code?.trim() === ourOrderNum ? 'order_number' : 'phone',
           shipping_company: hit.shipping_company,
           tracking_number: hit.tracking_number,
-          product_name: hit.product_name,
         });
       } else {
         const invCount = invoiceCountBySupplier[order.ordered_supplier_id] || 0;
         const supInvoices = invoiceMap[order.ordered_supplier_id] || [];
+        let reason;
+        if (supplierErrors[order.ordered_supplier_id]) {
+          const errMsg = supplierErrors[order.ordered_supplier_id];
+          reason = errMsg.includes('API 설정 없음') || errMsg.includes('미연결')
+            ? 'API미연동_도매처(수동처리)'
+            : 'API오류';
+        } else if (invCount === 0) {
+          reason = '미발송_또는_송장미등록';
+        } else if (!ourPhone || ourPhone.length < 10) {
+          reason = '안심번호_소실(14일마스킹_과거건)';
+        } else {
+          reason = '매칭실패_확인필요';
+        }
         unmatched.push({
           order_id: order.id,
           order_number: order.order_number || '(비어있음)',
@@ -4705,9 +4723,7 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
           our_phone_norm: ourPhone || '(전화없음)',
           has_order_number: !!ourOrderNum,
           supplier_invoice_count: invCount,
-          reason: invCount === 0
-            ? (supplierErrors[order.ordered_supplier_id] ? 'API오류' : '수집송장0건(미발송추정)')
-            : '송장있으나 매칭실패(포맷불일치 의심)',
+          reason,
           supplier_error: supplierErrors[order.ordered_supplier_id] || null,
         });
       }
