@@ -11949,10 +11949,13 @@ function renderInvoiceResult(j, wasDryRun) {
     '매칭실패_확인필요':'매칭 실패 (확인 필요)'
   };
 
+  const doneCount = (j.matched_list||[]).filter(m=>m.match_by==='already_done').length;
+  const newCount = j.matched - doneCount;
+
   let html = '';
   html += '<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
   html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">';
-  html += '<div style="font-size:15px;font-weight:700;color:var(--green)">✅ 매칭 '+j.matched+'건</div>';
+  html += '<div style="font-size:15px;font-weight:700;color:var(--green)">✅ 매칭 '+j.matched+'건'+(doneCount>0?' (이미처리 '+doneCount+' · 신규 '+newCount+')':'')+'</div>';
   if (wasDryRun && j.matched > 0)
     html += '<button onclick="collectInvoices(false)" class="btn btn-primary" style="font-size:13px;padding:7px 16px">💾 확정 저장</button>';
   if (!wasDryRun && j.matched > 0)
@@ -11964,7 +11967,7 @@ function renderInvoiceResult(j, wasDryRun) {
     html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
     html += '<tr style="color:var(--text-dim);text-align:left"><th style="padding:6px">주문번호</th><th style="padding:6px">택배사</th><th style="padding:6px">송장번호</th><th style="padding:6px">매칭</th></tr>';
     (j.matched_list||[]).forEach(m => {
-      html += '<tr style="border-top:1px solid var(--border)"><td style="padding:6px">'+(m.order_number||'')+'</td><td style="padding:6px">'+(m.shipping_company||'')+'</td><td style="padding:6px">'+(m.tracking_number||'')+'</td><td style="padding:6px">'+(m.match_by==='order_number'?'주문번호':'안심번호')+'</td></tr>';
+      html += '<tr style="border-top:1px solid var(--border)"><td style="padding:6px">'+(m.order_number||'')+'</td><td style="padding:6px">'+(m.shipping_company||'')+'</td><td style="padding:6px">'+(m.tracking_number||'')+'</td><td style="padding:6px">'+(m.match_by==='already_done'?'이미처리됨':(m.match_by==='order_number'?'주문번호':'안심번호'))+'</td></tr>';
     });
     html += '</table></div>';
   }
