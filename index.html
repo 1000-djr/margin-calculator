@@ -11971,10 +11971,23 @@ function renderInvoiceResult(j, wasDryRun) {
   html += '</div>';
 
   if (j.unmatched_count > 0) {
+    const groupByReason = {};
+    (j.unmatched||[]).forEach(u => {
+      if (!groupByReason[u.reason]) groupByReason[u.reason] = [];
+      groupByReason[u.reason].push(u);
+    });
     html += '<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
     html += '<div style="font-size:15px;font-weight:700;margin-bottom:12px">⚠️ 미매칭 '+j.unmatched_count+'건 (사유별)</div>';
-    Object.keys(byReason).forEach(rk => {
-      html += '<div style="padding:8px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between"><span style="font-size:13px">'+(reasonLabels[rk]||rk)+'</span><span style="font-size:13px;color:var(--text-dim)">'+byReason[rk]+'건</span></div>';
+    Object.keys(groupByReason).forEach(rk => {
+      const list = groupByReason[rk];
+      html += '<details style="border-top:1px solid var(--border)">';
+      html += '<summary style="padding:10px 0;cursor:pointer;display:flex;justify-content:space-between;list-style:none"><span style="font-size:13px">'+(reasonLabels[rk]||rk)+'</span><span style="font-size:13px;color:var(--text-dim)">'+list.length+'건 ▾</span></summary>';
+      html += '<div style="overflow-x:auto;padding:4px 0 12px"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+      html += '<tr style="color:var(--text-dim);text-align:left"><th style="padding:5px">주문번호</th><th style="padding:5px">주문ID</th><th style="padding:5px">전화(정규화)</th><th style="padding:5px">도매처송장수</th></tr>';
+      list.forEach(u => {
+        html += '<tr style="border-top:1px solid var(--border)"><td style="padding:5px">'+(u.order_number||'(비어있음)')+'</td><td style="padding:5px">'+(u.order_id||'')+'</td><td style="padding:5px">'+(u.our_phone_norm||'')+'</td><td style="padding:5px">'+(u.supplier_invoice_count!=null?u.supplier_invoice_count:'')+'</td></tr>';
+      });
+      html += '</table></div></details>';
     });
     html += '</div>';
   }
