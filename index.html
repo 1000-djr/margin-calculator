@@ -11890,6 +11890,42 @@ async function saveSupplierToB2B() {
   }
 }
 
+// ── 쿠팡 송장업로드 엑셀 생성 ────────────────────────────────────────────────
+function downloadCoupangInvoiceExcel(matchedList) {
+  // 쿠팡 송장업로드 양식 헤더 (39컬럼)
+  const headers = [
+    '번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송 Y/N',
+    '분리배송 출고예정일','주문일','옵션ID(구매옵션ID아님)','등록상품ID','등록상품명',
+    '등록옵션명','노출상품ID','노출상품명','옵션ID','옵션명',
+    '업체상품코드','결제금액','배송비 결제금액','판매가','즉시할인가','구매쿠폰할인',
+    '구매수(수량)','구매자ID','구매자명','수취인이름','수취인전화번호1','수취인전화번호2',
+    '우편번호','주소','결제일','상품주문번호','주문상태','배송방법','배송마감일',
+    '발주마감일','출고기한','출고일','배송완료일',
+  ];
+
+  const rows = matchedList.map((m, i) => {
+    const row = new Array(39).fill('');
+    row[0] = i + 1;                      // 번호 (순번)
+    row[1] = m.bundle_number || '';      // 묶음배송번호 (필수)
+    row[2] = m.order_number || '';       // 주문번호 (필수)
+    row[3] = m.shipping_company || '';   // 택배사 (필수)
+    row[4] = m.tracking_number || '';    // 운송장번호 (핵심)
+    row[5] = 'N';                        // 분리배송 Y/N (필수, 기본 N)
+    row[14] = m.option_id || '';         // 옵션ID (필수)
+    return row;
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = headers.map((_, i) => ({ wch: [4,18,18,12,16,10,16,10,14,12,20,20,12,20,12,20,16,10,12,10,10,12,8,14,10,12,14,14,10,30,12,14,10,10,12,12,10,10,12][i] || 12 }));
+  XLSX.utils.book_append_sheet(wb, ws, '송장업로드');
+
+  const today = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${today.getFullYear()}${pad(today.getMonth()+1)}${pad(today.getDate())}`;
+  XLSX.writeFile(wb, `coupang_invoice_${dateStr}.xlsx`);
+}
+
 // ── 초기화 ───────────────────────────────────────────────────────────────────
 // 인증 확인 → 로그인 시 앱 표시 + 서버 데이터 로드, 비로그인 시 로그인 화면 유지
 checkAuth();
