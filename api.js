@@ -4632,16 +4632,16 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
     const { from, to, dryRun = false } = req.body;
     if (!from || !to) return res.status(400).json({ error: 'from, to 필요 (ordered_at 기간)' });
 
-    // 1. 대상 주문: 해당 기간 발주, 송장 미입력
+    // 1. 대상 주문: 해당 기간 발주 (송장 있는 건 포함 — 재다운로드 지원)
     const { rows: orders } = await pool.query(
       `SELECT id, order_number, recipient_phone_masked, ordered_supplier_id,
-              bundle_number, product_name, option_name, option_id, quantity
+              bundle_number, product_name, option_name, option_id, quantity,
+              courier, tracking_number
        FROM orders
        WHERE user_id=$1
          AND ordered_at IS NOT NULL
          AND ordered_at >= $2::date
          AND ordered_at < ($3::date + INTERVAL '1 day')
-         AND (tracking_number IS NULL OR tracking_number = '')
          AND ordered_supplier_id IS NOT NULL`,
       [req.user.id, from, to]
     );
@@ -4667,6 +4667,23 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
     const matched = [];
     const unmatched = [];
     for (const order of orders) {
+      // 이미 송장이 채워진 주문 → DB값으로 바로 매칭 성공 (도매처 재조회 불필요)
+      if (order.tracking_number && order.tracking_number.trim()) {
+        matched.push({
+          order_id: order.id,
+          order_number: order.order_number,
+          bundle_number: order.bundle_number || '',
+          product_name: order.product_name || '',
+          option_name: order.option_name || '',
+          option_id: order.option_id || '',
+          quantity: order.quantity || 1,
+          match_by: 'already_done',
+          shipping_company: order.courier || '',
+          tracking_number: order.tracking_number,
+        });
+        continue;
+      }
+
       const invoices = invoiceMap[order.ordered_supplier_id] || [];
       const ourPhone = normalizePhone(order.recipient_phone_masked);
       const ourOrderNum = (order.order_number || '').trim();
