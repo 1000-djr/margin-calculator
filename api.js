@@ -4632,23 +4632,26 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
     const { from, to, dryRun = false } = req.body;
     if (!from || !to) return res.status(400).json({ error: 'from, to 필요 (ordered_at 기간)' });
 
-    // 1. 대상 주문: 해당 기간 발주 (송장 있는 건 포함 — 재다운로드 지원)
+    // 1. 대상 주문: 결제일 기준, 직접주문 포함 (송장 있는 건도 포함 — 재다운로드 지원)
     const { rows: orders } = await pool.query(
       `SELECT id, order_number, recipient_phone_masked, ordered_supplier_id,
               bundle_number, product_name, option_name, option_id, quantity,
               courier, tracking_number
        FROM orders
        WHERE user_id=$1
-         AND ordered_at IS NOT NULL
-         AND ordered_at >= $2::date
-         AND ordered_at < ($3::date + INTERVAL '1 day')
-         AND ordered_supplier_id IS NOT NULL`,
+         AND order_date IS NOT NULL AND order_date <> ''
+         AND SUBSTRING(order_date,1,10) >= $2
+         AND SUBSTRING(order_date,1,10) <= $3`,
       [req.user.id, from, to]
     );
     if (!orders.length) return res.json({ matched: 0, unmatched: [], total: 0, message: '대상 주문 없음' });
 
-    // 2. 도매처별 송장 수집
-    const supplierIds = [...new Set(orders.map(o => o.ordered_supplier_id))];
+    // 2. 도매처별 송장 수집 (연동된 전체 도매처)
+    const { rows: linkedSuppliers } = await pool.query(
+      `SELECT id FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
+      [req.user.id]
+    );
+    const supplierIds = linkedSuppliers.map(s => s.id);
     const invoiceMap = {};  // supplierId -> invoices[]
     const supplierErrors = {};
     for (const sid of supplierIds) {
@@ -4684,18 +4687,32 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
         continue;
       }
 
-      const invoices = invoiceMap[order.ordered_supplier_id] || [];
       const ourPhone = normalizePhone(order.recipient_phone_masked);
       const ourOrderNum = (order.order_number || '').trim();
 
+      // 발주도매처 우선, 없으면 전체 도매처 순서로 검색
+      let searchSids;
+      if (order.ordered_supplier_id && invoiceMap[order.ordered_supplier_id]) {
+        searchSids = [order.ordered_supplier_id, ...supplierIds.filter(s => s !== order.ordered_supplier_id)];
+      } else {
+        searchSids = supplierIds;
+      }
+
       // 1차: 쿠팡 주문번호 매칭
-      let hit = ourOrderNum
-        ? invoices.find(inv => inv.customer_order_code && inv.customer_order_code.trim() === ourOrderNum)
-        : null;
+      let hit = null, hitSid = null;
+      if (ourOrderNum) {
+        for (const sid of searchSids) {
+          const found = (invoiceMap[sid]||[]).find(inv => inv.customer_order_code && inv.customer_order_code.trim() === ourOrderNum);
+          if (found) { hit = found; hitSid = sid; break; }
+        }
+      }
 
       // 2차: 안심번호 매칭
       if (!hit && ourPhone) {
-        hit = invoices.find(inv => inv.receiver_phone && inv.receiver_phone === ourPhone);
+        for (const sid of searchSids) {
+          const found = (invoiceMap[sid]||[]).find(inv => normalizePhone(inv.receiver_phone) === ourPhone);
+          if (found) { hit = found; hitSid = sid; break; }
+        }
       }
 
       if (hit) {
@@ -4718,11 +4735,14 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
           tracking_number: hit.tracking_number,
         });
       } else {
-        const invCount = invoiceCountBySupplier[order.ordered_supplier_id] || 0;
+        const invCount = order.ordered_supplier_id
+          ? (invoiceCountBySupplier[order.ordered_supplier_id] || 0)
+          : Object.values(invoiceCountBySupplier).reduce((a, b) => a + b, 0);
         const supInvoices = invoiceMap[order.ordered_supplier_id] || [];
         let reason;
-        if (supplierErrors[order.ordered_supplier_id]) {
-          const errMsg = supplierErrors[order.ordered_supplier_id];
+        const sidErr = order.ordered_supplier_id ? supplierErrors[order.ordered_supplier_id] : null;
+        if (sidErr) {
+          const errMsg = sidErr;
           reason = errMsg.includes('API 설정 없음') || errMsg.includes('미연결')
             ? 'API미연동_도매처(수동처리)'
             : 'API오류';
@@ -4741,7 +4761,7 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
           has_order_number: !!ourOrderNum,
           supplier_invoice_count: invCount,
           reason,
-          supplier_error: supplierErrors[order.ordered_supplier_id] || null,
+          supplier_error: (order.ordered_supplier_id ? supplierErrors[order.ordered_supplier_id] : null) || null,
         });
       }
     }
