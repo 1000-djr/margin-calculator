@@ -4626,6 +4626,31 @@ async function maskOldOrders() {
   return count;
 }
 
+// ─── [임시 디버그] 도매처 송장 전화번호 형식 확인 ─────────────────────────────────
+router.post('/orders/debug-invoice-phones', requireAuth, async (req, res) => {
+  try {
+    const { rows: linkedSuppliers } = await pool.query(
+      `SELECT id, name FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
+      [req.user.id]
+    );
+    const out = {};
+    for (const s of linkedSuppliers) {
+      try {
+        const invoices = await fetchSupplierInvoices(req.user.id, s.id);
+        out[s.name || s.id] = {
+          count: invoices.length,
+          samples: invoices.slice(0, 5).map(inv => ({
+            receiver_phone: inv.receiver_phone,
+            customer_order_code: inv.customer_order_code,
+            tracking_number: inv.tracking_number,
+          }))
+        };
+      } catch(e) { out[s.name || s.id] = { error: e.message }; }
+    }
+    res.json(out);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 도매처 송장 수집+매칭 ────────────────────────────────────────────────────────
 router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   try {
