@@ -12000,13 +12000,45 @@ function renderInvoiceResult(j, wasDryRun) {
 // 쿠팡 송장업로드 엑셀 (formV4 정확한 39컬럼, 시트명 반드시 'form')
 function downloadCoupangInvoiceExcel() {
   if (!_invMatched.length) { alert('매칭된 송장이 없습니다'); return; }
+  // 도매처 택배사명 → 쿠팡 엑셀 대량업로드용 표준명
+  // 주의: 엑셀 업로드는 'CJ 대한통운'(띄어쓰기) 형태를 요구함
+  const COURIER_MAP = {
+    '우체국택배': '우체국',
+    '우체국': '우체국',
+    '로젠택배': '로젠택배',
+    '로젠': '로젠택배',
+    'CJ대한통운': 'CJ 대한통운',
+    'CJ 대한통운': 'CJ 대한통운',
+    'CJGLS': 'CJ 대한통운',
+    '대한통운': 'CJ 대한통운',
+    'CJ택배': 'CJ 대한통운',
+    '롯데택배': '롯데택배',
+    '롯데': '롯데택배',
+    '한진택배': '한진택배',
+    '한진': '한진택배',
+    '경동택배': '경동택배',
+    '경동': '경동택배',
+  };
+  function mapCourier(name) {
+    if (!name) return '';
+    const n = String(name).trim();
+    return COURIER_MAP[n] || n;
+  }
+  const unknownCouriers = new Set();
+  _invMatched.forEach(m => {
+    const n = String(m.shipping_company||'').trim();
+    if (n && !COURIER_MAP[n]) unknownCouriers.add(n);
+  });
+  if (unknownCouriers.size > 0) {
+    alert('⚠️ 쿠팡 표준 이름을 모르는 택배사가 있습니다: '+[...unknownCouriers].join(', ')+'\n\n원본 이름 그대로 엑셀에 들어갑니다. 쿠팡 업로드 시 실패할 수 있으니 확인하세요.');
+  }
   const headers = ['번호','묶음배송번호','주문번호','택배사','운송장번호','분리배송 Y/N','분리배송 출고예정일','주문시 출고예정일','출고일(발송일)','주문일','등록상품명','등록옵션명','노출상품명(옵션명)','노출상품ID','옵션ID','최초등록옵션명','업체상품코드','바코드','결제액','배송비구분','배송비','도서산간 추가배송비','구매수(수량)','옵션판매가(판매단가)','구매자','구매자전화번호','수취인이름','수취인전화번호','우편번호','수취인 주소','배송메세지','상품별 추가메시지','주문자 추가메시지','배송완료일','구매확정일자','개인통관번호(PCCC)','통관용구매자전화번호','기타','결제위치'];
   const rows = _invMatched.map((m, i) => {
     const row = new Array(39).fill('');
     row[0]  = i+1;                       // 번호
     row[1]  = m.bundle_number || '';     // 묶음배송번호 (필수)
     row[2]  = m.order_number || '';      // 주문번호 (필수)
-    row[3]  = m.shipping_company || '';  // 택배사 (필수)
+    row[3]  = mapCourier(m.shipping_company);  // 택배사 (필수, 표준명 변환)
     row[4]  = m.tracking_number || '';   // 운송장번호
     row[5]  = 'N';                       // 분리배송 Y/N (필수, 기본 N)
     row[14] = m.option_id || '';         // 옵션ID (필수) — 15번째 컬럼=index14
