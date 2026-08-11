@@ -2120,6 +2120,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <div style="padding:16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
         <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 수익분석</h2>
+        <div style="display:flex;gap:6px">
+          <button class="quick-pill" id="alwProfitQpYesterday" onclick="setAlwayzProfitQuickDate('yesterday')">어제</button>
+          <button class="quick-pill" id="alwProfitQpWeek" onclick="setAlwayzProfitQuickDate('week')">최근 7일</button>
+          <button class="quick-pill active" id="alwProfitQpMonth" onclick="setAlwayzProfitQuickDate('month')">이번 달</button>
+        </div>
         <input id="alwayzProfitFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
         <span style="color:var(--text-dim)">~</span>
         <input id="alwayzProfitTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
@@ -12371,6 +12376,32 @@ async function loadAlwayzOrders() {
 }
 
 // ── 올웨이즈 수익분석 ────────────────────────────────────────────────────────
+function setAlwayzProfitQuickDate(preset) {
+  ['Yesterday','Week','Month'].forEach(p => {
+    const el = document.getElementById('alwProfitQp'+p);
+    if (el) el.classList.remove('active');
+  });
+  const map = { yesterday:'Yesterday', week:'Week', month:'Month' };
+  const btn = document.getElementById('alwProfitQp'+(map[preset]||'Month'));
+  if (btn) btn.classList.add('active');
+
+  const kst = new Date(Date.now()+9*3600*1000);
+  const fmt = d => d.toISOString().slice(0,10);
+  let from, to;
+  if (preset === 'yesterday') {
+    const y = new Date(kst); y.setDate(y.getDate()-1);
+    from = to = fmt(y);
+  } else if (preset === 'week') {
+    const w = new Date(kst); w.setDate(w.getDate()-6);
+    from = fmt(w); to = fmt(kst);
+  } else {
+    from = fmt(kst).slice(0,8)+'01'; to = fmt(kst);
+  }
+  document.getElementById('alwayzProfitFrom').value = from;
+  document.getElementById('alwayzProfitTo').value   = to;
+  loadAlwayzProfit();
+}
+
 function initAlwayzProfitDates() {
   const kst  = new Date(Date.now()+9*3600*1000);
   const fmt  = d => d.toISOString().slice(0,10);
