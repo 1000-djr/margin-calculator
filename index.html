@@ -12767,7 +12767,7 @@ async function downloadAlwayzDispatchExcel(supplierId) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, form.sheet || 'Sheet1');
   const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-  XLSX.writeFile(wb, group.supplier_name+'_올웨발주_'+today+'.xlsx');
+  XLSX.writeFile(wb, group.supplier_name+'_올웨이즈발주_'+today+'.xlsx');
   try {
     const ids = group.orders.map(o => o.order_id);
     await fetch('/api/alwayz-orders/mark-dispatched', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ order_ids: ids }) });
@@ -12904,7 +12904,7 @@ async function loadUnifiedDispatch() {
     const j=await res.json();
     if(j.error){summary.textContent='오류: '+j.error;return;}
     _udData=j;
-    summary.textContent='쿠팡 '+j.total_coupang+' · 올웨 '+j.total_alwayz+' · 도매처 '+j.groups.length+'곳 · 미매칭 '+j.unmatched.length;
+    summary.textContent='쿠팡 '+j.total_coupang+' · 올웨이즈 '+j.total_alwayz+' · 도매처 '+j.groups.length+'곳 · 미매칭 '+j.unmatched.length;
     renderUnifiedDispatch(j);
   } catch(e){summary.textContent='오류: '+e.message;}
 }
@@ -12920,24 +12920,24 @@ function renderUnifiedDispatch(j) {
     const prods=Object.values(prodMap).sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'','ko'));
     html+='<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
     html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">';
-    html+='<div style="font-size:15px;font-weight:700">🏪 '+escHtml(g.supplier_name)+' <span style="font-size:12px;color:var(--text-dim);font-weight:400">쿠팡 '+g.coupang_count+' + 올웨 '+g.alwayz_count+' = '+g.orders.length+'건</span></div>';
+    html+='<div style="font-size:15px;font-weight:700">🏪 '+escHtml(g.supplier_name)+' <span style="font-size:12px;color:var(--text-dim);font-weight:400">쿠팡 '+g.coupang_count+' + 올웨이즈 '+g.alwayz_count+' = '+g.orders.length+'건</span></div>';
     if(g.form_key){
       html+='<button class="btn btn-primary" style="font-size:13px;padding:7px 14px" onclick="downloadUnifiedExcel('+g.supplier_id+',\'both\')">📥 발주서(합침)</button>';
       if(g.coupang_count>0) html+='<button class="btn" style="font-size:12px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border)" onclick="downloadUnifiedExcel('+g.supplier_id+',\'coupang\')">쿠팡만</button>';
-      if(g.alwayz_count>0) html+='<button class="btn" style="font-size:12px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border)" onclick="downloadUnifiedExcel('+g.supplier_id+',\'alwayz\')">올웨만</button>';
+      if(g.alwayz_count>0) html+='<button class="btn" style="font-size:12px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border)" onclick="downloadUnifiedExcel('+g.supplier_id+',\'alwayz\')">올웨이즈만</button>';
     } else html+='<span style="font-size:12px;color:var(--text-dim)">양식 미지정</span>';
     html+='</div>';
     html+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:6px">매체</th><th style="padding:6px">상품명</th><th style="padding:6px;text-align:center">수량</th><th style="padding:6px;text-align:center">건수</th></tr></thead><tbody>';
     prods.forEach(p=>{
       const badge=p.platform==='coupang'
         ?'<span style="background:#e8f0fe;color:#1a73e8;padding:1px 6px;border-radius:4px;font-size:10px">쿠팡</span>'
-        :'<span style="background:#fef3e8;color:#e8871a;padding:1px 6px;border-radius:4px;font-size:10px">올웨</span>';
+        :'<span style="background:#fef3e8;color:#e8871a;padding:1px 6px;border-radius:4px;font-size:10px">올웨이즈</span>';
       html+='<tr style="border-top:1px solid var(--border)"><td style="padding:6px">'+badge+'</td><td style="padding:6px">'+escHtml(p.product_name||'')+'</td><td style="padding:6px;text-align:center;font-weight:600">'+p.qty+'</td><td style="padding:6px;text-align:center;color:var(--text-dim)">'+p.count+'건</td></tr>';
     });
     html+='</tbody></table></div>';
   });
   if(j.unmatched.length){
-    const byR={};j.unmatched.forEach(u=>{const k=(u.platform==='coupang'?'[쿠팡] ':'[올웨] ')+u.reason;byR[k]=(byR[k]||0)+1;});
+    const byR={};j.unmatched.forEach(u=>{const k=(u.platform==='coupang'?'[쿠팡] ':'[올웨이즈] ')+u.reason;byR[k]=(byR[k]||0)+1;});
     html+='<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)"><div style="font-size:15px;font-weight:700;margin-bottom:8px">⚠️ 미매칭 '+j.unmatched.length+'건</div><div style="font-size:13px;color:var(--text-sub)">'+Object.entries(byR).map(([k,v])=>escHtml(k)+' '+v).join(', ')+'</div></div>';
   }
   result.innerHTML=html||'<div style="padding:20px;color:var(--text-dim)">발주 대상이 없습니다.</div>';
@@ -12972,7 +12972,7 @@ async function downloadUnifiedExcel(supplierId, mode) {
   const ws=XLSX.utils.aoa_to_sheet([header,...dataRows]); const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,form.sheet||'Sheet1');
   const today=new Date().toISOString().slice(0,10).replace(/-/g,'');
-  const suffix=mode==='coupang'?'_쿠팡':mode==='alwayz'?'_올웨':'';
+  const suffix=mode==='coupang'?'_쿠팡':mode==='alwayz'?'_올웨이즈':'';
   XLSX.writeFile(wb,group.supplier_name+'_발주'+suffix+'_'+today+'.xlsx');
   try {
     const cpIds=orders.filter(o=>o.platform==='coupang').map(o=>o.id);
