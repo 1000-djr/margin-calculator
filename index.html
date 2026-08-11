@@ -2171,6 +2171,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <span style="font-size:12px;color:var(--text-dim)">(결제일 기준, 미발주만)</span>
         <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzDispatch()">🔍 발주 대상 조회</button>
         <span id="alwayzDispSummary" style="font-size:13px;color:var(--text-dim)"></span>
+        <button id="alwayzDispAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllAlwayzDispatch()">📦 전체 발주서 다운로드</button>
       </div>
       <div id="alwayzDispResult" style="display:flex;flex-direction:column;gap:16px"></div>
     </div>
@@ -12658,6 +12659,8 @@ function renderAlwayzDispatch(j) {
     html += '</div>';
   }
   result.innerHTML = html || '<div style="padding:20px;color:var(--text-dim)">미발주 주문이 없습니다.</div>';
+  const allBtn = document.getElementById('alwayzDispAllBtn');
+  if (allBtn) allBtn.style.display = (j.groups && j.groups.filter(g=>g.form_key).length > 0) ? '' : 'none';
 }
 
 async function downloadAlwayzDispatchExcel(supplierId) {
@@ -12701,6 +12704,17 @@ async function downloadAlwayzDispatchExcel(supplierId) {
     document.getElementById('alwayzDispSummary').textContent = '미발주 '+_alwayzDispatchData.total+'건 · 도매처 '+_alwayzDispatchData.groups.length+'곳 · 미매칭 '+_alwayzDispatchData.unmatched.length+'건';
     renderAlwayzDispatch(_alwayzDispatchData);
   } catch(e) {}
+}
+
+async function downloadAllAlwayzDispatch() {
+  if (!_alwayzDispatchData || !_alwayzDispatchData.groups.length) return alert('발주 대상이 없습니다');
+  const supplierIds = _alwayzDispatchData.groups.filter(g=>g.form_key).map(g => g.supplier_id);
+  if (!supplierIds.length) return alert('발주 양식이 지정된 도매처가 없습니다');
+  for (const sid of supplierIds) {
+    await downloadAlwayzDispatchExcel(sid);
+    await new Promise(r => setTimeout(r, 500));
+  }
+  alert('전체 발주서 다운로드 완료 ('+supplierIds.length+'개 도매처, 파일 각각 생성)');
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
