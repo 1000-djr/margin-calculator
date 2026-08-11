@@ -12225,29 +12225,46 @@ async function uploadFilteredAlwayzOrders() {
 
 // ── 올웨이즈 원가표 ─────────────────────────────────────────────────────────
 let _alwayzCostRows = [];
+let _b2bProductsForAlwayz = [];
+
 async function loadAlwayzCostMapping() {
   const summary = document.getElementById('alwayzCostSummary');
   const result  = document.getElementById('alwayzCostResult');
   if (summary) summary.textContent = '불러오는 중...';
   try {
+    const b2bRes  = await fetch('/api/b2b-prices');
+    const b2bRows = await b2bRes.json();
+    const seen = new Set();
+    _b2bProductsForAlwayz = [];
+    (Array.isArray(b2bRows) ? b2bRows : []).forEach(r => {
+      const key = (r.product_name||'')+'|'+(r.unit||'');
+      if (!seen.has(key) && r.product_name) { seen.add(key); _b2bProductsForAlwayz.push({ name:r.product_name, unit:r.unit||'' }); }
+    });
+
     const res  = await fetch('/api/alwayz-cost-mapping');
     const rows = await res.json();
     if (rows.error) { if (summary) summary.textContent = '오류: '+rows.error; return; }
     _alwayzCostRows = rows;
-    const filled = rows.filter(r => r.cost != null && Number(r.cost) > 0).length;
-    if (summary) summary.textContent = '상품 '+rows.length+'종 · 원가입력 '+filled+'종';
+    const linked = rows.filter(r => r.b2b_name).length;
+    if (summary) summary.textContent = '상품 '+rows.length+'종 · B2B연결 '+linked+'종';
     if (!rows.length) { result.innerHTML = '<div style="padding:20px;color:var(--text-dim)">주문서를 먼저 업로드하세요.</div>'; return; }
+
     let html = '<table class="data-table"><thead><tr>'
-      + '<th>상품명</th><th>옵션</th><th>상품아이디</th><th>주문수</th><th>원가</th><th>과세구분</th><th>저장</th>'
+      + '<th>상품명</th><th>옵션</th><th>주문수</th><th>연결된 B2B 상품</th><th>저장</th>'
       + '</tr></thead><tbody>';
     rows.forEach((r, i) => {
+      const curKey = (r.b2b_name||'')+'|'+(r.b2b_unit||'');
+      let opts = '<option value="">— 선택 —</option>';
+      _b2bProductsForAlwayz.forEach(b => {
+        const k     = b.name+'|'+b.unit;
+        const label = b.unit ? (b.name+' ('+b.unit+')') : b.name;
+        opts += '<option value="'+encodeURIComponent(k)+'"'+(k===curKey?' selected':'')+'>'+escHtml(label)+'</option>';
+      });
       html += '<tr>'
         + '<td>'+escHtml(r.product_name||'')+'</td>'
         + '<td>'+escHtml(r.option_name||'')+'</td>'
-        + '<td style="font-size:11px;color:var(--text-dim)">'+escHtml(r.product_id||'')+'</td>'
         + '<td style="text-align:center">'+(r.order_count||0)+'</td>'
-        + '<td><input type="number" id="alwCost_'+i+'" value="'+(r.cost!=null?r.cost:'')+'" placeholder="0" style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right"></td>'
-        + '<td><select id="alwTax_'+i+'" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px"><option value="exempt"'+((r.tax_type||'exempt')==='exempt'?' selected':'')+'>면세</option><option value="taxable"'+(r.tax_type==='taxable'?' selected':'')+'>과세</option></select></td>'
+        + '<td><select id="alwB2b_'+i+'" style="min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">'+opts+'</select></td>'
         + '<td><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzCost('+i+',this)">저장</button></td>'
         + '</tr>';
     });
@@ -12255,22 +12272,23 @@ async function loadAlwayzCostMapping() {
     result.innerHTML = html;
   } catch(e) { if (summary) summary.textContent = '오류: '+e.message; }
 }
+
 async function saveAlwayzCost(i, btn) {
-  const r        = _alwayzCostRows[i];
-  const cost     = document.getElementById('alwCost_'+i).value;
-  const tax_type = document.getElementById('alwTax_'+i).value;
+  const r   = _alwayzCostRows[i];
+  const sel = document.getElementById('alwB2b_'+i).value;
+  if (!sel) { alert('B2B 상품을 선택하세요'); return; }
+  const [b2b_name, b2b_unit] = decodeURIComponent(sel).split('|');
   try {
     const res = await fetch('/api/alwayz-cost-mapping', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ product_id:r.product_id, option_name:r.option_name, product_name:r.product_name, cost, tax_type })
+      body: JSON.stringify({ product_id:r.product_id, option_name:r.option_name, product_name:r.product_name, b2b_name, b2b_unit })
     });
     const j = await res.json();
     if (j.error) { alert('오류: '+j.error); return; }
-    const orig = btn.textContent;
-    btn.textContent = '✓'; btn.style.background = 'var(--green)';
+    const orig = btn.textContent; btn.textContent = '✓'; btn.style.background = 'var(--green)';
     setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1200);
-    _alwayzCostRows[i].cost     = parseFloat(cost)||0;
-    _alwayzCostRows[i].tax_type = tax_type;
+    _alwayzCostRows[i].b2b_name = b2b_name;
+    _alwayzCostRows[i].b2b_unit = b2b_unit;
   } catch(e) { alert('오류: '+e.message); }
 }
 

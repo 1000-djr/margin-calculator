@@ -4688,33 +4688,33 @@ router.get('/alwayz-cost-mapping', requireAuth, async (req, res) => {
         MAX(d.product_name) AS product_name,
         MAX(d.order_date)   AS last_order_date,
         COUNT(*)            AS order_count,
-        cm.cost,
-        cm.tax_type
+        pm.b2b_name,
+        pm.b2b_unit
       FROM alwayz_orders d
-      LEFT JOIN alwayz_cost_mapping cm
-        ON cm.user_id = d.user_id AND cm.product_id = d.product_id AND cm.option_name = d.option_name
+      LEFT JOIN alwayz_product_mapping pm
+        ON pm.user_id = d.user_id AND pm.product_id = d.product_id AND pm.option_name = d.option_name
       WHERE d.user_id = $1
-      GROUP BY d.product_id, d.option_name, cm.cost, cm.tax_type
+      GROUP BY d.product_id, d.option_name, pm.b2b_name, pm.b2b_unit
       ORDER BY MAX(d.order_date) DESC
     `, [req.user.id]);
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ─── 올웨이즈 원가 저장(upsert) ──────────────────────────────────────────────
+// ─── 올웨이즈 상품 → B2B 연결 저장(upsert) ───────────────────────────────────
 router.post('/alwayz-cost-mapping', requireAuth, async (req, res) => {
-  const { product_id, option_name, product_name, cost, tax_type } = req.body || {};
-  if (!product_id) return res.status(400).json({ error: 'product_id 필요' });
+  const { product_id, option_name, product_name, b2b_name, b2b_unit } = req.body || {};
+  if (!product_id || !b2b_name) return res.status(400).json({ error: 'product_id와 b2b_name 필요' });
   try {
     await pool.query(`
-      INSERT INTO alwayz_cost_mapping (user_id, product_id, option_name, product_name, cost, tax_type, updated_at)
+      INSERT INTO alwayz_product_mapping (user_id, product_id, option_name, product_name, b2b_name, b2b_unit, updated_at)
       VALUES ($1,$2,$3,$4,$5,$6,NOW())
       ON CONFLICT (user_id, product_id, option_name) DO UPDATE SET
         product_name = EXCLUDED.product_name,
-        cost = EXCLUDED.cost,
-        tax_type = EXCLUDED.tax_type,
+        b2b_name = EXCLUDED.b2b_name,
+        b2b_unit = EXCLUDED.b2b_unit,
         updated_at = NOW()
-    `, [req.user.id, product_id, option_name||'', product_name||'', parseFloat(cost)||0, tax_type||'exempt']);
+    `, [req.user.id, product_id, option_name||'', product_name||'', b2b_name, b2b_unit||'']);
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

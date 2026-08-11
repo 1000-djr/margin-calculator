@@ -148,6 +148,18 @@ async function initDB() {
       UNIQUE (user_id, product_id, option_name)
     );
 
+    CREATE TABLE IF NOT EXISTS alwayz_product_mapping (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      product_id   VARCHAR(100) NOT NULL,
+      option_name  TEXT NOT NULL DEFAULT '',
+      product_name TEXT,
+      b2b_name     TEXT NOT NULL,
+      b2b_unit     TEXT NOT NULL DEFAULT '',
+      updated_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, product_id, option_name)
+    );
+
     CREATE TABLE IF NOT EXISTS ad_reports (
       id               SERIAL PRIMARY KEY,
       user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
