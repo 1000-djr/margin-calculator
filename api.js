@@ -4808,6 +4808,45 @@ router.post('/alwayz-cost-mapping', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── [임시 디버그] 도매처 상품 status 무필터 조회 ────────────────────────────────
+router.get('/admin/debug-supplier-products', requireRealAdmin, async (req, res) => {
+  try {
+    const supplierName = req.query.name || '에코앤팜';
+    const keyword = req.query.keyword || '참외';
+    const { rows } = await pool.query(
+      `SELECT * FROM wholesale_suppliers WHERE user_id=$1 AND name=$2 AND api_linked=true`,
+      [req.user.id, supplierName]
+    );
+    if (!rows.length) return res.json({ error: '도매처 없음: '+supplierName });
+    const cfg = getSupplierApiConfig(rows[0]);
+    if (!cfg || cfg.type !== 'adminplus') return res.json({ error: 'adminplus 아님' });
+    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+
+    let allItems = [], cursor = null, pages = 0;
+    do {
+      const params = { limit: 500 };
+      if (cursor) params.cursor = cursor;
+      const data = await adminplusGetProducts(token, params);
+      allItems = allItems.concat(data.items || []);
+      cursor = data.has_more ? data.next_cursor : null;
+      pages++;
+    } while (cursor && pages < 50);
+
+    const matched = allItems.filter(p => (p.name||'').includes(keyword));
+    const statusDist = {};
+    allItems.forEach(p => { statusDist[p.status||'(없음)'] = (statusDist[p.status||'(없음)']||0)+1; });
+
+    res.json({
+      supplier: supplierName,
+      total_all_status: allItems.length,
+      status_distribution: statusDist,
+      keyword: keyword,
+      matched_count: matched.length,
+      matched_samples: matched.slice(0, 15).map(p => ({ name: p.name, status: p.status, stock: p.stock, price: p.price })),
+    });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 도매처 송장 수집+매칭 ────────────────────────────────────────────────────────
 router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   try {
