@@ -1810,8 +1810,6 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       <button id="stab-browse" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('browse')">📦 상품 보기</button>
       <button id="stab-manage" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('manage')">⚙️ 도매처 관리</button>
       <button id="stab-order" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('order')">📋 발주 매칭</button>
-      <button id="stab-dispatch" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('dispatch')">🚚 발주</button>
-      <button id="stab-invoice" class="tab" style="padding:6px 16px;font-size:13px" onclick="setSupplierSubTab('invoice')">📮 송장수집</button>
     </div>
 
     <!-- ── 가격 비교 패널 ── -->
@@ -2028,74 +2026,6 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       </div>
     </div>
 
-    <!-- ── 발주 패널 ── -->
-    <div id="spanel-dispatch" style="display:none">
-
-      <!-- 보내는사람 설정 (접이식) -->
-      <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
-        <div id="dispatchSenderSummary" onclick="toggleDispatchSender()"
-             style="padding:14px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--surface2)">
-          <span id="dispatchSenderLabel" style="flex:1;font-size:14px;font-weight:600;color:var(--text)">📮 보내는사람 설정 로드 중...</span>
-          <span id="dispatchSenderToggleIcon" style="font-size:12px;color:var(--text-dim)">▼ 펼치기</span>
-        </div>
-        <div id="dispatchSenderForm" style="display:none;padding:18px 20px;display:none;flex-direction:column;gap:12px;background:var(--surface)">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div>
-              <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">업체명</div>
-              <input id="dsSenderName" type="text" placeholder="예: TCG헬스케어"
-                style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
-            </div>
-            <div>
-              <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">전화번호</div>
-              <input id="dsSenderPhone" type="text" placeholder="예: 070-0000-0000"
-                style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
-            </div>
-          </div>
-          <div>
-            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">주소</div>
-            <input id="dsSenderAddress" type="text" placeholder="예: 경기도 성남시 분당구 ..."
-              style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
-          </div>
-          <div style="display:flex;justify-content:flex-end">
-            <button onclick="saveDispatchSender()" class="btn btn-primary" style="font-size:14px;padding:9px 20px">저장</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 기간 조회 -->
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <div class="quick-date-pills">
-          <button id="dispatchQpOrderCycle" class="quick-pill active" onclick="setDispatchQuickDate('order_cycle')">발주분</button>
-          <button id="dispatchQpToday" class="quick-pill" onclick="setDispatchQuickDate('today')">오늘</button>
-          <button id="dispatchQpWeek"  class="quick-pill" onclick="setDispatchQuickDate('week')">최근 7일</button>
-          <button id="dispatchQpMonth" class="quick-pill" onclick="setDispatchQuickDate('month')">이번달</button>
-        </div>
-        <span id="dispatchCycleLabel" style="font-size:12px;color:var(--text-dim)"></span>
-        <input id="dispatchFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="color:var(--text-dim)">~</span>
-        <input id="dispatchTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <button onclick="_dispatchFromDt='';_dispatchToDt='';loadDispatch()" class="btn btn-primary" style="font-size:13px;padding:8px 18px">조회</button>
-        <span id="dispatchSummary" style="font-size:13px;color:var(--text-dim)"></span>
-        <div style="margin-left:auto">
-          <button onclick="downloadAllDispatch()" class="btn btn-sm" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);color:var(--text-sub);white-space:nowrap">📦 전체 발주서 다운로드</button>
-        </div>
-      </div>
-
-      <!-- 결과 영역 -->
-      <div id="dispatchResult" style="display:flex;flex-direction:column;gap:16px"></div>
-    </div>
-
-    <div id="spanel-invoice" style="display:none">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <input id="invFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="color:var(--text-dim)">~</span>
-        <input id="invTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="font-size:12px;color:var(--text-dim);white-space:nowrap">(결제일 기준)</span>
-        <button onclick="collectInvoices(true)" class="btn btn-primary" style="font-size:13px;padding:8px 18px">🔍 송장 수집 (미리보기)</button>
-        <span id="invSummary" style="font-size:13px;color:var(--text-dim)"></span>
-      </div>
-      <div id="invResult" style="display:flex;flex-direction:column;gap:16px"></div>
-    </div>
   </div>
 
   <!-- ══ 올웨이즈 통합 탭 ═══════════════════════════════════════════════════ -->
@@ -2172,8 +2102,40 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
   <!-- ══ 통합 발주·송장 탭 ══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-unified-dispatch">
     <div style="padding:16px">
+      <h2 style="font-size:18px;font-weight:700;margin:0 0 14px">🚚 발주 (쿠팡+올웨이즈 통합)</h2>
+
+      <!-- 보내는사람 설정 (접이식) -->
+      <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
+        <div id="dispatchSenderSummary" onclick="toggleDispatchSender()"
+             style="padding:14px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--surface2)">
+          <span id="dispatchSenderLabel" style="flex:1;font-size:14px;font-weight:600;color:var(--text)">📮 보내는사람 설정 로드 중...</span>
+          <span id="dispatchSenderToggleIcon" style="font-size:12px;color:var(--text-dim)">▼ 펼치기</span>
+        </div>
+        <div id="dispatchSenderForm" style="display:none;padding:18px 20px;flex-direction:column;gap:12px;background:var(--surface)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">업체명</div>
+              <input id="dsSenderName" type="text" placeholder="예: TCG헬스케어"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
+            </div>
+            <div>
+              <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">전화번호</div>
+              <input id="dsSenderPhone" type="text" placeholder="예: 070-0000-0000"
+                style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
+            </div>
+          </div>
+          <div>
+            <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">주소</div>
+            <input id="dsSenderAddress" type="text" placeholder="예: 경기도 성남시 분당구 ..."
+              style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:14px;font-family:var(--sans)">
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button onclick="saveDispatchSender()" class="btn btn-primary" style="font-size:14px;padding:9px 20px">저장</button>
+          </div>
+        </div>
+      </div>
+
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-        <h2 style="font-size:18px;font-weight:700;margin:0">🚚 발주 (쿠팡+올웨이즈 통합)</h2>
         <div style="display:flex;gap:6px">
           <button class="quick-pill" onclick="setUdQuickDate('yesterday')">어제</button>
           <button class="quick-pill" onclick="setUdQuickDate('week')">최근 7일</button>
@@ -10956,8 +10918,7 @@ async function saveOrderMapping() {
     cancelOmEdit();
     if (window._omFromDispatch) {
       window._omFromDispatch = false;
-      setSupplierSubTab('dispatch');
-      loadDispatch();
+      switchTab('unified-dispatch');
     } else {
       await loadOrderMappings();
     }
@@ -11578,8 +11539,7 @@ function prefillOrderMapping(btn) {
 function backToDispatch() {
   window._omFromDispatch = false;
   cancelOmEdit();
-  setSupplierSubTab('dispatch');
-  loadDispatch();
+  switchTab('unified-dispatch');
 }
 
 // 하위 탭 팔레트 (도매처 id → 색)
@@ -11607,15 +11567,13 @@ function setAlwayzSubTab(name) {
 }
 
 function setSupplierSubTab(name) {
-  ['compare','browse','manage','order','dispatch','invoice'].forEach(t => {
+  ['compare','browse','manage','order'].forEach(t => {
     document.getElementById('spanel-' + t).style.display = name === t ? '' : 'none';
     document.getElementById('stab-' + t).classList.toggle('active', name === t);
   });
-  if (name === 'browse')   initSupplierTab();
-  if (name === 'manage')   loadWholesaleSuppliers();
-  if (name === 'order')    initOrderMappingTab();
-  if (name === 'dispatch') initDispatchTab();
-  if (name === 'invoice')  initInvoiceTab();
+  if (name === 'browse') initSupplierTab();
+  if (name === 'manage') loadWholesaleSuppliers();
+  if (name === 'order')  initOrderMappingTab();
 }
 
 // ── 가격 비교 ──────────────────────────────────────────────────────────────────
@@ -12868,6 +12826,7 @@ function initUnifiedDispatch() {
   if (!document.getElementById('udFrom').value) document.getElementById('udFrom').value = fmt(kst);
   if (!document.getElementById('udTo').value) document.getElementById('udTo').value = fmt(kst);
   if (!Object.keys(_orderForms).length) fetch('/api/order-forms').then(r=>r.json()).then(j=>{_orderForms=j.forms||{};});
+  if (typeof loadDispatchSender === 'function') loadDispatchSender();
 }
 
 function setUdQuickDate(preset) {
