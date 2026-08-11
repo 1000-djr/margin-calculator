@@ -2142,9 +2142,22 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
         <button id="udtab-invoice" class="tab" style="padding:6px 16px;font-size:13px" onclick="setUdSubTab('invoice')">📮 송장</button>
       </div>
 
-      <!-- 발주매칭 서브패널 (다음 단계에서 채움) -->
+      <!-- 발주매칭 서브패널 -->
       <div id="udpanel-matching">
-        <div style="padding:20px;color:var(--text-dim)">발주매칭 화면 (준비 중)</div>
+        <div style="padding:8px 0">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <div style="display:flex;gap:6px">
+              <button class="quick-pill active" id="udmFilterAll" onclick="setUdmFilter('all')">전체</button>
+              <button class="quick-pill" id="udmFilterCoupang" onclick="setUdmFilter('coupang')">쿠팡</button>
+              <button class="quick-pill" id="udmFilterAlwayz" onclick="setUdmFilter('alwayz')">올웨이즈</button>
+              <button class="quick-pill" id="udmFilterUnmatched" onclick="setUdmFilter('unmatched')">미매칭만</button>
+            </div>
+            <input id="udmSearch" type="text" placeholder="상품명 검색…" oninput="renderUdMatching()" style="flex:1;min-width:160px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+            <button class="btn" style="font-size:13px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border)" onclick="loadUdMatching()">🔄 새로고침</button>
+            <span id="udmSummary" style="font-size:13px;color:var(--text-dim)"></span>
+          </div>
+          <div id="udmResult"></div>
+        </div>
       </div>
 
       <!-- 발주 서브패널 -->
@@ -12847,6 +12860,152 @@ function setUdSubTab(name) {
     if (btn) btn.classList.toggle('active', name===t);
   });
   if (name === 'matching' && typeof loadUdMatching === 'function') loadUdMatching();
+}
+
+// ── 통합 발주매칭 ─────────────────────────────────────────────────────────────
+let _udmData = { coupang: [], alwayz: [] };
+let _udmFilter = 'all';
+
+async function loadUdMatching() {
+  const summary = document.getElementById('udmSummary');
+  if (summary) summary.textContent = '불러오는 중...';
+  try {
+    const [cpMap, awMap] = await Promise.all([
+      fetch('/api/order-mappings').then(r=>r.json()).catch(()=>[]),
+      fetch('/api/alwayz-order-mappings').then(r=>r.json()).catch(()=>[])
+    ]);
+    _udmData.coupang = Array.isArray(cpMap) ? cpMap.map(m => ({
+      platform:'coupang', key:m.option_id, product_name:m.registered_name, option_name:m.option_name||'',
+      supplier_id:m.supplier_id, supplier_name:m.supplier_name||null, supplier_product_name:m.supplier_product_name||'',
+      matched: !!m.supplier_id
+    })) : [];
+    _udmData.alwayz = Array.isArray(awMap) ? awMap.map(m => ({
+      platform:'alwayz', product_id:m.product_id, option_name:m.option_name||'', product_name:m.registered_name,
+      supplier_id:m.supplier_id, supplier_name:m.supplier_name||null, supplier_product_name:m.supplier_product_name||'',
+      order_count:m.order_count, matched: !!m.supplier_id
+    })) : [];
+    renderUdMatching();
+  } catch(e) { if(summary) summary.textContent = '오류: '+e.message; }
+}
+
+function setUdmFilter(f) {
+  _udmFilter = f;
+  ['all','coupang','alwayz','unmatched'].forEach(x => {
+    const el = document.getElementById('udmFilter'+x.charAt(0).toUpperCase()+x.slice(1));
+    if (el) el.classList.toggle('active', x===f);
+  });
+  renderUdMatching();
+}
+
+function renderUdMatching() {
+  const result = document.getElementById('udmResult');
+  const summary = document.getElementById('udmSummary');
+  if (!result) return;
+  const kw = (document.getElementById('udmSearch')?.value||'').toLowerCase();
+  let all = [..._udmData.coupang, ..._udmData.alwayz];
+  if (_udmFilter==='coupang') all = all.filter(x=>x.platform==='coupang');
+  else if (_udmFilter==='alwayz') all = all.filter(x=>x.platform==='alwayz');
+  else if (_udmFilter==='unmatched') all = all.filter(x=>!x.matched);
+  if (kw) all = all.filter(x=>(x.product_name||'').toLowerCase().includes(kw));
+
+  const matchedCnt = [..._udmData.coupang,..._udmData.alwayz].filter(x=>x.matched).length;
+  const unmatchedCnt = [..._udmData.coupang,..._udmData.alwayz].filter(x=>!x.matched).length;
+  if (summary) summary.textContent = '매칭 '+matchedCnt+' · 미매칭 '+unmatchedCnt;
+
+  if (!all.length) { result.innerHTML = '<div style="padding:20px;color:var(--text-dim)">해당 항목이 없습니다.</div>'; return; }
+  let html = '';
+  all.forEach(x => {
+    const idx = _udmData[x.platform].indexOf(x);
+    const badge = x.platform==='coupang'
+      ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#E6F1FB;color:#0C447C">쿠팡</span>'
+      : '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#FAEEDA;color:#633806">올웨이즈</span>';
+    html += '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;background:var(--surface)">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+badge
+      +'<span style="font-size:14px;font-weight:600">'+escHtml(x.product_name||'')+'</span>'
+      +(x.option_name?'<span style="font-size:13px;color:var(--text-sub)">· '+escHtml(x.option_name)+'</span>':'')
+      +(!x.matched?'<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#fef3e8;color:#b8860b;margin-left:auto">미매칭</span>':'')
+      +'</div>';
+    if (x.matched) {
+      html += '<div style="font-size:13px;color:var(--text-sub)">🏪 '+escHtml(x.supplier_name||'')+' → '+escHtml(x.supplier_product_name||'')+'</div>';
+    }
+    html += '<div style="margin-top:8px"><button class="btn" style="font-size:12px;padding:5px 12px;background:var(--surface2);border:1px solid var(--border)" onclick="openUdmEdit(\''+x.platform+'\','+idx+')">'+(x.matched?'수정':'도매처 지정')+'</button></div>';
+    html += '</div>';
+  });
+  result.innerHTML = html;
+}
+
+function openUdmEdit(platform, idx) {
+  if (platform === 'coupang') {
+    const item = _udmData.coupang[idx];
+    switchTab('supplier');
+    if (typeof setSupplierSubTab==='function') setSupplierSubTab('order');
+    setTimeout(() => {
+      if (document.getElementById('omOptionId')) document.getElementById('omOptionId').value = item.key||'';
+      if (document.getElementById('omRegisteredName')) document.getElementById('omRegisteredName').value = item.product_name||'';
+      if (document.getElementById('omOptionName')) document.getElementById('omOptionName').value = item.option_name||'';
+    }, 300);
+    return;
+  }
+  openUdmAlwayzForm(idx);
+}
+
+async function openUdmAlwayzForm(idx) {
+  const item = _udmData.alwayz[idx];
+  const ws = await fetch('/api/wholesale-suppliers').then(r=>r.json()).catch(()=>[]);
+  const supplierOpts = (Array.isArray(ws)?ws:[]).map(w =>
+    '<option value="'+w.id+'"'+(String(w.id)===String(item.supplier_id)?' selected':'')+'>'+escHtml(w.name)+'</option>'
+  ).join('');
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = '<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;width:480px;max-width:94vw">'
+    +'<div style="font-size:16px;font-weight:700;margin-bottom:4px">올웨이즈 발주매칭</div>'
+    +'<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">'+escHtml(item.product_name||'')+(item.option_name?' · '+escHtml(item.option_name):'')+'</div>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">발주처(도매처)</label>'
+    +'<select id="udmAwSupplier" onchange="udmAwSearchProduct()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;font-family:var(--sans)"><option value="">— 선택 —</option>'+supplierOpts+'</select>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">도매처 상품명(발주서에 찍힘)</label>'
+    +'<input id="udmAwProductName" type="text" value="'+escHtml(item.supplier_product_name||'')+'" placeholder="예: 성주참외 가정용 2kg" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px;font-family:var(--sans)">'
+    +'<div id="udmAwSearchResult" style="max-height:160px;overflow-y:auto;margin-bottom:12px"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="this.closest(\'[style*=fixed]\').remove()">취소</button>'
+    +'<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="saveUdmAlwayz('+idx+',this)">저장</button>'
+    +'</div></div>';
+  document.body.appendChild(modal);
+  const nameInput = modal.querySelector('#udmAwProductName');
+  nameInput.addEventListener('input', udmAwSearchProduct);
+}
+
+async function udmAwSearchProduct() {
+  const supplierId = document.getElementById('udmAwSupplier')?.value;
+  const q = document.getElementById('udmAwProductName')?.value.trim();
+  const box = document.getElementById('udmAwSearchResult');
+  if (!box) return;
+  if (!supplierId || q.length < 1) { box.innerHTML = ''; return; }
+  try {
+    const r = await fetch('/api/order-mappings/search-supplier-product?supplier_id='+encodeURIComponent(supplierId)+'&q='+encodeURIComponent(q));
+    const items = await r.json();
+    if (!Array.isArray(items)||!items.length) { box.innerHTML='<div style="font-size:12px;color:var(--text-dim);padding:6px">검색 결과 없음 (직접 입력해도 됩니다)</div>'; return; }
+    box.innerHTML = items.slice(0,10).map(it =>
+      '<div onclick="document.getElementById(\'udmAwProductName\').value=this.dataset.name;document.getElementById(\'udmAwSearchResult\').innerHTML=\'\'" data-name="'+escHtml(it.name||'')+'" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+escHtml(it.name||'')+'</div>'
+    ).join('');
+  } catch(e) { box.innerHTML = ''; }
+}
+
+async function saveUdmAlwayz(idx, btn) {
+  const item = _udmData.alwayz[idx];
+  const supplier_id = document.getElementById('udmAwSupplier')?.value || null;
+  const supplier_product_name = (document.getElementById('udmAwProductName')?.value||'').trim();
+  if (!supplier_id) { alert('도매처를 선택하세요'); return; }
+  if (!supplier_product_name) { alert('도매처 상품명을 입력하세요'); return; }
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    const r = await fetch('/api/alwayz-order-mappings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ product_id:item.product_id, option_name:item.option_name, registered_name:item.product_name, supplier_id, supplier_product_name, supplier_option_name:'' })
+    });
+    if (!r.ok) { const e=await r.json(); throw new Error(e.error); }
+    btn.closest('[style*=fixed]').remove();
+    await loadUdMatching();
+  } catch(e) { alert('저장 실패: '+e.message); btn.disabled=false; btn.textContent='저장'; }
 }
 
 function initUnifiedDispatch() {
