@@ -4777,7 +4777,7 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
     if (to)   { cpParams.push(to);   cpQ += ` AND SUBSTRING(o.order_date,1,${to.length>10?19:10}) <= $${cpParams.length}`; }
     const { rows: cpRows } = await pool.query(cpQ, cpParams);
 
-    // ── 2. 올웨 발주 대상 (B2B 자동 매칭) ──
+    // ── 2. 올웨 발주 대상 (수동 발주매칭) ──
     const awParams = [req.user.id];
     let awDf = '';
     if (from) { awParams.push(from.slice(0,10)); awDf += ` AND SUBSTRING(o.order_date,1,10) >= $${awParams.length}`; }
@@ -4785,29 +4785,16 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
     const awQ = `
       SELECT o.id, o.order_id, o.order_date, o.product_id, o.product_name, o.option_name,
              o.quantity, o.recipient, o.recipient_phone, o.address, o.zipcode,
-             pm.b2b_name,
-             (
-               SELECT bs.name FROM alwayz_product_mapping pm2
-               JOIN b2b_products bp ON bp.user_id=pm2.user_id AND bp.name=pm2.b2b_name AND bp.unit=pm2.b2b_unit
-               JOIN b2b_prices pr ON pr.user_id=pm2.user_id AND pr.b2b_product_id=bp.id
-                 AND pr.start_date <= CURRENT_DATE AND (pr.end_date IS NULL OR pr.end_date >= CURRENT_DATE)
-               JOIN b2b_suppliers bs ON bs.id=pr.supplier_id
-               WHERE pm2.user_id=o.user_id AND pm2.product_id=o.product_id AND pm2.option_name=o.option_name
-               ORDER BY pr.start_date DESC LIMIT 1
-             ) AS supplier_name
+             m.supplier_id, m.supplier_product_name, m.supplier_option_name,
+             ws.name AS supplier_name, ws.form_key AS supplier_form_key
       FROM alwayz_orders o
-      LEFT JOIN alwayz_product_mapping pm ON pm.user_id=o.user_id AND pm.product_id=o.product_id AND pm.option_name=o.option_name
+      LEFT JOIN alwayz_order_mappings m
+        ON m.user_id=o.user_id AND m.product_id=o.product_id AND m.option_name=o.option_name
+      LEFT JOIN wholesale_suppliers ws ON ws.id=m.supplier_id
       WHERE o.user_id=$1 AND o.ordered_at IS NULL${awDf}`;
     const { rows: awRows } = await pool.query(awQ, awParams);
 
-    // ── 3. wholesale_suppliers 이름→정보 매핑 (올웨용) ──
-    const { rows: wsList } = await pool.query(
-      `SELECT id, name, COALESCE(form_key,'') AS form_key FROM wholesale_suppliers WHERE user_id=$1`, [req.user.id]
-    );
-    const wsByName = {}; const wsById = {};
-    wsList.forEach(w => { wsByName[w.name] = w; wsById[w.id] = w; });
-
-    // ── 4. 도매처별 병합 ──
+    // ── 3. 도매처별 병합 ──
     const groups = {}; const unmatched = [];
     function ensureGroup(sid, sname, fkey) {
       if (!groups[sid]) groups[sid] = { supplier_id: sid, supplier_name: sname, form_key: fkey||null, orders: [], coupang_count: 0, alwayz_count: 0 };
@@ -4832,16 +4819,15 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
     }
     // 올웨 주문 투입
     for (const r of awRows) {
-      if (!r.supplier_name) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason: r.b2b_name?'진행중 매입가 없음':'B2B 미연결' }); continue; }
-      const ws = wsByName[r.supplier_name];
-      if (!ws || !ws.form_key) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주양식 미지정('+r.supplier_name+')' }); continue; }
-      const g = ensureGroup(ws.id, ws.name, ws.form_key);
+      if (!r.supplier_id) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주매칭 안 됨' }); continue; }
+      if (!r.supplier_form_key) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주양식 미지정('+(r.supplier_name||'')+')' }); continue; }
+      const g = ensureGroup(r.supplier_id, r.supplier_name, r.supplier_form_key);
       g.orders.push({
         platform: 'alwayz',
         id: r.id,
         order_number: r.order_id,
-        product_name: r.b2b_name,
-        option_name: '',
+        product_name: r.supplier_product_name || r.product_name,
+        option_name: r.supplier_option_name || '',
         quantity: r.quantity,
         recipient: r.recipient, recipient_phone: r.recipient_phone,
         address: r.address, zipcode: r.zipcode,
