@@ -4678,6 +4678,47 @@ router.get('/alwayz-orders', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 원가표 조회 (주문서 상품 전체 + 저장된 원가 LEFT JOIN) ────────────
+router.get('/alwayz-cost-mapping', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        d.product_id,
+        d.option_name,
+        MAX(d.product_name) AS product_name,
+        MAX(d.order_date)   AS last_order_date,
+        COUNT(*)            AS order_count,
+        cm.cost,
+        cm.tax_type
+      FROM alwayz_orders d
+      LEFT JOIN alwayz_cost_mapping cm
+        ON cm.user_id = d.user_id AND cm.product_id = d.product_id AND cm.option_name = d.option_name
+      WHERE d.user_id = $1
+      GROUP BY d.product_id, d.option_name, cm.cost, cm.tax_type
+      ORDER BY MAX(d.order_date) DESC
+    `, [req.user.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 원가 저장(upsert) ──────────────────────────────────────────────
+router.post('/alwayz-cost-mapping', requireAuth, async (req, res) => {
+  const { product_id, option_name, product_name, cost, tax_type } = req.body || {};
+  if (!product_id) return res.status(400).json({ error: 'product_id 필요' });
+  try {
+    await pool.query(`
+      INSERT INTO alwayz_cost_mapping (user_id, product_id, option_name, product_name, cost, tax_type, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,NOW())
+      ON CONFLICT (user_id, product_id, option_name) DO UPDATE SET
+        product_name = EXCLUDED.product_name,
+        cost = EXCLUDED.cost,
+        tax_type = EXCLUDED.tax_type,
+        updated_at = NOW()
+    `, [req.user.id, product_id, option_name||'', product_name||'', parseFloat(cost)||0, tax_type||'exempt']);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 도매처 송장 수집+매칭 ────────────────────────────────────────────────────────
 router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   try {

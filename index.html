@@ -770,6 +770,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
     <button class="tab" onclick="switchTab('supplier', this)">🏪 도매처</button>
     <button class="tab" onclick="switchTab('alwayz-orders', this)">🌽 올웨(주문서)</button>
+    <button class="tab" onclick="switchTab('alwayz-cost', this)">🌽 올웨(원가표)</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -2112,6 +2113,19 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
+  <!-- ══ 올웨이즈 원가표 탭 ══════════════════════════════════════════════ -->
+  <div class="panel" id="tab-alwayz-cost">
+    <div style="padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 원가표</h2>
+        <button class="btn" style="font-size:13px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border)" onclick="loadAlwayzCostMapping()">🔄 새로고침</button>
+        <span id="alwayzCostSummary" style="font-size:13px;color:var(--text-dim)"></span>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">주문서에 있는 상품이 자동으로 나열됩니다. 각 상품의 원가를 입력하면 수익분석에 반영됩니다. (상품아이디+옵션 기준 매칭)</div>
+      <div id="alwayzCostResult" class="data-table-wrap"></div>
+    </div>
+  </div>
+
 <!-- ══ 올웨이즈 필터링 모달 ══════════════════════════════════════════════ -->
 <div id="alwayzFilterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;width:760px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
@@ -2948,7 +2962,8 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
   orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns',
-  'alwayz-orders': 'alwayz-orders'
+  'alwayz-orders': 'alwayz-orders',
+  'alwayz-cost': 'alwayz-cost'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -2973,6 +2988,7 @@ function _activateTabUI(name) {
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
   if (name === 'alwayz-orders') { loadAlwayzOrders(); }
+  if (name === 'alwayz-cost') { loadAlwayzCostMapping(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -12204,6 +12220,57 @@ async function uploadFilteredAlwayzOrders() {
     alert('업로드 완료: '+j.inserted+'건 저장 (선택 '+toUpload.length+'건)');
     closeAlwayzFilterModal();
     loadAlwayzOrders();
+  } catch(e) { alert('오류: '+e.message); }
+}
+
+// ── 올웨이즈 원가표 ─────────────────────────────────────────────────────────
+let _alwayzCostRows = [];
+async function loadAlwayzCostMapping() {
+  const summary = document.getElementById('alwayzCostSummary');
+  const result  = document.getElementById('alwayzCostResult');
+  if (summary) summary.textContent = '불러오는 중...';
+  try {
+    const res  = await fetch('/api/alwayz-cost-mapping');
+    const rows = await res.json();
+    if (rows.error) { if (summary) summary.textContent = '오류: '+rows.error; return; }
+    _alwayzCostRows = rows;
+    const filled = rows.filter(r => r.cost != null && Number(r.cost) > 0).length;
+    if (summary) summary.textContent = '상품 '+rows.length+'종 · 원가입력 '+filled+'종';
+    if (!rows.length) { result.innerHTML = '<div style="padding:20px;color:var(--text-dim)">주문서를 먼저 업로드하세요.</div>'; return; }
+    let html = '<table class="data-table"><thead><tr>'
+      + '<th>상품명</th><th>옵션</th><th>상품아이디</th><th>주문수</th><th>원가</th><th>과세구분</th><th>저장</th>'
+      + '</tr></thead><tbody>';
+    rows.forEach((r, i) => {
+      html += '<tr>'
+        + '<td>'+escHtml(r.product_name||'')+'</td>'
+        + '<td>'+escHtml(r.option_name||'')+'</td>'
+        + '<td style="font-size:11px;color:var(--text-dim)">'+escHtml(r.product_id||'')+'</td>'
+        + '<td style="text-align:center">'+(r.order_count||0)+'</td>'
+        + '<td><input type="number" id="alwCost_'+i+'" value="'+(r.cost!=null?r.cost:'')+'" placeholder="0" style="width:90px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:right"></td>'
+        + '<td><select id="alwTax_'+i+'" style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px"><option value="exempt"'+((r.tax_type||'exempt')==='exempt'?' selected':'')+'>면세</option><option value="taxable"'+(r.tax_type==='taxable'?' selected':'')+'>과세</option></select></td>'
+        + '<td><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzCost('+i+',this)">저장</button></td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    result.innerHTML = html;
+  } catch(e) { if (summary) summary.textContent = '오류: '+e.message; }
+}
+async function saveAlwayzCost(i, btn) {
+  const r        = _alwayzCostRows[i];
+  const cost     = document.getElementById('alwCost_'+i).value;
+  const tax_type = document.getElementById('alwTax_'+i).value;
+  try {
+    const res = await fetch('/api/alwayz-cost-mapping', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ product_id:r.product_id, option_name:r.option_name, product_name:r.product_name, cost, tax_type })
+    });
+    const j = await res.json();
+    if (j.error) { alert('오류: '+j.error); return; }
+    const orig = btn.textContent;
+    btn.textContent = '✓'; btn.style.background = 'var(--green)';
+    setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1200);
+    _alwayzCostRows[i].cost     = parseFloat(cost)||0;
+    _alwayzCostRows[i].tax_type = tax_type;
   } catch(e) { alert('오류: '+e.message); }
 }
 
