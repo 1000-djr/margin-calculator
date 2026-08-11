@@ -12676,9 +12676,17 @@ function renderAlwayzDispatch(j) {
       html += '<span style="font-size:12px;color:var(--text-dim)">양식 미지정 — 도매처 관리에서 설정</span>';
     }
     html += '</div>';
-    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:5px">상품명</th><th style="padding:5px">수량</th><th style="padding:5px">수령인</th><th style="padding:5px">주소</th></tr></thead><tbody>';
+    const prodMap = {};
     g.orders.forEach(o => {
-      html += '<tr style="border-top:1px solid var(--border)"><td style="padding:5px">'+escHtml(o.product_name||'')+'</td><td style="padding:5px;text-align:center">'+(o.quantity||1)+'</td><td style="padding:5px">'+escHtml(o.recipient||'')+'</td><td style="padding:5px">'+escHtml((o.address||'').slice(0,20))+'</td></tr>';
+      const key = o.product_name || '(이름없음)';
+      if (!prodMap[key]) prodMap[key] = { product_name: key, qty: 0, count: 0 };
+      prodMap[key].qty += (o.quantity || 1);
+      prodMap[key].count += 1;
+    });
+    const prodList = Object.values(prodMap).sort((a,b)=> (a.product_name||'').localeCompare(b.product_name||'','ko'));
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:6px">상품명</th><th style="padding:6px;text-align:center">총수량</th><th style="padding:6px;text-align:center">건수</th></tr></thead><tbody>';
+    prodList.forEach(p => {
+      html += '<tr style="border-top:1px solid var(--border)"><td style="padding:6px">'+escHtml(p.product_name)+'</td><td style="padding:6px;text-align:center;font-weight:600">'+p.qty+'</td><td style="padding:6px;text-align:center;color:var(--text-dim)">'+p.count+'건</td></tr>';
     });
     html += '</tbody></table></div></div>';
   });
