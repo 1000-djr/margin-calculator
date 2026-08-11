@@ -4819,6 +4819,7 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
       const g = ensureGroup(r.supplier_id, r.supplier_name, r.supplier_form_key);
       g.orders.push({
         platform: 'coupang',
+        id: r.id,
         order_number: r.order_number,
         product_name: r.supplier_product_name || r.product_name,
         option_name: r.supplier_option_name || r.option_name || '',
@@ -4837,6 +4838,7 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
       const g = ensureGroup(ws.id, ws.name, ws.form_key);
       g.orders.push({
         platform: 'alwayz',
+        id: r.id,
         order_number: r.order_id,
         product_name: r.b2b_name,
         option_name: '',
