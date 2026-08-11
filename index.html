@@ -2111,6 +2111,18 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
       </div>
       <div id="alwayzUnlinkedArea" style="margin-bottom:16px"></div>
       <div id="alwayzOrderResult" class="data-table-wrap"></div>
+
+      <hr style="border:none;border-top:1px solid var(--border);margin:24px 0 20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <h3 style="font-size:16px;font-weight:700;margin:0">📦 발주 (미발주 주문)</h3>
+        <input id="alwayzDispFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <span style="color:var(--text-dim)">~</span>
+        <input id="alwayzDispTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzDispatch()">🔍 조회</button>
+        <span id="alwayzDispSummary" style="font-size:13px;color:var(--text-dim)"></span>
+        <button id="alwayzDispAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllAlwayzDispatch()">📦 전체 발주서 다운로드</button>
+      </div>
+      <div id="alwayzDispResult"></div>
     </div>
   </div>
 
@@ -12571,6 +12583,166 @@ async function saveAlwayzSaAd(i, btn) {
     const o = btn.textContent; btn.textContent='✓'; btn.style.background='var(--green)';
     setTimeout(() => { btn.textContent=o; btn.style.background=''; }, 1000);
   } catch(e) { alert(e.message); }
+}
+
+// ── 올웨이즈 발주 ──────────────────────────────────────────────────────────────
+let _alwayzDispatchData = null;
+
+async function loadAlwayzDispatch() {
+  const from = document.getElementById('alwayzDispFrom').value;
+  const to   = document.getElementById('alwayzDispTo').value;
+  const summaryEl = document.getElementById('alwayzDispSummary');
+  const resultEl  = document.getElementById('alwayzDispResult');
+  if (summaryEl) summaryEl.textContent = '조회 중...';
+  try {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to)   params.set('to',   to);
+    const r = await fetch('/api/alwayz-orders/for-dispatch?' + params);
+    const j = await r.json();
+    _alwayzDispatchData = j;
+    if (summaryEl) summaryEl.textContent = `미발주 ${j.total}건 · 도매처 ${j.groups.length}곳 · 미매칭 ${j.unmatched.length}건`;
+    renderAlwayzDispatch(j);
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = `<div style="color:var(--red);font-size:14px">조회 실패: ${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderAlwayzDispatch({ groups, unmatched }) {
+  const el = document.getElementById('alwayzDispResult');
+  if (!el) return;
+  let html = '';
+  const colors = ['#4f8ef7','#e6834e','#4caf84','#b47fe0','#e0b44e'];
+  groups.forEach((g, gi) => {
+    const color = colors[gi % colors.length];
+    html += `<div style="border:1px solid ${color}28;border-radius:12px;margin-bottom:16px;overflow:hidden">
+      <div style="background:${color}12;padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-weight:700;color:${color};font-size:14px">${escHtml(g.supplier_name)}</span>
+        <span style="font-size:13px;color:var(--text-dim)">${g.orders.length}건</span>
+        <div style="margin-left:auto">
+          ${g.form_key
+            ? `<button onclick="downloadAlwayzDispatchExcel('${String(g.supplier_id)}')" class="btn btn-sm" style="font-size:12px;padding:6px 14px;background:var(--surface);border:1px solid ${color}38;color:${color};white-space:nowrap">📥 발주서 다운로드</button>`
+            : `<span style="font-size:11px;color:var(--text-dim)">양식 미지정 — 도매처 관리에서 설정</span>`
+          }
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">주문번호</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">상품명</th>
+          <th style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border)">수량</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">수령인</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">주소</th>
+        </tr></thead>
+        <tbody>`;
+    g.orders.forEach(o => {
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 12px;color:var(--text-dim);font-size:12px">${escHtml(o.order_id||'')}</td>
+        <td style="padding:7px 12px">${escHtml(o.product_name||'')}${o.option_name ? ' / '+escHtml(o.option_name) : ''}</td>
+        <td style="padding:7px 12px;text-align:center">${o.quantity||1}</td>
+        <td style="padding:7px 12px">${escHtml(o.recipient||'')} ${escHtml(o.recipient_phone||'')}</td>
+        <td style="padding:7px 12px;font-size:12px">${escHtml(o.address||'')} ${escHtml(o.zipcode||'')}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  });
+  if (unmatched.length) {
+    html += `<div style="border:1px solid var(--border);border-radius:12px;margin-bottom:16px;overflow:hidden">
+      <div style="background:var(--surface2);padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-weight:700;color:var(--text-dim);font-size:14px">⚠ 미매칭</span>
+        <span style="font-size:13px;color:var(--text-dim)">${unmatched.length}건</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">상품명</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">옵션</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--border)">사유</th>
+        </tr></thead>
+        <tbody>`;
+    unmatched.forEach(o => {
+      html += `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 12px">${escHtml(o.product_name||'')}</td>
+        <td style="padding:7px 12px;color:var(--text-dim)">${escHtml(o.option_name||'')}</td>
+        <td style="padding:7px 12px;color:var(--orange);font-size:12px">${escHtml(o.reason||'')}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  if (!groups.length && !unmatched.length) {
+    html = '<div style="color:var(--text-dim);font-size:14px;padding:20px 0">미발주 주문이 없습니다.</div>';
+  }
+  el.innerHTML = html;
+  const allBtn = document.getElementById('alwayzDispAllBtn');
+  if (allBtn) allBtn.style.display = (groups.length > 0) ? '' : 'none';
+}
+
+function _buildAlwayzDispatchWorkbook(group, sender) {
+  const form = _orderForms[group.form_key];
+  if (!form) return null;
+  const cols = form.columns;
+  const header = cols.map(c => c.header);
+  const dataRows = group.orders.map(o => cols.map(c => {
+    switch (c.source) {
+      case 'recipient_name':    return o.recipient         || '';
+      case 'recipient_phone':   return o.recipient_phone   || '';
+      case 'recipient_address': return o.address           || '';
+      case 'recipient_zipcode': return o.zipcode           || '';
+      case 'product_name':      return o.product_name      || '';
+      case 'option_name':       return o.option_name       || '';
+      case 'qty':               return o.quantity          || 1;
+      case 'delivery_msg':      return o.delivery_msg      || '';
+      case 'sender_name':       return sender.name         || '';
+      case 'sender_phone':      return sender.phone        || '';
+      case 'sender_address':    return sender.address      || '';
+      case 'order_number':      return o.order_id          || '';
+      case 'empty':             return '';
+      default:                  return '';
+    }
+  }));
+  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, form.sheet || 'Sheet1');
+  return wb;
+}
+
+async function downloadAlwayzDispatchExcel(supplierId) {
+  if (!_alwayzDispatchData) return alert('먼저 조회해 주세요.');
+  const group = _alwayzDispatchData.groups.find(g => String(g.supplier_id) === String(supplierId));
+  if (!group) return alert('해당 도매처 데이터가 없습니다.');
+  if (!group.form_key) return alert('발주 양식이 지정되지 않았습니다.\n도매처 관리 탭에서 발주 양식을 설정하세요.');
+  const sender = _getDispatchSender();
+  if (!sender.name || !sender.phone) return alert('보내는사람 정보를 먼저 설정하세요.\n(쿠팡 발주 탭 > 보내는사람 정보)');
+  const wb = _buildAlwayzDispatchWorkbook(group, sender);
+  if (!wb) return alert('양식 데이터를 불러올 수 없습니다.');
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, `올웨_${group.supplier_name}_발주_${today}.xlsx`);
+}
+
+async function downloadAllAlwayzDispatch() {
+  if (!_alwayzDispatchData || !_alwayzDispatchData.groups.length) return alert('발주 대상이 없습니다.');
+  const sender = _getDispatchSender();
+  if (!sender.name || !sender.phone) return alert('보내는사람 정보를 먼저 설정하세요.\n(쿠팡 발주 탭 > 보내는사람 정보)');
+  const groups = _alwayzDispatchData.groups.filter(g => g.form_key);
+  if (!groups.length) return alert('발주 양식이 지정된 도매처가 없습니다.');
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  if (groups.length === 1) {
+    const wb = _buildAlwayzDispatchWorkbook(groups[0], sender);
+    if (wb) XLSX.writeFile(wb, `올웨_${groups[0].supplier_name}_발주_${today}.xlsx`);
+  } else {
+    const zip = new JSZip();
+    for (const g of groups) {
+      const wb = _buildAlwayzDispatchWorkbook(g, sender);
+      if (!wb) continue;
+      const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      zip.file(`올웨_${g.supplier_name}_발주_${today}.xlsx`, buf);
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `올웨이즈_발주서_${today}.zip`;
+    a.click();
+  }
+  alert('전체 발주서 다운로드 완료 ('+groups.length+'개 도매처)');
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
