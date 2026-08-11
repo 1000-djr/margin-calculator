@@ -2174,6 +2174,16 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button id="alwayzDispAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllAlwayzDispatch()">📦 전체 발주서 다운로드</button>
       </div>
       <div id="alwayzDispResult" style="display:flex;flex-direction:column;gap:16px"></div>
+
+      <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
+          <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="collectAlwayzInvoices(true)">🔍 송장 수집 (미리보기)</button>
+          <span id="alwayzInvSummary" style="font-size:13px;color:var(--text-dim)"></span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">발주 기간과 동일한 날짜로 조회됩니다. 도매처 송장을 주문아이디(1차)·전화번호(2차)로 매칭합니다.</div>
+        <div id="alwayzInvResult"></div>
+      </div>
     </div>
   </div>
 
@@ -12715,6 +12725,70 @@ async function downloadAllAlwayzDispatch() {
     await new Promise(r => setTimeout(r, 500));
   }
   alert('전체 발주서 다운로드 완료 ('+supplierIds.length+'개 도매처, 파일 각각 생성)');
+}
+
+// ── 올웨이즈 송장 수집 ────────────────────────────────────────────────────────
+let _alwayzInvData = null;
+
+async function collectAlwayzInvoices(dryRun) {
+  const from = document.getElementById('alwayzDispFrom').value;
+  const to = document.getElementById('alwayzDispTo').value;
+  if (!from || !to) return alert('발주 탭 기간을 먼저 설정하세요');
+  const summary = document.getElementById('alwayzInvSummary');
+  const result = document.getElementById('alwayzInvResult');
+  summary.textContent = dryRun ? '수집 중...' : '저장 중...';
+  try {
+    const res = await fetch('/api/alwayz-orders/collect-invoices', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ from, to, dryRun })
+    });
+    const j = await res.json();
+    if (j.error) { summary.textContent = '오류: '+j.error; return; }
+    _alwayzInvData = j;
+    summary.textContent = '총 '+j.total+'건 · 매칭 '+j.matched+'건 · 미매칭 '+j.unmatched_count+'건';
+    let html = '<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">';
+    html += '<div style="font-size:14px;font-weight:700;color:var(--green)">✅ 매칭 '+j.matched+'건</div>';
+    if (dryRun && j.matched>0) html += '<button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="collectAlwayzInvoices(false)">💾 확정 저장</button>';
+    if (!dryRun && j.matched>0) html += '<span style="font-size:13px;color:var(--green)">✔ 저장 완료</span>';
+    if (j.matched>0) html += '<button class="btn" style="font-size:13px;padding:6px 14px;background:var(--surface2);border:1px solid var(--border)" onclick="downloadAlwayzInvoiceExcel()">📥 올웨이즈 송장 엑셀</button>';
+    html += '</div>';
+    if (j.matched_list && j.matched_list.length) {
+      html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:5px">주문아이디</th><th style="padding:5px">택배사</th><th style="padding:5px">송장번호</th><th style="padding:5px">매칭</th></tr></thead><tbody>';
+      j.matched_list.slice(0,50).forEach(m => {
+        html += '<tr style="border-top:1px solid var(--border)"><td style="padding:5px;font-size:10px">'+escHtml((m.order_id||'').slice(0,12))+'…</td><td style="padding:5px">'+escHtml(m.shipping_company||'')+'</td><td style="padding:5px">'+escHtml(m.tracking_number||'')+'</td><td style="padding:5px">'+(m.match_by==='order_id'?'주문아이디':'전화번호')+'</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    if (j.unmatched_count>0) {
+      const byReason={}; j.unmatched.forEach(u=>{ byReason[u.reason]=(byReason[u.reason]||0)+1; });
+      html += '<div style="margin-top:10px;font-size:13px;color:var(--text-sub)">⚠️ 미매칭 '+j.unmatched_count+'건: '+Object.entries(byReason).map(([k,v])=>escHtml(k)+' '+v).join(', ')+'</div>';
+    }
+    html += '</div>';
+    result.innerHTML = html;
+  } catch(e) { summary.textContent = '오류: '+e.message; }
+}
+
+async function downloadAlwayzInvoiceExcel() {
+  const from = document.getElementById('alwayzDispFrom').value;
+  const to = document.getElementById('alwayzDispTo').value;
+  const res = await fetch('/api/alwayz-orders/invoice-excel-data?from='+from+'&to='+to);
+  const rows = await res.json();
+  if (rows.error) return alert(rows.error);
+  if (!rows.length) return alert('송장이 있는 주문이 없습니다. 먼저 송장 수집·확정하세요.');
+  const headers = ['주문아이디','상품아이디','합배송아이디','판매자 상품코드','상품명','옵션','수량','상품가격','배송비','추가지원금','올웨이즈 부담 쿠폰 할인금','판매자 부담 쿠폰 할인금','총 쿠폰 할인금','예상 정산금액(수수료 제외)','주소','우편번호','공동현관 비밀번호','수령 방법','수령인','수령인 연락처','주문 시점','택배사','운송장번호','고유 코드'];
+  const data = rows.map(r => [
+    r.order_id, r.product_id, r.bundle_id, r.seller_product_code, r.product_name, r.option_name,
+    r.quantity, Number(r.product_price)||0, Number(r.delivery_fee)||0, Number(r.extra_support)||0,
+    Number(r.coupon_alwayz)||0, Number(r.coupon_seller)||0, Number(r.coupon_total)||0, Number(r.settlement_amount)||0,
+    r.address, r.zipcode, r.entrance_password, r.receive_method, r.recipient, r.recipient_phone,
+    r.order_date, r.courier||'', r.tracking_number||'', r.unique_code||''
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '주문 내역');
+  const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  XLSX.writeFile(wb, '올웨이즈_송장업로드_'+today+'.xlsx');
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

@@ -4756,6 +4756,84 @@ router.post('/alwayz-orders/mark-dispatched', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 송장 수집+매칭 ─────────────────────────────────────────────────────
+router.post('/alwayz-orders/collect-invoices', requireAuth, async (req, res) => {
+  try {
+    const { from, to, dryRun } = req.body || {};
+    const params = [req.user.id];
+    let df = '';
+    if (from) { params.push(from); df += ` AND SUBSTRING(order_date,1,10) >= $${params.length}`; }
+    if (to)   { params.push(to);   df += ` AND SUBSTRING(order_date,1,10) <= $${params.length}`; }
+
+    const { rows: orders } = await pool.query(
+      `SELECT id, order_id, product_id, order_date, recipient_phone, courier, tracking_number
+       FROM alwayz_orders WHERE user_id=$1${df}`, params
+    );
+
+    const { rows: linkedSuppliers } = await pool.query(
+      `SELECT id FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
+      [req.user.id]
+    );
+    const invoiceMap = {};
+    const supplierErrors = {};
+    for (const s of linkedSuppliers) {
+      try { invoiceMap[s.id] = await fetchSupplierInvoices(req.user.id, s.id); }
+      catch(e) { supplierErrors[s.id] = e.message; invoiceMap[s.id] = []; }
+    }
+    const allInvoices = Object.values(invoiceMap).flat();
+
+    const matched = []; const unmatched = [];
+    for (const o of orders) {
+      const ourPhone = normalizePhone(o.recipient_phone);
+      const ourOrderId = (o.order_id || '').trim();
+      let hit = ourOrderId ? allInvoices.find(inv => inv.customer_order_code && inv.customer_order_code.trim() === ourOrderId) : null;
+      if (!hit && ourPhone && ourPhone.length >= 10) {
+        hit = allInvoices.find(inv => inv.receiver_phone === ourPhone);
+      }
+      if (hit) {
+        if (!dryRun) {
+          await pool.query(
+            `UPDATE alwayz_orders SET courier=$1, tracking_number=$2 WHERE id=$3 AND user_id=$4`,
+            [hit.shipping_company, hit.tracking_number, o.id, req.user.id]
+          );
+        }
+        matched.push({
+          order_id: o.order_id,
+          match_by: (ourOrderId && hit.customer_order_code?.trim() === ourOrderId) ? 'order_id' : 'phone',
+          shipping_company: hit.shipping_company,
+          tracking_number: hit.tracking_number,
+        });
+      } else {
+        unmatched.push({
+          order_id: o.order_id,
+          our_phone: ourPhone || '(없음)',
+          reason: allInvoices.length === 0 ? '수집송장0건(미발송추정)' : '매칭실패(도매처송장에없음)',
+        });
+      }
+    }
+    res.json({
+      total: orders.length, matched: matched.length, unmatched_count: unmatched.length,
+      matched_list: matched, unmatched, supplier_errors: supplierErrors, dryRun: !!dryRun,
+    });
+  } catch(e) { console.error('[alwayz collect-invoices]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 송장 엑셀용 데이터 ───────────────────────────────────────────────
+router.get('/alwayz-orders/invoice-excel-data', requireAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const params = [req.user.id];
+    let df = '';
+    if (from) { params.push(from); df += ` AND SUBSTRING(order_date,1,10) >= $${params.length}`; }
+    if (to)   { params.push(to);   df += ` AND SUBSTRING(order_date,1,10) <= $${params.length}`; }
+    const { rows } = await pool.query(
+      `SELECT * FROM alwayz_orders WHERE user_id=$1 AND tracking_number IS NOT NULL AND tracking_number <> ''${df} ORDER BY order_date`,
+      params
+    );
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 올웨이즈 SA광고 조회 ────────────────────────────────────────────────────────
 router.get('/alwayz-sa-ads', requireAuth, async (req, res) => {
   try {
