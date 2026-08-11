@@ -769,9 +769,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('profit', this)">📊 수익분석</button>
     <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
     <button class="tab" onclick="switchTab('supplier', this)">🏪 도매처</button>
-    <button class="tab" onclick="switchTab('alwayz-orders', this)">🌽 올웨(주문서)</button>
-    <button class="tab" onclick="switchTab('alwayz-profit', this)">🌽 올웨(수익분석)</button>
-    <button class="tab" onclick="switchTab('alwayz-dispatch', this)">🌽 올웨(발주)</button>
+    <button class="tab" onclick="switchTab('alwayz', this)">🌽 올웨이즈</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -2097,92 +2095,101 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
-  <!-- ══ 올웨이즈 주문서 탭 ══════════════════════════════════════════════ -->
-  <div class="panel" id="tab-alwayz-orders">
-    <div style="padding:16px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 주문서</h2>
-        <input type="file" id="alwayzOrderFile" accept=".xlsx,.xls" style="display:none" onchange="handleAlwayzOrdersUpload(this)">
-        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="document.getElementById('alwayzOrderFile').click()">📤 주문서 업로드</button>
-        <input id="alwayzFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="color:var(--text-dim)">~</span>
-        <input id="alwayzTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="loadAlwayzOrders()">🔍 조회</button>
-        <span id="alwayzOrderSummary" style="font-size:13px;color:var(--text-dim)"></span>
-      </div>
-      <div id="alwayzUnlinkedArea" style="margin-bottom:16px"></div>
-      <div id="alwayzOrderResult" class="data-table-wrap"></div>
+  <!-- ══ 올웨이즈 통합 탭 ═══════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-alwayz">
+    <!-- 서브탭 버튼 -->
+    <div style="display:flex;gap:6px;padding:12px 16px 0;flex-wrap:wrap">
+      <button id="astab-orders" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('orders')">📋 주문서</button>
+      <button id="astab-profit" class="tab" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('profit')">📊 수익분석</button>
+      <button id="astab-dispatch" class="tab" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('dispatch')">🚚 발주·송장</button>
     </div>
-  </div>
 
-
-  <!-- ══ 올웨이즈 수익분석 탭 ══════════════════════════════════════════════ -->
-  <div class="panel" id="tab-alwayz-profit">
-    <div style="padding:16px">
-      <h2 style="font-size:18px;font-weight:700;margin:0 0 4px">🌽 올웨이즈 수익분석</h2>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">순익 = 예상정산금액 − 원가 + 매입세액공제(수수료·광고비의 1/11). 광고비는 추후 연결.</div>
-      <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:16px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
-        <div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">집계 단위</div>
-          <div style="display:inline-flex;background:var(--surface2);border-radius:8px;padding:3px">
-            <button class="period-btn active" id="alwPeriodDay" onclick="setAlwayzPeriodMode('day')">일별</button>
-            <button class="period-btn" id="alwPeriodWeek" onclick="setAlwayzPeriodMode('week')">주별</button>
-            <button class="period-btn" id="alwPeriodMonth" onclick="setAlwayzPeriodMode('month')">월별</button>
-          </div>
+    <!-- 주문서 서브패널 -->
+    <div id="apanel-orders">
+      <div style="padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 주문서</h2>
+          <input type="file" id="alwayzOrderFile" accept=".xlsx,.xls" style="display:none" onchange="handleAlwayzOrdersUpload(this)">
+          <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="document.getElementById('alwayzOrderFile').click()">📤 주문서 업로드</button>
+          <input id="alwayzFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <span style="color:var(--text-dim)">~</span>
+          <input id="alwayzTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="loadAlwayzOrders()">🔍 조회</button>
+          <span id="alwayzOrderSummary" style="font-size:13px;color:var(--text-dim)"></span>
         </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">시작일</div>
-          <input id="alwayzProfitFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">종료일</div>
-          <input id="alwayzProfitTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">빠른 선택</div>
-          <div style="display:flex;gap:6px">
-            <button class="quick-pill" id="alwProfitQpYesterday" onclick="setAlwayzProfitQuickDate('yesterday')">어제</button>
-            <button class="quick-pill" id="alwProfitQpWeek" onclick="setAlwayzProfitQuickDate('week')">최근 7일</button>
-            <button class="quick-pill active" id="alwProfitQpMonth" onclick="setAlwayzProfitQuickDate('month')">이번 달</button>
-          </div>
-        </div>
-        <button class="btn btn-primary" style="font-size:13px;padding:9px 18px" onclick="loadAlwayzProfit()">🔍 분석 실행</button>
+        <div id="alwayzUnlinkedArea" style="margin-bottom:16px"></div>
+        <div id="alwayzOrderResult" class="data-table-wrap"></div>
       </div>
-      <details style="margin-bottom:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">
-        <summary style="padding:12px 16px;cursor:pointer;font-size:14px;font-weight:600">📢 광고비 입력 (SA · 올팜)</summary>
-        <div style="padding:0 16px 16px">
-          <div id="alwayzAdArea" style="font-size:12px;color:var(--text-dim)">기간을 선택하고 분석하면 광고비 입력란이 나옵니다.</div>
-        </div>
-      </details>
-      <div id="alwayzProfitSummary" style="margin-bottom:16px"></div>
-      <div id="alwayzProfitPeriods" style="margin-bottom:16px"></div>
-      <div id="alwayzProfitResult" class="data-table-wrap"></div>
     </div>
-  </div>
 
-<!-- ══ 올웨이즈 발주 탭 ══════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-alwayz-dispatch" style="display:none">
-    <div style="padding:16px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 발주</h2>
-        <input id="alwayzDispFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="color:var(--text-dim)">~</span>
-        <input id="alwayzDispTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="font-size:12px;color:var(--text-dim)">(결제일 기준, 미발주만)</span>
-        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzDispatch()">🔍 발주 대상 조회</button>
-        <span id="alwayzDispSummary" style="font-size:13px;color:var(--text-dim)"></span>
-        <button id="alwayzDispAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllAlwayzDispatch()">📦 전체 발주서 다운로드</button>
-      </div>
-      <div id="alwayzDispResult" style="display:flex;flex-direction:column;gap:16px"></div>
-
-      <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-          <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
-          <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="collectAlwayzInvoices(true)">🔍 송장 수집 (미리보기)</button>
-          <span id="alwayzInvSummary" style="font-size:13px;color:var(--text-dim)"></span>
+    <!-- 수익분석 서브패널 -->
+    <div id="apanel-profit" style="display:none">
+      <div style="padding:16px">
+        <h2 style="font-size:18px;font-weight:700;margin:0 0 4px">🌽 올웨이즈 수익분석</h2>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">순익 = 예상정산금액 − 원가 + 매입세액공제(수수료·광고비의 1/11). 광고비는 추후 연결.</div>
+        <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:16px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">집계 단위</div>
+            <div style="display:inline-flex;background:var(--surface2);border-radius:8px;padding:3px">
+              <button class="period-btn active" id="alwPeriodDay" onclick="setAlwayzPeriodMode('day')">일별</button>
+              <button class="period-btn" id="alwPeriodWeek" onclick="setAlwayzPeriodMode('week')">주별</button>
+              <button class="period-btn" id="alwPeriodMonth" onclick="setAlwayzPeriodMode('month')">월별</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">시작일</div>
+            <input id="alwayzProfitFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">종료일</div>
+            <input id="alwayzProfitTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">빠른 선택</div>
+            <div style="display:flex;gap:6px">
+              <button class="quick-pill" id="alwProfitQpYesterday" onclick="setAlwayzProfitQuickDate('yesterday')">어제</button>
+              <button class="quick-pill" id="alwProfitQpWeek" onclick="setAlwayzProfitQuickDate('week')">최근 7일</button>
+              <button class="quick-pill active" id="alwProfitQpMonth" onclick="setAlwayzProfitQuickDate('month')">이번 달</button>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="font-size:13px;padding:9px 18px" onclick="loadAlwayzProfit()">🔍 분석 실행</button>
         </div>
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">발주 기간과 동일한 날짜로 조회됩니다. 도매처 송장을 주문아이디(1차)·전화번호(2차)로 매칭합니다.</div>
-        <div id="alwayzInvResult"></div>
+        <details style="margin-bottom:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">
+          <summary style="padding:12px 16px;cursor:pointer;font-size:14px;font-weight:600">📢 광고비 입력 (SA · 올팜)</summary>
+          <div style="padding:0 16px 16px">
+            <div id="alwayzAdArea" style="font-size:12px;color:var(--text-dim)">기간을 선택하고 분석하면 광고비 입력란이 나옵니다.</div>
+          </div>
+        </details>
+        <div id="alwayzProfitSummary" style="margin-bottom:16px"></div>
+        <div id="alwayzProfitPeriods" style="margin-bottom:16px"></div>
+        <div id="alwayzProfitResult" class="data-table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- 발주·송장 서브패널 -->
+    <div id="apanel-dispatch" style="display:none">
+      <div style="padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 발주</h2>
+          <input id="alwayzDispFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <span style="color:var(--text-dim)">~</span>
+          <input id="alwayzDispTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <span style="font-size:12px;color:var(--text-dim)">(결제일 기준, 미발주만)</span>
+          <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzDispatch()">🔍 발주 대상 조회</button>
+          <span id="alwayzDispSummary" style="font-size:13px;color:var(--text-dim)"></span>
+          <button id="alwayzDispAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllAlwayzDispatch()">📦 전체 발주서 다운로드</button>
+        </div>
+        <div id="alwayzDispResult" style="display:flex;flex-direction:column;gap:16px"></div>
+
+        <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
+            <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="collectAlwayzInvoices(true)">🔍 송장 수집 (미리보기)</button>
+            <span id="alwayzInvSummary" style="font-size:13px;color:var(--text-dim)"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">발주 기간과 동일한 날짜로 조회됩니다. 도매처 송장을 주문아이디(1차)·전화번호(2차)로 매칭합니다.</div>
+          <div id="alwayzInvResult"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -3024,9 +3031,7 @@ const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
   orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns',
   supplier: 'supplier',
-  'alwayz-orders': 'alwayz-orders',
-  'alwayz-profit': 'alwayz-profit',
-  'alwayz-dispatch': 'alwayz-dispatch'
+  'alwayz': 'alwayz'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -3050,9 +3055,7 @@ function _activateTabUI(name) {
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
-  if (name === 'alwayz-orders') { loadAlwayzOrders(); }
-  if (name === 'alwayz-profit') { loadAlwayzProfit(); }
-  if (name === 'alwayz-dispatch') { initAlwayzDispatch(); }
+  if (name === 'alwayz') { setAlwayzSubTab(_alwayzSubTab || 'orders'); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -11571,6 +11574,20 @@ function _supplierColor(id) {
     _supplierColorMap[id] = _supplierColors[keys.length % _supplierColors.length];
   }
   return _supplierColorMap[id];
+}
+
+let _alwayzSubTab = 'orders';
+function setAlwayzSubTab(name) {
+  _alwayzSubTab = name;
+  ['orders','profit','dispatch'].forEach(t => {
+    const panel = document.getElementById('apanel-'+t);
+    const btn = document.getElementById('astab-'+t);
+    if (panel) panel.style.display = (name===t) ? '' : 'none';
+    if (btn) btn.classList.toggle('active', name===t);
+  });
+  if (name === 'orders')   loadAlwayzOrders();
+  if (name === 'profit')   loadAlwayzProfit();
+  if (name === 'dispatch') initAlwayzDispatch();
 }
 
 function setSupplierSubTab(name) {
