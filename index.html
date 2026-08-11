@@ -37,6 +37,8 @@
 body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; -webkit-font-smoothing: antialiased; opacity: 0; transition: opacity 0.22s ease; }
 .result-value, .big-value, .history-margin, .badge,
 .b2b-table td input[type="number"], input[type="number"] { font-feature-settings: "tnum"; }
+input, select, textarea, button { font-family: var(--sans); }
+input[type="date"], input[type="number"], input[type="text"] { font-family: var(--sans) !important; font-feature-settings: "tnum"; }
 .app { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
 .header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
 .header-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #34c759, #1d8348); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 8px rgba(29,131,72,0.3); }
@@ -2213,9 +2215,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
           <button class="quick-pill" onclick="setUdQuickDate('week')">최근 7일</button>
           <button class="quick-pill active" onclick="setUdQuickDate('today')">오늘</button>
         </div>
-        <input id="udFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text)">
+        <input id="udFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
         <span style="color:var(--text-dim)">~</span>
-        <input id="udTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text)">
+        <input id="udTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
         <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadUnifiedDispatch()">🔍 발주 대상 조회</button>
         <span id="udSummary" style="font-size:13px;color:var(--text-dim)"></span>
         <button id="udAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllUnified()">📦 전체 발주서</button>
