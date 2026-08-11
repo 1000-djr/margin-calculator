@@ -2112,6 +2112,36 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
+<!-- ══ 올웨이즈 필터링 모달 ══════════════════════════════════════════════ -->
+<div id="alwayzFilterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px;padding:28px 32px;width:760px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
+    <div style="font-size:20px;font-weight:700;margin-bottom:4px">🔍 업로드 전 필터링</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:14px">업로드할 상품을 선택하세요. 선택된 상품의 주문만 저장됩니다.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <input id="alwayzFilterSearch" type="text" placeholder="상품명 검색…" style="flex:1;min-width:180px;padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface);color:var(--text)" oninput="renderAlwayzFilterTable()">
+      <button class="btn btn-ghost btn-sm" onclick="setAllAlwayzFilter(true)">전체선택</button>
+      <button class="btn btn-ghost btn-sm" onclick="setAllAlwayzFilter(false)">전체해제</button>
+      <span id="alwayzFilterCount" style="font-size:13px;color:var(--text-dim);white-space:nowrap"></span>
+    </div>
+    <div style="overflow-y:auto;flex:1;border:1px solid var(--border);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
+          <th style="padding:8px 10px;text-align:center;width:36px;border-bottom:1px solid var(--border)"><input type="checkbox" id="alwayzFilterSelectAll" onchange="setAllAlwayzFilter(this.checked)" style="accent-color:var(--primary)"></th>
+          <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">상품명</th>
+          <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)">옵션</th>
+          <th style="padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap">판매자상품코드</th>
+          <th style="padding:8px 10px;text-align:center;border-bottom:1px solid var(--border);white-space:nowrap">주문수</th>
+        </tr></thead>
+        <tbody id="alwayzFilterTbody"></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;align-items:center">
+      <button class="btn btn-ghost" onclick="closeAlwayzFilterModal()">취소</button>
+      <button class="btn btn-primary" onclick="uploadFilteredAlwayzOrders()">선택한 상품만 업로드</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 발주처 변경 모달 ══════════════════════════════════════════════════ -->
 <div id="dispatchReassignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeDispatchReassign()">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:480px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,0.25);max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
@@ -12079,11 +12109,14 @@ function downloadCoupangInvoiceExcel() {
 //            추가지원금,올웨이즈 부담 쿠폰 할인금,판매자 부담 쿠폰 할인금,총 쿠폰 할인금,
 //            예상 정산금액(수수료 제외),주소,우편번호,공동현관 비밀번호,수령 방법,수령인,
 //            수령인 연락처,주문 시점,택배사,운송장번호,고유 코드
+let _alwayzParsedItems = [];
+let _alwayzFilterGroups = [];
+
 function handleAlwayzOrdersUpload(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = async (e) => {
+  reader.onload = (e) => {
     try {
       const wb = XLSX.read(e.target.result, { type:'array', cellDates:false });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -12094,44 +12127,86 @@ function handleAlwayzOrdersUpload(input) {
         const r = rows[i];
         if (!r[0]) continue;
         items.push({
-          order_id:            String(r[0]||''),
-          product_id:          String(r[1]||''),
-          bundle_id:           String(r[2]||''),
-          seller_product_code: String(r[3]||''),
-          product_name:        String(r[4]||''),
-          option_name:         String(r[5]||''),
-          quantity:            parseInt(r[6])||1,
-          product_price:       parseFloat(r[7])||0,
-          delivery_fee:        parseFloat(r[8])||0,
-          extra_support:       parseFloat(r[9])||0,
-          coupon_alwayz:       parseFloat(r[10])||0,
-          coupon_seller:       parseFloat(r[11])||0,
-          coupon_total:        parseFloat(r[12])||0,
-          settlement_amount:   parseFloat(r[13])||0,
-          address:             String(r[14]||''),
-          zipcode:             String(r[15]||''),
-          entrance_password:   String(r[16]||''),
-          receive_method:      String(r[17]||''),
-          recipient:           String(r[18]||''),
-          recipient_phone:     String(r[19]||''),
-          order_date:          String(r[20]||''),
-          courier:             String(r[21]||''),
-          tracking_number:     String(r[22]||''),
+          order_id:String(r[0]||''), product_id:String(r[1]||''), bundle_id:String(r[2]||''),
+          seller_product_code:String(r[3]||''), product_name:String(r[4]||''), option_name:String(r[5]||''),
+          quantity:parseInt(r[6])||1, product_price:parseFloat(r[7])||0, delivery_fee:parseFloat(r[8])||0,
+          extra_support:parseFloat(r[9])||0, coupon_alwayz:parseFloat(r[10])||0, coupon_seller:parseFloat(r[11])||0,
+          coupon_total:parseFloat(r[12])||0, settlement_amount:parseFloat(r[13])||0, address:String(r[14]||''),
+          zipcode:String(r[15]||''), entrance_password:String(r[16]||''), receive_method:String(r[17]||''),
+          recipient:String(r[18]||''), recipient_phone:String(r[19]||''), order_date:String(r[20]||''),
+          courier:String(r[21]||''), tracking_number:String(r[22]||''),
         });
       }
       if (!items.length) { alert('업로드할 주문이 없습니다'); return; }
-      const res = await fetch('/api/alwayz-orders/bulk', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ items })
+      _alwayzParsedItems = items;
+      const map = {};
+      items.forEach(it => {
+        const key = it.product_name+'|'+it.option_name+'|'+it.seller_product_code;
+        if (!map[key]) map[key] = { key, product_name:it.product_name, option_name:it.option_name, seller_product_code:it.seller_product_code, count:0, selected:true };
+        map[key].count++;
       });
-      const j = await res.json();
-      if (j.error) { alert('오류: '+j.error); return; }
-      alert(`업로드 완료: ${j.inserted}건 저장 (전체 ${j.total}건)`);
-      loadAlwayzOrders();
+      _alwayzFilterGroups = Object.values(map);
+      openAlwayzFilterModal();
     } catch(err) { alert('파싱 오류: '+err.message); }
     input.value = '';
   };
   reader.readAsArrayBuffer(file);
+}
+
+function openAlwayzFilterModal() {
+  document.getElementById('alwayzFilterModal').style.display = 'flex';
+  document.getElementById('alwayzFilterSearch').value = '';
+  renderAlwayzFilterTable();
+}
+function closeAlwayzFilterModal() {
+  document.getElementById('alwayzFilterModal').style.display = 'none';
+  _alwayzParsedItems = []; _alwayzFilterGroups = [];
+}
+function setAllAlwayzFilter(checked) {
+  const kw = (document.getElementById('alwayzFilterSearch').value||'').toLowerCase();
+  _alwayzFilterGroups.forEach(g => {
+    if (!kw || g.product_name.toLowerCase().includes(kw)) g.selected = checked;
+  });
+  renderAlwayzFilterTable();
+}
+function renderAlwayzFilterTable() {
+  const kw = (document.getElementById('alwayzFilterSearch').value||'').toLowerCase();
+  const tbody = document.getElementById('alwayzFilterTbody');
+  const shown = _alwayzFilterGroups.filter(g => !kw || g.product_name.toLowerCase().includes(kw));
+  tbody.innerHTML = shown.map(g => {
+    const realIdx = _alwayzFilterGroups.indexOf(g);
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:7px 10px;text-align:center"><input type="checkbox" '+(g.selected?'checked':'')+' onchange="_alwayzFilterGroups['+realIdx+'].selected=this.checked;updateAlwayzFilterCount()" style="accent-color:var(--primary)"></td>'
+      + '<td style="padding:7px 10px">'+g.product_name+'</td>'
+      + '<td style="padding:7px 10px">'+g.option_name+'</td>'
+      + '<td style="padding:7px 10px">'+g.seller_product_code+'</td>'
+      + '<td style="padding:7px 10px;text-align:center">'+g.count+'</td>'
+      + '</tr>';
+  }).join('');
+  updateAlwayzFilterCount();
+}
+function updateAlwayzFilterCount() {
+  const sel = _alwayzFilterGroups.filter(g=>g.selected);
+  const orderCount = sel.reduce((a,g)=>a+g.count,0);
+  document.getElementById('alwayzFilterCount').textContent = '상품 '+sel.length+'종 · 주문 '+orderCount+'건 선택';
+  const all = document.getElementById('alwayzFilterSelectAll');
+  if (all) all.checked = _alwayzFilterGroups.length>0 && _alwayzFilterGroups.every(g=>g.selected);
+}
+async function uploadFilteredAlwayzOrders() {
+  const selectedKeys = new Set(_alwayzFilterGroups.filter(g=>g.selected).map(g=>g.key));
+  const toUpload = _alwayzParsedItems.filter(it => selectedKeys.has(it.product_name+'|'+it.option_name+'|'+it.seller_product_code));
+  if (!toUpload.length) { alert('선택된 상품이 없습니다'); return; }
+  try {
+    const res = await fetch('/api/alwayz-orders/bulk', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ items: toUpload })
+    });
+    const j = await res.json();
+    if (j.error) { alert('오류: '+j.error); return; }
+    alert('업로드 완료: '+j.inserted+'건 저장 (선택 '+toUpload.length+'건)');
+    closeAlwayzFilterModal();
+    loadAlwayzOrders();
+  } catch(e) { alert('오류: '+e.message); }
 }
 
 async function loadAlwayzOrders() {
