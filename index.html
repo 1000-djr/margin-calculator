@@ -2137,10 +2137,12 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
 
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
         <div style="display:flex;gap:6px">
+          <button class="quick-pill active" onclick="setUdQuickDate('order_cycle')">발주분</button>
           <button class="quick-pill" onclick="setUdQuickDate('yesterday')">어제</button>
           <button class="quick-pill" onclick="setUdQuickDate('week')">최근 7일</button>
-          <button class="quick-pill active" onclick="setUdQuickDate('today')">오늘</button>
+          <button class="quick-pill" onclick="setUdQuickDate('today')">오늘</button>
         </div>
+        <span id="udCycleLabel" style="font-size:12px;color:var(--text-dim)"></span>
         <input id="udFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
         <span style="color:var(--text-dim)">~</span>
         <input id="udTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
@@ -12821,23 +12823,44 @@ async function downloadAlwayzInvoiceExcel() {
 let _udData = null;
 
 function initUnifiedDispatch() {
-  const kst = new Date(Date.now()+9*3600*1000);
-  const fmt = d => d.toISOString().slice(0,10);
-  if (!document.getElementById('udFrom').value) document.getElementById('udFrom').value = fmt(kst);
-  if (!document.getElementById('udTo').value) document.getElementById('udTo').value = fmt(kst);
+  if (!document.getElementById('udFrom').value) {
+    const now=new Date(); const pad=n=>String(n).padStart(2,'0');
+    const yst=new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
+    const fromVal=yst.getFullYear()+'-'+pad(yst.getMonth()+1)+'-'+pad(yst.getDate());
+    const toVal=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate());
+    document.getElementById('udFrom').value=fromVal;
+    document.getElementById('udTo').value=toVal;
+    const labelEl=document.getElementById('udCycleLabel');
+    if(labelEl) labelEl.textContent=fromVal.slice(5).replace('-','/')+' 10:00 ~ '+toVal.slice(5).replace('-','/')+' 09:59';
+  }
   if (!Object.keys(_orderForms).length) fetch('/api/order-forms').then(r=>r.json()).then(j=>{_orderForms=j.forms||{};});
   if (typeof loadDispatchSender === 'function') loadDispatchSender();
 }
 
 function setUdQuickDate(preset) {
   document.querySelectorAll('#tab-unified-dispatch .quick-pill').forEach(b=>b.classList.remove('active'));
-  event.target.classList.add('active');
-  const kst = new Date(Date.now()+9*3600*1000); const fmt=d=>d.toISOString().slice(0,10);
-  let from,to;
-  if(preset==='yesterday'){const y=new Date(kst);y.setDate(y.getDate()-1);from=to=fmt(y);}
-  else if(preset==='week'){const w=new Date(kst);w.setDate(w.getDate()-6);from=fmt(w);to=fmt(kst);}
-  else{from=to=fmt(kst);}
-  document.getElementById('udFrom').value=from; document.getElementById('udTo').value=to;
+  if (event && event.target) event.target.classList.add('active');
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const y=now.getFullYear(), mo=now.getMonth(), d=now.getDate();
+  const fmt = (yr,m,dy) => yr+'-'+pad(m+1)+'-'+pad(dy);
+  let from, to, cycleLabel='';
+  if (preset === 'order_cycle') {
+    const yst = new Date(y, mo, d-1);
+    from = fmt(yst.getFullYear(), yst.getMonth(), yst.getDate());
+    to = fmt(y, mo, d);
+    cycleLabel = from.slice(5).replace('-','/')+' 10:00 ~ '+to.slice(5).replace('-','/')+' 09:59';
+  } else if (preset === 'yesterday') {
+    const yy=new Date(y,mo,d-1); from=to=fmt(yy.getFullYear(),yy.getMonth(),yy.getDate());
+  } else if (preset === 'week') {
+    const w=new Date(y,mo,d-6); from=fmt(w.getFullYear(),w.getMonth(),w.getDate()); to=fmt(y,mo,d);
+  } else {
+    from=to=fmt(y,mo,d);
+  }
+  document.getElementById('udFrom').value=from;
+  document.getElementById('udTo').value=to;
+  const labelEl=document.getElementById('udCycleLabel');
+  if (labelEl) labelEl.textContent=cycleLabel;
   loadUnifiedDispatch();
 }
 
