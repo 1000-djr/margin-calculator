@@ -4678,6 +4678,72 @@ router.get('/alwayz-orders', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 SA광고 조회 ────────────────────────────────────────────────────────
+router.get('/alwayz-sa-ads', requireAuth, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const params = [req.user.id];
+    let df = '';
+    if (start) { params.push(start); df += ` AND SUBSTRING(o.order_date,1,10) >= $${params.length}`; }
+    if (end)   { params.push(end);   df += ` AND SUBSTRING(o.order_date,1,10) <= $${params.length}`; }
+    const { rows } = await pool.query(`
+      SELECT DISTINCT SUBSTRING(o.order_date,1,10) AS ad_date, o.product_id,
+             (SELECT product_name FROM alwayz_orders x WHERE x.user_id=o.user_id AND x.product_id=o.product_id ORDER BY order_date DESC LIMIT 1) AS product_name
+      FROM alwayz_orders o
+      WHERE o.user_id=$1${df}
+      ORDER BY ad_date DESC, product_name
+    `, params);
+    const { rows: saved } = await pool.query(
+      `SELECT ad_date, product_id, ad_cost FROM alwayz_sa_ads WHERE user_id=$1`, [req.user.id]
+    );
+    const savedMap = {};
+    saved.forEach(s => { savedMap[s.ad_date+'|'+s.product_id] = s.ad_cost; });
+    res.json(rows.map(r => ({ ...r, ad_cost: savedMap[r.ad_date+'|'+r.product_id] ?? null })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 SA광고 저장(upsert) ────────────────────────────────────────────
+router.post('/alwayz-sa-ads', requireAuth, async (req, res) => {
+  const { ad_date, product_id, product_name, ad_cost } = req.body || {};
+  if (!ad_date || !product_id) return res.status(400).json({ error: 'ad_date, product_id 필요' });
+  try {
+    await pool.query(`
+      INSERT INTO alwayz_sa_ads (user_id, ad_date, product_id, product_name, ad_cost, updated_at)
+      VALUES ($1,$2,$3,$4,$5,NOW())
+      ON CONFLICT (user_id, ad_date, product_id) DO UPDATE SET product_name=EXCLUDED.product_name, ad_cost=EXCLUDED.ad_cost, updated_at=NOW()
+    `, [req.user.id, ad_date, product_id, product_name||'', parseFloat(ad_cost)||0]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 올팜광고 조회 ───────────────────────────────────────────────────
+router.get('/alwayz-olpam-ads', requireAuth, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const params = [req.user.id];
+    let q = `SELECT ad_date, ad_cost FROM alwayz_olpam_ads WHERE user_id=$1`;
+    if (start) { params.push(start); q += ` AND ad_date >= $${params.length}`; }
+    if (end)   { params.push(end);   q += ` AND ad_date <= $${params.length}`; }
+    q += ' ORDER BY ad_date DESC';
+    const { rows } = await pool.query(q, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 올팜광고 저장(upsert) ──────────────────────────────────────────
+router.post('/alwayz-olpam-ads', requireAuth, async (req, res) => {
+  const { ad_date, ad_cost } = req.body || {};
+  if (!ad_date) return res.status(400).json({ error: 'ad_date 필요' });
+  try {
+    await pool.query(`
+      INSERT INTO alwayz_olpam_ads (user_id, ad_date, ad_cost, updated_at)
+      VALUES ($1,$2,$3,NOW())
+      ON CONFLICT (user_id, ad_date) DO UPDATE SET ad_cost=EXCLUDED.ad_cost, updated_at=NOW()
+    `, [req.user.id, ad_date, parseFloat(ad_cost)||0]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 올웨이즈 수익분석 (결제일 기준, 상품별 집계 + 총계) ─────────────────────────
 router.get('/alwayz-profit', requireAuth, async (req, res) => {
   try {

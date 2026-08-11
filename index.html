@@ -2147,6 +2147,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         </div>
         <button class="btn btn-primary" style="font-size:13px;padding:9px 18px" onclick="loadAlwayzProfit()">🔍 분석 실행</button>
       </div>
+      <details style="margin-bottom:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface)">
+        <summary style="padding:12px 16px;cursor:pointer;font-size:14px;font-weight:600">📢 광고비 입력 (SA · 올팜)</summary>
+        <div style="padding:0 16px 16px">
+          <div id="alwayzAdArea" style="font-size:12px;color:var(--text-dim)">기간을 선택하고 분석하면 광고비 입력란이 나옵니다.</div>
+        </div>
+      </details>
       <div id="alwayzProfitSummary" style="margin-bottom:16px"></div>
       <div id="alwayzProfitPeriods" style="margin-bottom:16px"></div>
       <div id="alwayzProfitResult" class="data-table-wrap"></div>
@@ -12496,7 +12502,75 @@ async function loadAlwayzProfit() {
     });
     html += '</tbody></table>';
     resEl.innerHTML = html;
+    renderAlwayzAds();
   } catch(e) { sumEl.innerHTML = '<div style="color:red">오류: '+e.message+'</div>'; }
+}
+
+// ── 올웨이즈 광고비 입력 ──────────────────────────────────────────────────────
+function renderAlwayzAds() {
+  const from = document.getElementById('alwayzProfitFrom').value;
+  const to   = document.getElementById('alwayzProfitTo').value;
+  const area = document.getElementById('alwayzAdArea');
+  if (!area || !from || !to) return;
+  Promise.all([
+    fetch('/api/alwayz-sa-ads?start='+from+'&end='+to).then(r=>r.json()),
+    fetch('/api/alwayz-olpam-ads?start='+from+'&end='+to).then(r=>r.json())
+  ]).then(([sa, olpam]) => {
+    let html = '';
+    // 올팜광고 (일자별 총액)
+    html += '<div style="font-weight:600;font-size:13px;margin:8px 0">🌱 올팜광고 (일자별 총액)</div>';
+    const dates = [];
+    let d = new Date(from), e = new Date(to);
+    while (d <= e) { dates.push(d.toISOString().slice(0,10)); d.setDate(d.getDate()+1); }
+    const olpamMap = {}; (Array.isArray(olpam)?olpam:[]).forEach(o => olpamMap[o.ad_date] = o.ad_cost);
+    html += '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:5px">일자</th><th style="padding:5px">올팜광고비</th><th></th></tr></thead><tbody>';
+    dates.forEach((dt, i) => {
+      html += '<tr><td style="padding:5px">'+dt+'</td>'
+        + '<td style="padding:5px"><input type="number" id="olpam_'+i+'" data-date="'+dt+'" value="'+(olpamMap[dt]!=null?olpamMap[dt]:'')+'" placeholder="0" style="width:110px;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;text-align:right"></td>'
+        + '<td style="padding:5px"><button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="saveAlwayzOlpam('+i+',this)">저장</button></td></tr>';
+    });
+    html += '</tbody></table>';
+    // SA광고 (일자×상품아이디)
+    html += '<div style="font-weight:600;font-size:13px;margin:8px 0">🔍 SA광고 (일자별 상품)</div>';
+    if (!Array.isArray(sa) || !sa.length) {
+      html += '<div style="color:var(--text-dim);font-size:12px">해당 기간 판매 상품이 없습니다.</div>';
+    } else {
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:5px">일자</th><th style="padding:5px">상품명</th><th style="padding:5px">상품아이디</th><th style="padding:5px">SA광고비</th><th></th></tr></thead><tbody>';
+      sa.forEach((r, i) => {
+        html += '<tr><td style="padding:5px">'+r.ad_date+'</td>'
+          + '<td style="padding:5px">'+escHtml(r.product_name||'')+'</td>'
+          + '<td style="padding:5px;font-size:10px;color:var(--text-dim)">'+escHtml(r.product_id||'')+'</td>'
+          + '<td style="padding:5px"><input type="number" id="saad_'+i+'" value="'+(r.ad_cost!=null?r.ad_cost:'')+'" placeholder="0" style="width:100px;padding:4px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;text-align:right"></td>'
+          + '<td style="padding:5px"><button class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="saveAlwayzSaAd('+i+',this)">저장</button></td></tr>';
+      });
+      html += '</tbody></table>';
+      window._alwayzSaAdRows = sa;
+    }
+    area.innerHTML = html;
+    window._alwayzOlpamDates = dates;
+  }).catch(e => { area.innerHTML = '<div style="color:red">광고 로드 오류: '+e.message+'</div>'; });
+}
+
+async function saveAlwayzOlpam(i, btn) {
+  const dt   = window._alwayzOlpamDates[i];
+  const cost = document.getElementById('olpam_'+i).value;
+  try {
+    const res = await fetch('/api/alwayz-olpam-ads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ad_date:dt, ad_cost:cost }) });
+    const j = await res.json(); if (j.error) { alert(j.error); return; }
+    const o = btn.textContent; btn.textContent='✓'; btn.style.background='var(--green)';
+    setTimeout(() => { btn.textContent=o; btn.style.background=''; }, 1000);
+  } catch(e) { alert(e.message); }
+}
+
+async function saveAlwayzSaAd(i, btn) {
+  const r    = window._alwayzSaAdRows[i];
+  const cost = document.getElementById('saad_'+i).value;
+  try {
+    const res = await fetch('/api/alwayz-sa-ads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ad_date:r.ad_date, product_id:r.product_id, product_name:r.product_name, ad_cost:cost }) });
+    const j = await res.json(); if (j.error) { alert(j.error); return; }
+    const o = btn.textContent; btn.textContent='✓'; btn.style.background='var(--green)';
+    setTimeout(() => { btn.textContent=o; btn.style.background=''; }, 1000);
+  } catch(e) { alert(e.message); }
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

@@ -160,6 +160,26 @@ async function initDB() {
       UNIQUE (user_id, product_id, option_name)
     );
 
+    CREATE TABLE IF NOT EXISTS alwayz_sa_ads (
+      id           SERIAL PRIMARY KEY,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      ad_date      VARCHAR(10) NOT NULL,
+      product_id   VARCHAR(100) NOT NULL,
+      product_name TEXT,
+      ad_cost      NUMERIC(14,2) DEFAULT 0,
+      updated_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, ad_date, product_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS alwayz_olpam_ads (
+      id         SERIAL PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      ad_date    VARCHAR(10) NOT NULL,
+      ad_cost    NUMERIC(14,2) DEFAULT 0,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, ad_date)
+    );
+
     CREATE TABLE IF NOT EXISTS ad_reports (
       id               SERIAL PRIMARY KEY,
       user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
