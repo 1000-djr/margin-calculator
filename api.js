@@ -5227,6 +5227,28 @@ router.delete('/alwayz-order-mappings/:productId/:optionName', requireAuth, asyn
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 발주매칭 - 도매처별 B2B 상품 목록 ──────────────────────────────────
+router.get('/alwayz-order-mappings/b2b-products-by-supplier', requireAuth, async (req, res) => {
+  try {
+    const { supplier_id } = req.query;
+    if (!supplier_id) return res.json([]);
+    const { rows } = await pool.query(`
+      SELECT DISTINCT bp.name, bp.unit
+      FROM wholesale_suppliers ws
+      JOIN b2b_suppliers bs ON bs.user_id=ws.user_id AND bs.name=ws.name
+      JOIN b2b_prices pr ON pr.user_id=bs.user_id AND pr.supplier_id=bs.id
+      JOIN b2b_products bp ON bp.id=pr.b2b_product_id
+      WHERE ws.user_id=$1 AND ws.id=$2
+      ORDER BY bp.name, bp.unit
+    `, [req.user.id, supplier_id]);
+    res.json(rows.map(r => ({
+      name: r.name,
+      unit: r.unit || '',
+      display: r.unit ? (r.name+' '+r.unit) : r.name
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── [임시 디버그] 도매처 상품 status 무필터 조회 ────────────────────────────────
 router.get('/admin/debug-supplier-products', requireRealAdmin, async (req, res) => {
   try {

@@ -12961,34 +12961,56 @@ async function openUdmAlwayzForm(idx) {
     +'<div style="font-size:16px;font-weight:700;margin-bottom:4px">올웨이즈 발주매칭</div>'
     +'<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">'+escHtml(item.product_name||'')+(item.option_name?' · '+escHtml(item.option_name):'')+'</div>'
     +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">발주처(도매처)</label>'
-    +'<select id="udmAwSupplier" onchange="udmAwSearchProduct()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;font-family:var(--sans)"><option value="">— 선택 —</option>'+supplierOpts+'</select>'
+    +'<select id="udmAwSupplier" onchange="udmAwSupplierChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;font-family:var(--sans)"><option value="">— 선택 —</option>'+supplierOpts+'</select>'
     +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">도매처 상품명(발주서에 찍힘)</label>'
-    +'<input id="udmAwProductName" type="text" value="'+escHtml(item.supplier_product_name||'')+'" placeholder="예: 성주참외 가정용 2kg" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px;font-family:var(--sans)">'
-    +'<div id="udmAwSearchResult" style="max-height:160px;overflow-y:auto;margin-bottom:12px"></div>'
+    +'<select id="udmAwProductSelect" onchange="udmAwProductSelectChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:8px;font-family:var(--sans)"><option value="">도매처를 먼저 선택하세요</option></select>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><input type="checkbox" id="udmAwDirectMode" onchange="udmAwToggleDirect()"><label for="udmAwDirectMode" style="font-size:12px;color:var(--text-dim)">목록에 없음 - 직접 입력</label></div>'
+    +'<input id="udmAwProductName" type="text" value="'+escHtml(item.supplier_product_name||'')+'" placeholder="직접 입력" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;font-family:var(--sans);display:none">'
     +'<div style="display:flex;gap:8px;justify-content:flex-end">'
     +'<button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="this.closest(\'[style*=fixed]\').remove()">취소</button>'
     +'<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="saveUdmAlwayz('+idx+',this)">저장</button>'
     +'</div></div>';
   document.body.appendChild(modal);
-  const nameInput = modal.querySelector('#udmAwProductName');
-  nameInput.addEventListener('input', udmAwSearchProduct);
+  // 기존 supplier_id가 있으면 바로 B2B 상품목록 로드
+  if (item.supplier_id) udmAwSupplierChange(item.supplier_product_name||'');
 }
 
-async function udmAwSearchProduct() {
+async function udmAwSupplierChange(preselect) {
   const supplierId = document.getElementById('udmAwSupplier')?.value;
-  const q = document.getElementById('udmAwProductName')?.value.trim();
-  const box = document.getElementById('udmAwSearchResult');
-  if (!box) return;
-  if (!supplierId || q.length < 1) { box.innerHTML = ''; return; }
+  const sel = document.getElementById('udmAwProductSelect');
+  if (!sel) return;
+  if (!supplierId) { sel.innerHTML='<option value="">도매처를 먼저 선택하세요</option>'; return; }
+  sel.innerHTML = '<option value="">불러오는 중...</option>';
   try {
-    const r = await fetch('/api/order-mappings/search-supplier-product?supplier_id='+encodeURIComponent(supplierId)+'&q='+encodeURIComponent(q));
-    const items = await r.json();
-    if (!Array.isArray(items)||!items.length) { box.innerHTML='<div style="font-size:12px;color:var(--text-dim);padding:6px">검색 결과 없음 (직접 입력해도 됩니다)</div>'; return; }
-    box.innerHTML = items.slice(0,10).map(it =>
-      '<div onclick="document.getElementById(\'udmAwProductName\').value=this.dataset.name;document.getElementById(\'udmAwSearchResult\').innerHTML=\'\'" data-name="'+escHtml(it.name||'')+'" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+escHtml(it.name||'')+'</div>'
-    ).join('');
-  } catch(e) { box.innerHTML = ''; }
+    const items = await fetch('/api/alwayz-order-mappings/b2b-products-by-supplier?supplier_id='+encodeURIComponent(supplierId)).then(r=>r.json());
+    if (!Array.isArray(items)||!items.length) {
+      sel.innerHTML = '<option value="">등록된 B2B 상품 없음 - 직접 입력하세요</option>';
+      document.getElementById('udmAwDirectMode').checked = true;
+      udmAwToggleDirect();
+      return;
+    }
+    const cur = preselect || document.getElementById('udmAwProductName').value;
+    sel.innerHTML = '<option value="">— 선택 —</option>'
+      + items.map(it => '<option value="'+escHtml(it.display)+'"'+(it.display===cur?' selected':'')+'>'+escHtml(it.display)+'</option>').join('');
+    // 기존 값이 목록에 있으면 숨겨진 input에도 반영
+    if (cur) document.getElementById('udmAwProductName').value = cur;
+  } catch(e) { sel.innerHTML='<option value="">로드 오류</option>'; }
 }
+
+function udmAwProductSelectChange() {
+  const v = document.getElementById('udmAwProductSelect')?.value;
+  if (v) document.getElementById('udmAwProductName').value = v;
+}
+
+function udmAwToggleDirect() {
+  const direct = document.getElementById('udmAwDirectMode')?.checked;
+  const sel = document.getElementById('udmAwProductSelect');
+  const inp = document.getElementById('udmAwProductName');
+  if (sel) sel.style.display = direct ? 'none' : '';
+  if (inp) inp.style.display = direct ? '' : 'none';
+}
+
+async function udmAwSearchProduct() { /* 미사용 - 드롭다운 방식으로 교체됨 */ }
 
 async function saveUdmAlwayz(idx, btn) {
   const item = _udmData.alwayz[idx];
