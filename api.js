@@ -5174,6 +5174,59 @@ router.post('/alwayz-cost-mapping', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 발주매칭 조회 ───────────────────────────────────────────────────────
+router.get('/alwayz-order-mappings', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        d.product_id, d.option_name,
+        MAX(d.product_name) AS registered_name,
+        MAX(d.order_date)   AS last_order_date,
+        COUNT(*)            AS order_count,
+        m.supplier_id, m.supplier_product_name, m.supplier_option_name,
+        ws.name AS supplier_name
+      FROM alwayz_orders d
+      LEFT JOIN alwayz_order_mappings m
+        ON m.user_id=d.user_id AND m.product_id=d.product_id AND m.option_name=d.option_name
+      LEFT JOIN wholesale_suppliers ws ON ws.id=m.supplier_id
+      WHERE d.user_id=$1
+      GROUP BY d.product_id, d.option_name, m.supplier_id, m.supplier_product_name, m.supplier_option_name, ws.name
+      ORDER BY MAX(d.order_date) DESC
+    `, [req.user.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 발주매칭 저장(upsert) ──────────────────────────────────────────────
+router.post('/alwayz-order-mappings', requireAuth, async (req, res) => {
+  const { product_id, option_name, registered_name, supplier_id, supplier_product_name, supplier_option_name } = req.body;
+  if (!product_id) return res.status(400).json({ error: 'product_id 필수' });
+  try {
+    const { rows } = await pool.query(`
+      INSERT INTO alwayz_order_mappings
+        (user_id, product_id, option_name, registered_name, supplier_id, supplier_product_name, supplier_option_name)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (user_id, product_id, option_name) DO UPDATE SET
+        registered_name       = EXCLUDED.registered_name,
+        supplier_id           = EXCLUDED.supplier_id,
+        supplier_product_name = EXCLUDED.supplier_product_name,
+        supplier_option_name  = EXCLUDED.supplier_option_name
+      RETURNING *`,
+      [req.user.id, product_id, option_name||'', registered_name||'', supplier_id||null, supplier_product_name||'', supplier_option_name||'']
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 발주매칭 삭제 ───────────────────────────────────────────────────────
+router.delete('/alwayz-order-mappings/:productId/:optionName', requireAuth, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM alwayz_order_mappings WHERE user_id=$1 AND product_id=$2 AND option_name=$3',
+      [req.user.id, req.params.productId, decodeURIComponent(req.params.optionName||'')]);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── [임시 디버그] 도매처 상품 status 무필터 조회 ────────────────────────────────
 router.get('/admin/debug-supplier-products', requireRealAdmin, async (req, res) => {
   try {

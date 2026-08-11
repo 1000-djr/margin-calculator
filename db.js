@@ -180,6 +180,19 @@ async function initDB() {
       UNIQUE (user_id, ad_date)
     );
 
+    CREATE TABLE IF NOT EXISTS alwayz_order_mappings (
+      id                    SERIAL PRIMARY KEY,
+      user_id               INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      product_id            VARCHAR(100) NOT NULL,
+      option_name           TEXT NOT NULL DEFAULT '',
+      registered_name       TEXT,
+      supplier_id           INTEGER REFERENCES wholesale_suppliers(id) ON DELETE SET NULL,
+      supplier_product_name TEXT,
+      supplier_option_name  TEXT DEFAULT '',
+      created_at            TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, product_id, option_name)
+    );
+
     CREATE TABLE IF NOT EXISTS ad_reports (
       id               SERIAL PRIMARY KEY,
       user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,
