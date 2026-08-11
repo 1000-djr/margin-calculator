@@ -770,7 +770,6 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
     <button class="tab" onclick="switchTab('supplier', this)">🏪 도매처</button>
     <button class="tab" onclick="switchTab('alwayz-orders', this)">🌽 올웨(주문서)</button>
-    <button class="tab" onclick="switchTab('alwayz-cost', this)">🌽 올웨(원가표)</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -2109,22 +2108,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="loadAlwayzOrders()">🔍 조회</button>
         <span id="alwayzOrderSummary" style="font-size:13px;color:var(--text-dim)"></span>
       </div>
+      <div id="alwayzUnlinkedArea" style="margin-bottom:16px"></div>
       <div id="alwayzOrderResult" class="data-table-wrap"></div>
     </div>
   </div>
 
-  <!-- ══ 올웨이즈 원가표 탭 ══════════════════════════════════════════════ -->
-  <div class="panel" id="tab-alwayz-cost">
-    <div style="padding:16px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
-        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 원가표</h2>
-        <button class="btn" style="font-size:13px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border)" onclick="loadAlwayzCostMapping()">🔄 새로고침</button>
-        <span id="alwayzCostSummary" style="font-size:13px;color:var(--text-dim)"></span>
-      </div>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">주문서에 있는 상품이 자동으로 나열됩니다. 각 상품의 원가를 입력하면 수익분석에 반영됩니다. (상품아이디+옵션 기준 매칭)</div>
-      <div id="alwayzCostResult" class="data-table-wrap"></div>
-    </div>
-  </div>
 
 <!-- ══ 올웨이즈 필터링 모달 ══════════════════════════════════════════════ -->
 <div id="alwayzFilterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
@@ -2962,8 +2950,7 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
   orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns',
-  'alwayz-orders': 'alwayz-orders',
-  'alwayz-cost': 'alwayz-cost'
+  'alwayz-orders': 'alwayz-orders'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -2988,7 +2975,6 @@ function _activateTabUI(name) {
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
   if (name === 'alwayz-orders') { loadAlwayzOrders(); }
-  if (name === 'alwayz-cost') { loadAlwayzCostMapping(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -12224,18 +12210,16 @@ async function uploadFilteredAlwayzOrders() {
 }
 
 // ── 올웨이즈 원가표 ─────────────────────────────────────────────────────────
-let _alwayzCostRows = [];
+let _alwayzUnlinkedRows = [];
 let _b2bProductsForAlwayz = [];
 
-async function loadAlwayzCostMapping() {
-  const summary = document.getElementById('alwayzCostSummary');
-  const result  = document.getElementById('alwayzCostResult');
-  if (summary) summary.textContent = '불러오는 중...';
+async function renderAlwayzUnlinked() {
+  const area = document.getElementById('alwayzUnlinkedArea');
+  if (!area) return;
   try {
     const b2bRes  = await fetch('/api/b2b-prices');
     const b2bRows = await b2bRes.json();
-    const seen = new Set();
-    _b2bProductsForAlwayz = [];
+    const seen = new Set(); _b2bProductsForAlwayz = [];
     (Array.isArray(b2bRows) ? b2bRows : []).forEach(r => {
       const key = (r.product_name||'')+'|'+(r.unit||'');
       if (!seen.has(key) && r.product_name) { seen.add(key); _b2bProductsForAlwayz.push({ name:r.product_name, unit:r.unit||'' }); }
@@ -12243,39 +12227,39 @@ async function loadAlwayzCostMapping() {
 
     const res  = await fetch('/api/alwayz-cost-mapping');
     const rows = await res.json();
-    if (rows.error) { if (summary) summary.textContent = '오류: '+rows.error; return; }
-    _alwayzCostRows = rows;
-    const linked = rows.filter(r => r.b2b_name).length;
-    if (summary) summary.textContent = '상품 '+rows.length+'종 · B2B연결 '+linked+'종';
-    if (!rows.length) { result.innerHTML = '<div style="padding:20px;color:var(--text-dim)">주문서를 먼저 업로드하세요.</div>'; return; }
+    if (rows.error) { area.innerHTML = ''; return; }
+    _alwayzUnlinkedRows = rows.filter(r => !r.b2b_name);
+    if (!_alwayzUnlinkedRows.length) { area.innerHTML = ''; return; }
 
-    let html = '<table class="data-table"><thead><tr>'
-      + '<th>상품명</th><th>옵션</th><th>주문수</th><th>연결된 B2B 상품</th><th>저장</th>'
+    let html = '<div style="border:1px solid var(--warning,#e0a800);border-radius:12px;padding:16px;background:rgba(224,168,0,0.06)">';
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--warning,#b8860b)">⚠️ B2B 원가 미연결 상품 '+_alwayzUnlinkedRows.length+'종</div>';
+    html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">각 상품을 B2B 매입상품에 연결하면 수익분석에 원가가 반영됩니다. (매입가는 쿠팡과 공유)</div>';
+    html += '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text-dim)">'
+      + '<th style="padding:6px">상품명</th><th style="padding:6px">옵션</th><th style="padding:6px">주문수</th><th style="padding:6px">B2B 상품 연결</th><th style="padding:6px"></th>'
       + '</tr></thead><tbody>';
-    rows.forEach((r, i) => {
-      const curKey = (r.b2b_name||'')+'|'+(r.b2b_unit||'');
+    _alwayzUnlinkedRows.forEach((r, i) => {
       let opts = '<option value="">— 선택 —</option>';
       _b2bProductsForAlwayz.forEach(b => {
         const k     = b.name+'|'+b.unit;
         const label = b.unit ? (b.name+' ('+b.unit+')') : b.name;
-        opts += '<option value="'+encodeURIComponent(k)+'"'+(k===curKey?' selected':'')+'>'+escHtml(label)+'</option>';
+        opts += '<option value="'+encodeURIComponent(k)+'">'+escHtml(label)+'</option>';
       });
-      html += '<tr>'
-        + '<td>'+escHtml(r.product_name||'')+'</td>'
-        + '<td>'+escHtml(r.option_name||'')+'</td>'
-        + '<td style="text-align:center">'+(r.order_count||0)+'</td>'
-        + '<td><select id="alwB2b_'+i+'" style="min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">'+opts+'</select></td>'
-        + '<td><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzCost('+i+',this)">저장</button></td>'
+      html += '<tr style="border-top:1px solid var(--border)">'
+        + '<td style="padding:6px">'+escHtml(r.product_name||'')+'</td>'
+        + '<td style="padding:6px">'+escHtml(r.option_name||'')+'</td>'
+        + '<td style="padding:6px;text-align:center">'+(r.order_count||0)+'</td>'
+        + '<td style="padding:6px"><select id="alwUnlink_'+i+'" style="min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">'+opts+'</select></td>'
+        + '<td style="padding:6px"><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzCost('+i+',this)">연결</button></td>'
         + '</tr>';
     });
-    html += '</tbody></table>';
-    result.innerHTML = html;
-  } catch(e) { if (summary) summary.textContent = '오류: '+e.message; }
+    html += '</tbody></table></div>';
+    area.innerHTML = html;
+  } catch(e) { area.innerHTML = ''; }
 }
 
 async function saveAlwayzCost(i, btn) {
-  const r   = _alwayzCostRows[i];
-  const sel = document.getElementById('alwB2b_'+i).value;
+  const r   = _alwayzUnlinkedRows[i];
+  const sel = document.getElementById('alwUnlink_'+i).value;
   if (!sel) { alert('B2B 상품을 선택하세요'); return; }
   const [b2b_name, b2b_unit] = decodeURIComponent(sel).split('|');
   try {
@@ -12285,10 +12269,7 @@ async function saveAlwayzCost(i, btn) {
     });
     const j = await res.json();
     if (j.error) { alert('오류: '+j.error); return; }
-    const orig = btn.textContent; btn.textContent = '✓'; btn.style.background = 'var(--green)';
-    setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1200);
-    _alwayzCostRows[i].b2b_name = b2b_name;
-    _alwayzCostRows[i].b2b_unit = b2b_unit;
+    renderAlwayzUnlinked();
   } catch(e) { alert('오류: '+e.message); }
 }
 
@@ -12332,6 +12313,7 @@ async function loadAlwayzOrders() {
     html += '</tbody></table>';
     result.innerHTML = html;
   } catch(e) { if (summary) summary.textContent = '오류: '+e.message; }
+  renderAlwayzUnlinked();
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
