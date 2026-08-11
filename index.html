@@ -12231,7 +12231,9 @@ async function uploadFilteredAlwayzOrders() {
 
 // ── 올웨이즈 원가표 ─────────────────────────────────────────────────────────
 let _alwayzUnlinkedRows = [];
+let _alwayzLinkedRows   = [];
 let _b2bProductsForAlwayz = [];
+let _showLinkedAlwayz = false;
 
 async function renderAlwayzUnlinked() {
   const area = document.getElementById('alwayzUnlinkedArea');
@@ -12249,37 +12251,67 @@ async function renderAlwayzUnlinked() {
     const rows = await res.json();
     if (rows.error) { area.innerHTML = ''; return; }
     _alwayzUnlinkedRows = rows.filter(r => !r.b2b_name);
-    if (!_alwayzUnlinkedRows.length) { area.innerHTML = ''; return; }
+    _alwayzLinkedRows   = rows.filter(r =>  r.b2b_name);
 
-    let html = '<div style="border:1px solid var(--warning,#e0a800);border-radius:12px;padding:16px;background:rgba(224,168,0,0.06)">';
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--warning,#b8860b)">⚠️ B2B 원가 미연결 상품 '+_alwayzUnlinkedRows.length+'종</div>';
-    html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">각 상품을 B2B 매입상품에 연결하면 수익분석에 원가가 반영됩니다. (매입가는 쿠팡과 공유)</div>';
-    html += '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text-dim)">'
-      + '<th style="padding:6px">상품명</th><th style="padding:6px">옵션</th><th style="padding:6px">주문수</th><th style="padding:6px">B2B 상품 연결</th><th style="padding:6px"></th>'
-      + '</tr></thead><tbody>';
-    _alwayzUnlinkedRows.forEach((r, i) => {
-      let opts = '<option value="">— 선택 —</option>';
-      _b2bProductsForAlwayz.forEach(b => {
-        const k     = b.name+'|'+b.unit;
-        const label = b.unit ? (b.name+' ('+b.unit+')') : b.name;
-        opts += '<option value="'+encodeURIComponent(k)+'">'+escHtml(label)+'</option>';
-      });
-      html += '<tr style="border-top:1px solid var(--border)">'
-        + '<td style="padding:6px">'+escHtml(r.product_name||'')+'</td>'
-        + '<td style="padding:6px">'+escHtml(r.option_name||'')+'</td>'
-        + '<td style="padding:6px;text-align:center">'+(r.order_count||0)+'</td>'
-        + '<td style="padding:6px"><select id="alwUnlink_'+i+'" style="min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">'+opts+'</select></td>'
-        + '<td style="padding:6px"><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzCost('+i+',this)">연결</button></td>'
-        + '</tr>';
-    });
-    html += '</tbody></table></div>';
+    let html = '';
+
+    if (_alwayzUnlinkedRows.length) {
+      html += '<div style="border:1px solid var(--warning,#e0a800);border-radius:12px;padding:16px;background:rgba(224,168,0,0.06);margin-bottom:12px">';
+      html += '<div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--warning,#b8860b)">⚠️ B2B 원가 미연결 상품 '+_alwayzUnlinkedRows.length+'종</div>';
+      html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">각 상품을 B2B 매입상품에 연결하면 수익분석에 원가가 반영됩니다. (매입가는 쿠팡과 공유)</div>';
+      html += buildAlwayzLinkTable(_alwayzUnlinkedRows, 'unlink');
+      html += '</div>';
+    }
+
+    if (_alwayzLinkedRows.length) {
+      html += '<div style="margin-bottom:12px">';
+      html += '<button class="btn" style="font-size:13px;padding:7px 14px;background:var(--surface2);border:1px solid var(--border)" onclick="toggleAlwayzLinked()">🔗 연결된 상품 '+_alwayzLinkedRows.length+'종 '+(_showLinkedAlwayz ? '접기 ▲' : '보기 ▼')+'</button>';
+      if (_showLinkedAlwayz) {
+        html += '<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface);margin-top:10px">';
+        html += '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">연결을 잘못했으면 B2B 상품을 다시 선택하고 저장하세요.</div>';
+        html += buildAlwayzLinkTable(_alwayzLinkedRows, 'link');
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
     area.innerHTML = html;
   } catch(e) { area.innerHTML = ''; }
 }
 
-async function saveAlwayzCost(i, btn) {
-  const r   = _alwayzUnlinkedRows[i];
-  const sel = document.getElementById('alwUnlink_'+i).value;
+function buildAlwayzLinkTable(list, mode) {
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:var(--text-dim)">'
+    + '<th style="padding:6px">상품명</th><th style="padding:6px">옵션</th><th style="padding:6px">주문수</th><th style="padding:6px">B2B 상품 연결</th><th style="padding:6px"></th>'
+    + '</tr></thead><tbody>';
+  list.forEach((r, i) => {
+    const curKey = (r.b2b_name||'')+'|'+(r.b2b_unit||'');
+    let opts = '<option value="">— 선택 —</option>';
+    _b2bProductsForAlwayz.forEach(b => {
+      const k     = b.name+'|'+b.unit;
+      const label = b.unit ? (b.name+' ('+b.unit+')') : b.name;
+      opts += '<option value="'+encodeURIComponent(k)+'"'+(k===curKey?' selected':'')+'>'+escHtml(label)+'</option>';
+    });
+    const selId = 'alwLink_'+mode+'_'+i;
+    html += '<tr style="border-top:1px solid var(--border)">'
+      + '<td style="padding:6px">'+escHtml(r.product_name||'')+'</td>'
+      + '<td style="padding:6px">'+escHtml(r.option_name||'')+'</td>'
+      + '<td style="padding:6px;text-align:center">'+(r.order_count||0)+'</td>'
+      + '<td style="padding:6px"><select id="'+selId+'" style="min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">'+opts+'</select></td>'
+      + '<td style="padding:6px"><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzLink('+i+',\''+mode+'\',this)">'+(mode==='unlink'?'연결':'수정')+'</button></td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function toggleAlwayzLinked() {
+  _showLinkedAlwayz = !_showLinkedAlwayz;
+  renderAlwayzUnlinked();
+}
+
+async function saveAlwayzLink(i, mode, btn) {
+  const r   = (mode === 'unlink' ? _alwayzUnlinkedRows : _alwayzLinkedRows)[i];
+  const sel = document.getElementById('alwLink_'+mode+'_'+i).value;
   if (!sel) { alert('B2B 상품을 선택하세요'); return; }
   const [b2b_name, b2b_unit] = decodeURIComponent(sel).split('|');
   try {
@@ -12289,6 +12321,7 @@ async function saveAlwayzCost(i, btn) {
     });
     const j = await res.json();
     if (j.error) { alert('오류: '+j.error); return; }
+    if (mode === 'link') _showLinkedAlwayz = true;
     renderAlwayzUnlinked();
   } catch(e) { alert('오류: '+e.message); }
 }
