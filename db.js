@@ -103,6 +103,39 @@ async function initDB() {
       UNIQUE (user_id, order_number)
     );
 
+    CREATE TABLE IF NOT EXISTS alwayz_orders (
+      id                  SERIAL PRIMARY KEY,
+      user_id             INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      order_id            VARCHAR(100) NOT NULL,
+      product_id          VARCHAR(100),
+      bundle_id           VARCHAR(200),
+      seller_product_code VARCHAR(200),
+      product_name        TEXT,
+      option_name         TEXT,
+      quantity            INTEGER DEFAULT 1,
+      product_price       NUMERIC(14,2) DEFAULT 0,
+      delivery_fee        NUMERIC(14,2) DEFAULT 0,
+      extra_support       NUMERIC(14,2) DEFAULT 0,
+      coupon_alwayz       NUMERIC(14,2) DEFAULT 0,
+      coupon_seller       NUMERIC(14,2) DEFAULT 0,
+      coupon_total        NUMERIC(14,2) DEFAULT 0,
+      settlement_amount   NUMERIC(14,2) DEFAULT 0,
+      address             TEXT,
+      zipcode             VARCHAR(20),
+      entrance_password   VARCHAR(100),
+      receive_method      VARCHAR(100),
+      recipient           VARCHAR(100),
+      recipient_phone     VARCHAR(50),
+      order_date          VARCHAR(30),
+      courier             VARCHAR(50),
+      tracking_number     VARCHAR(100),
+      unique_code         VARCHAR(200),
+      ordered_at          TIMESTAMPTZ,
+      ordered_supplier_id INTEGER,
+      created_at          TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, order_id, product_id)
+    );
+
     CREATE TABLE IF NOT EXISTS ad_reports (
       id               SERIAL PRIMARY KEY,
       user_id          INTEGER REFERENCES users(id) ON DELETE CASCADE,

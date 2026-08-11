@@ -769,6 +769,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('profit', this)">📊 수익분석</button>
     <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
     <button class="tab" onclick="switchTab('supplier', this)">🏪 도매처</button>
+    <button class="tab" onclick="switchTab('alwayz-orders', this)">🌽 올웨(주문서)</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -2094,6 +2095,23 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
+  <!-- ══ 올웨이즈 주문서 탭 ══════════════════════════════════════════════ -->
+  <div class="panel" id="tab-alwayz-orders">
+    <div style="padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 주문서</h2>
+        <input type="file" id="alwayzOrderFile" accept=".xlsx,.xls" style="display:none" onchange="handleAlwayzOrdersUpload(this)">
+        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="document.getElementById('alwayzOrderFile').click()">📤 주문서 업로드</button>
+        <input id="alwayzFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <span style="color:var(--text-dim)">~</span>
+        <input id="alwayzTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="loadAlwayzOrders()">🔍 조회</button>
+        <span id="alwayzOrderSummary" style="font-size:13px;color:var(--text-dim)"></span>
+      </div>
+      <div id="alwayzOrderResult" class="data-table-wrap"></div>
+    </div>
+  </div>
+
 <!-- ══ 발주처 변경 모달 ══════════════════════════════════════════════════ -->
 <div id="dispatchReassignModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:3000;align-items:center;justify-content:center" onclick="if(event.target===this)closeDispatchReassign()">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;max-width:480px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,0.25);max-height:90vh;overflow-y:auto" onclick="event.stopPropagation()">
@@ -2899,7 +2917,8 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 // ── 탭 ↔ URL 해시 매핑 ────────────────────────────────────────────────────────
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
-  orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns'
+  orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns',
+  'alwayz-orders': 'alwayz-orders'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -2923,6 +2942,7 @@ function _activateTabUI(name) {
   if (name === 'profit')   { renderProfit(); }
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
+  if (name === 'alwayz-orders') { loadAlwayzOrders(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -12052,6 +12072,108 @@ function downloadCoupangInvoiceExcel() {
   const d = new Date();
   const ds = d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
   XLSX.writeFile(wb, '쿠팡송장업로드_'+ds+'.xlsx');
+}
+
+// ── 올웨이즈 주문서 엑셀 파싱 → 업로드 ─────────────────────────────────────────
+// 헤더(1행): 주문아이디,상품아이디,합배송아이디,판매자 상품코드,상품명,옵션,수량,상품가격,배송비,
+//            추가지원금,올웨이즈 부담 쿠폰 할인금,판매자 부담 쿠폰 할인금,총 쿠폰 할인금,
+//            예상 정산금액(수수료 제외),주소,우편번호,공동현관 비밀번호,수령 방법,수령인,
+//            수령인 연락처,주문 시점,택배사,운송장번호,고유 코드
+function handleAlwayzOrdersUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+      if (rows.length < 2) { alert('데이터가 없습니다'); return; }
+      const items = [];
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r[0]) continue;
+        items.push({
+          order_id:            String(r[0]||''),
+          product_id:          String(r[1]||''),
+          bundle_id:           String(r[2]||''),
+          seller_product_code: String(r[3]||''),
+          product_name:        String(r[4]||''),
+          option_name:         String(r[5]||''),
+          quantity:            parseInt(r[6])||1,
+          product_price:       parseFloat(r[7])||0,
+          delivery_fee:        parseFloat(r[8])||0,
+          extra_support:       parseFloat(r[9])||0,
+          coupon_alwayz:       parseFloat(r[10])||0,
+          coupon_seller:       parseFloat(r[11])||0,
+          coupon_total:        parseFloat(r[12])||0,
+          settlement_amount:   parseFloat(r[13])||0,
+          address:             String(r[14]||''),
+          zipcode:             String(r[15]||''),
+          entrance_password:   String(r[16]||''),
+          receive_method:      String(r[17]||''),
+          recipient:           String(r[18]||''),
+          recipient_phone:     String(r[19]||''),
+          order_date:          String(r[20]||''),
+          courier:             String(r[21]||''),
+          tracking_number:     String(r[22]||''),
+        });
+      }
+      if (!items.length) { alert('업로드할 주문이 없습니다'); return; }
+      const res = await fetch('/api/alwayz-orders/bulk', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ items })
+      });
+      const j = await res.json();
+      if (j.error) { alert('오류: '+j.error); return; }
+      alert(`업로드 완료: ${j.inserted}건 저장 (전체 ${j.total}건)`);
+      loadAlwayzOrders();
+    } catch(err) { alert('파싱 오류: '+err.message); }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function loadAlwayzOrders() {
+  const from    = document.getElementById('alwayzFrom')?.value;
+  const to      = document.getElementById('alwayzTo')?.value;
+  const summary = document.getElementById('alwayzOrderSummary');
+  const result  = document.getElementById('alwayzOrderResult');
+  if (!result) return;
+  if (summary) summary.textContent = '조회 중...';
+  try {
+    let url = '/api/alwayz-orders';
+    const qs = [];
+    if (from) qs.push('start='+from);
+    if (to)   qs.push('end='+to);
+    if (qs.length) url += '?'+qs.join('&');
+    const res  = await fetch(url);
+    const rows = await res.json();
+    if (rows.error) { if (summary) summary.textContent = '오류: '+rows.error; return; }
+    if (summary) summary.textContent = `총 ${rows.length}건`;
+    if (!rows.length) {
+      result.innerHTML = '<div style="padding:20px;color:var(--text-dim)">주문이 없습니다. 주문서를 업로드하세요.</div>';
+      return;
+    }
+    let html = '<table class="data-table"><thead><tr>';
+    ['주문시점','상품명','옵션','수량','상품가격','정산금액','수령인','택배사','송장번호'].forEach(h => html += '<th>'+h+'</th>');
+    html += '</tr></thead><tbody>';
+    rows.forEach(r => {
+      html += '<tr>'
+        + '<td>'+(r.order_date||'')+'</td>'
+        + '<td>'+(r.product_name||'')+'</td>'
+        + '<td>'+(r.option_name||'')+'</td>'
+        + '<td>'+(r.quantity||'')+'</td>'
+        + '<td>'+Number(r.product_price||0).toLocaleString()+'</td>'
+        + '<td>'+Number(r.settlement_amount||0).toLocaleString()+'</td>'
+        + '<td>'+(r.recipient||'')+'</td>'
+        + '<td>'+(r.courier||'')+'</td>'
+        + '<td>'+(r.tracking_number||'')+'</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    result.innerHTML = html;
+  } catch(e) { if (summary) summary.textContent = '오류: '+e.message; }
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────

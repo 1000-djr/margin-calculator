@@ -4626,6 +4626,58 @@ async function maskOldOrders() {
   return count;
 }
 
+// ─── 올웨이즈 주문 대량 저장 ─────────────────────────────────────────────────────
+router.post('/alwayz-orders/bulk', requireAuth, async (req, res) => {
+  const items = (req.body && req.body.items) || [];
+  if (!items.length) return res.json({ inserted: 0 });
+  try {
+    let inserted = 0;
+    const BATCH = 100;
+    for (let start = 0; start < items.length; start += BATCH) {
+      const batch = items.slice(start, start + BATCH);
+      const values = [];
+      const params = [];
+      let p = 1;
+      for (const it of batch) {
+        values.push(`($${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++},$${p++})`);
+        params.push(
+          req.user.id, it.order_id, it.product_id||'', it.bundle_id||'', it.seller_product_code||'',
+          it.product_name||'', it.option_name||'', it.quantity||1, it.product_price||0, it.delivery_fee||0,
+          it.extra_support||0, it.coupon_alwayz||0, it.coupon_seller||0, it.coupon_total||0, it.settlement_amount||0,
+          it.address||'', it.zipcode||'', it.entrance_password||'', it.receive_method||'', it.recipient||'',
+          it.recipient_phone||'', it.order_date||'', it.courier||'', it.tracking_number||''
+        );
+      }
+      const q = `INSERT INTO alwayz_orders
+        (user_id, order_id, product_id, bundle_id, seller_product_code, product_name, option_name, quantity,
+         product_price, delivery_fee, extra_support, coupon_alwayz, coupon_seller, coupon_total, settlement_amount,
+         address, zipcode, entrance_password, receive_method, recipient, recipient_phone, order_date, courier, tracking_number)
+        VALUES ${values.join(',')}
+        ON CONFLICT (user_id, order_id, product_id) DO UPDATE SET
+          settlement_amount = EXCLUDED.settlement_amount,
+          courier = EXCLUDED.courier,
+          tracking_number = EXCLUDED.tracking_number`;
+      const r = await pool.query(q, params);
+      inserted += r.rowCount;
+    }
+    res.json({ inserted, total: items.length });
+  } catch(e) { console.error('[alwayz-orders/bulk]', e.message); res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 주문 목록 조회 (기간 필터, 결제일 기준) ────────────────────────────
+router.get('/alwayz-orders', requireAuth, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const params = [req.user.id];
+    let q = `SELECT * FROM alwayz_orders WHERE user_id=$1`;
+    if (start) { params.push(start); q += ` AND SUBSTRING(order_date,1,10) >= $${params.length}`; }
+    if (end)   { params.push(end);   q += ` AND SUBSTRING(order_date,1,10) <= $${params.length}`; }
+    q += ' ORDER BY order_date DESC LIMIT 1000';
+    const { rows } = await pool.query(q, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 도매처 송장 수집+매칭 ────────────────────────────────────────────────────────
 router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   try {
