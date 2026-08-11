@@ -2104,7 +2104,6 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     <div style="display:flex;gap:6px;padding:12px 16px 0;flex-wrap:wrap">
       <button id="astab-orders" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('orders')">📋 주문서</button>
       <button id="astab-profit" class="tab" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('profit')">📊 수익분석</button>
-      <button id="astab-dispatch" class="tab" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('dispatch')">🚚 발주·송장</button>
     </div>
 
     <!-- 주문서 서브패널 -->
@@ -2166,41 +2165,6 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
         <div id="alwayzProfitSummary" style="margin-bottom:16px"></div>
         <div id="alwayzProfitPeriods" style="margin-bottom:16px"></div>
         <div id="alwayzProfitResult" class="data-table-wrap"></div>
-      </div>
-    </div>
-
-    <!-- 발주·송장 서브패널 -->
-    <div id="apanel-dispatch" style="display:none">
-      <div style="padding:16px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-          <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 발주</h2>
-          <input id="alwayzDispFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-          <span style="color:var(--text-dim)">~</span>
-          <input id="alwayzDispTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-          <span style="font-size:12px;color:var(--text-dim)">(결제일 기준, 미발주만)</span>
-          <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzDispatch()">🔍 발주 대상 조회</button>
-          <span id="alwayzDispSummary" style="font-size:13px;color:var(--text-dim)"></span>
-          <button id="alwayzDispAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllAlwayzDispatch()">📦 전체 발주서 다운로드</button>
-        </div>
-        <div id="alwayzDispResult" style="display:flex;flex-direction:column;gap:16px"></div>
-
-        <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-            <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
-            <div style="display:flex;gap:6px">
-              <button class="quick-pill" id="alwInvQpYesterday" onclick="setAlwayzInvQuickDate('yesterday')">어제</button>
-              <button class="quick-pill" id="alwInvQpWeek" onclick="setAlwayzInvQuickDate('week')">최근 7일</button>
-              <button class="quick-pill" id="alwInvQpMonth" onclick="setAlwayzInvQuickDate('month')">이번 달</button>
-            </div>
-            <input id="alwayzInvFrom" type="date" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-            <span style="color:var(--text-dim)">~</span>
-            <input id="alwayzInvTo" type="date" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-            <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="collectAlwayzInvoices(true)">🔍 송장 수집 (미리보기)</button>
-            <span id="alwayzInvSummary" style="font-size:13px;color:var(--text-dim)"></span>
-          </div>
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">도매처 송장을 주문아이디(1차)·전화번호(2차)로 매칭합니다.</div>
-          <div id="alwayzInvResult"></div>
-        </div>
       </div>
     </div>
   </div>
@@ -11632,15 +11596,14 @@ function _supplierColor(id) {
 let _alwayzSubTab = 'orders';
 function setAlwayzSubTab(name) {
   _alwayzSubTab = name;
-  ['orders','profit','dispatch'].forEach(t => {
+  ['orders','profit'].forEach(t => {
     const panel = document.getElementById('apanel-'+t);
     const btn = document.getElementById('astab-'+t);
     if (panel) panel.style.display = (name===t) ? '' : 'none';
     if (btn) btn.classList.toggle('active', name===t);
   });
-  if (name === 'orders')   loadAlwayzOrders();
-  if (name === 'profit')   loadAlwayzProfit();
-  if (name === 'dispatch') initAlwayzDispatch();
+  if (name === 'orders') loadAlwayzOrders();
+  if (name === 'profit') loadAlwayzProfit();
 }
 
 function setSupplierSubTab(name) {
