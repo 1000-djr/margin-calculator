@@ -2118,21 +2118,37 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   <!-- ══ 올웨이즈 수익분석 탭 ══════════════════════════════════════════════ -->
   <div class="panel" id="tab-alwayz-profit">
     <div style="padding:16px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 수익분석</h2>
-        <div style="display:flex;gap:6px">
-          <button class="quick-pill" id="alwProfitQpYesterday" onclick="setAlwayzProfitQuickDate('yesterday')">어제</button>
-          <button class="quick-pill" id="alwProfitQpWeek" onclick="setAlwayzProfitQuickDate('week')">최근 7일</button>
-          <button class="quick-pill active" id="alwProfitQpMonth" onclick="setAlwayzProfitQuickDate('month')">이번 달</button>
+      <h2 style="font-size:18px;font-weight:700;margin:0 0 4px">🌽 올웨이즈 수익분석</h2>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:14px">순익 = 예상정산금액 − 원가 + 매입세액공제(수수료·광고비의 1/11). 광고비는 추후 연결.</div>
+      <div style="display:flex;align-items:flex-end;gap:14px;margin-bottom:16px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">집계 단위</div>
+          <div style="display:inline-flex;background:var(--surface2);border-radius:8px;padding:3px">
+            <button class="period-btn active" id="alwPeriodDay" onclick="setAlwayzPeriodMode('day')">일별</button>
+            <button class="period-btn" id="alwPeriodWeek" onclick="setAlwayzPeriodMode('week')">주별</button>
+            <button class="period-btn" id="alwPeriodMonth" onclick="setAlwayzPeriodMode('month')">월별</button>
+          </div>
         </div>
-        <input id="alwayzProfitFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="color:var(--text-dim)">~</span>
-        <input id="alwayzProfitTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="font-size:12px;color:var(--text-dim)">(결제일 기준)</span>
-        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzProfit()">🔍 분석</button>
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">시작일</div>
+          <input id="alwayzProfitFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">종료일</div>
+          <input id="alwayzProfitTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;font-weight:600">빠른 선택</div>
+          <div style="display:flex;gap:6px">
+            <button class="quick-pill" id="alwProfitQpYesterday" onclick="setAlwayzProfitQuickDate('yesterday')">어제</button>
+            <button class="quick-pill" id="alwProfitQpWeek" onclick="setAlwayzProfitQuickDate('week')">최근 7일</button>
+            <button class="quick-pill active" id="alwProfitQpMonth" onclick="setAlwayzProfitQuickDate('month')">이번 달</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" style="font-size:13px;padding:9px 18px" onclick="loadAlwayzProfit()">🔍 분석 실행</button>
       </div>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">순익 = 예상정산금액 − 원가 + 매입세액공제(수수료·광고비의 1/11). 광고비는 추후 연결.</div>
       <div id="alwayzProfitSummary" style="margin-bottom:16px"></div>
+      <div id="alwayzProfitPeriods" style="margin-bottom:16px"></div>
       <div id="alwayzProfitResult" class="data-table-wrap"></div>
     </div>
   </div>
@@ -12376,6 +12392,16 @@ async function loadAlwayzOrders() {
 }
 
 // ── 올웨이즈 수익분석 ────────────────────────────────────────────────────────
+let _alwayzProfitGroupBy = 'day';
+function setAlwayzPeriodMode(mode) {
+  _alwayzProfitGroupBy = mode;
+  ['Day','Week','Month'].forEach(m => {
+    const el = document.getElementById('alwPeriod'+m);
+    if (el) el.classList.toggle('active', m.toLowerCase() === mode);
+  });
+  loadAlwayzProfit();
+}
+
 function setAlwayzProfitQuickDate(preset) {
   ['Yesterday','Week','Month'].forEach(p => {
     const el = document.getElementById('alwProfitQp'+p);
@@ -12413,15 +12439,18 @@ async function loadAlwayzProfit() {
   initAlwayzProfitDates();
   const from  = document.getElementById('alwayzProfitFrom').value;
   const to    = document.getElementById('alwayzProfitTo').value;
-  const sumEl = document.getElementById('alwayzProfitSummary');
-  const resEl = document.getElementById('alwayzProfitResult');
+  const sumEl     = document.getElementById('alwayzProfitSummary');
+  const periodsEl = document.getElementById('alwayzProfitPeriods');
+  const resEl     = document.getElementById('alwayzProfitResult');
   sumEl.innerHTML = '<div style="color:var(--text-dim)">분석 중...</div>';
+  if (periodsEl) periodsEl.innerHTML = '';
   resEl.innerHTML = '';
   try {
     let url = '/api/alwayz-profit';
     const qs = [];
     if (from) qs.push('start='+from);
     if (to)   qs.push('end='+to);
+    if (_alwayzProfitGroupBy) qs.push('groupBy='+_alwayzProfitGroupBy);
     if (qs.length) url += '?'+qs.join('&');
     const res = await fetch(url);
     const j   = await res.json();
@@ -12438,6 +12467,18 @@ async function loadAlwayzProfit() {
       + card('마진율',    s.margin_rate+'%', s.margin_rate>=0?'var(--green)':'red')
       + '</div>'
       + (s.no_cost_count>0 ? '<div style="margin-top:10px;font-size:13px;color:var(--warning,#b8860b)">⚠️ 원가 미연결 '+s.no_cost_count+'종 — 주문서 탭에서 B2B 연결하면 정확해집니다.</div>' : '');
+    if (j.periods && j.periods.length && periodsEl) {
+      let ph = '<table class="data-table"><thead><tr><th>기간</th><th>판매수</th><th>정산금액</th><th>원가</th><th>순이익</th><th>마진율</th></tr></thead><tbody>';
+      j.periods.forEach(p => {
+        ph += '<tr><td>'+escHtml(p.period)+'</td><td style="text-align:center">'+p.qty+'</td>'
+          + '<td style="text-align:right">'+Number(p.settlement).toLocaleString()+'</td>'
+          + '<td style="text-align:right">'+Number(p.total_cost).toLocaleString()+'</td>'
+          + '<td style="text-align:right;font-weight:600;color:'+(p.net_profit>=0?'var(--green)':'red')+'">'+Number(p.net_profit).toLocaleString()+'</td>'
+          + '<td style="text-align:right">'+p.margin_rate+'%</td></tr>';
+      });
+      ph += '</tbody></table>';
+      periodsEl.innerHTML = '<div style="font-size:13px;font-weight:600;margin-bottom:8px">📅 기간별</div>'+ph;
+    } else if (periodsEl) { periodsEl.innerHTML = ''; }
     if (!j.products.length) { resEl.innerHTML = '<div style="padding:20px;color:var(--text-dim)">데이터가 없습니다.</div>'; return; }
     let html = '<table class="data-table"><thead><tr>'
       + '<th>상품명</th><th>옵션</th><th>판매수</th><th>정산금액</th><th>원가</th><th>순이익</th><th>마진율</th>'

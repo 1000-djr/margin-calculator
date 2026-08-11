@@ -4681,11 +4681,16 @@ router.get('/alwayz-orders', requireAuth, async (req, res) => {
 // ─── 올웨이즈 수익분석 (결제일 기준, 상품별 집계 + 총계) ─────────────────────────
 router.get('/alwayz-profit', requireAuth, async (req, res) => {
   try {
-    const { start, end } = req.query;
+    const { start, end, groupBy = 'day' } = req.query;
     const params = [req.user.id];
     let dateFilter = '';
     if (start) { params.push(start); dateFilter += ` AND SUBSTRING(o.order_date,1,10) >= $${params.length}`; }
     if (end)   { params.push(end);   dateFilter += ` AND SUBSTRING(o.order_date,1,10) <= $${params.length}`; }
+
+    let periodExpr;
+    if (groupBy === 'month')     periodExpr = `SUBSTRING(o.order_date,1,7)`;
+    else if (groupBy === 'week') periodExpr = `TO_CHAR(TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD'), 'IYYY-"W"IW')`;
+    else                         periodExpr = `SUBSTRING(o.order_date,1,10)`;
 
     const q = `
       WITH order_costs AS (
@@ -4752,6 +4757,40 @@ router.get('/alwayz-profit', requireAuth, async (req, res) => {
         margin_rate:  settle>0 ? Math.round(profit/settle*1000)/10 : 0,
       };
     });
+    const periodQ = `
+      WITH order_costs AS (
+        SELECT
+          ${periodExpr} AS period_key,
+          o.quantity, o.product_price, o.settlement_amount,
+          COALESCE((
+            SELECT bp.cost FROM alwayz_product_mapping pm
+            JOIN b2b_products b2bp ON b2bp.user_id=pm.user_id AND b2bp.name=pm.b2b_name AND b2bp.unit=pm.b2b_unit
+            JOIN b2b_prices bp ON bp.user_id=pm.user_id AND bp.b2b_product_id=b2bp.id
+             AND (bp.start_date IS NULL OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND bp.start_date <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+             AND (bp.end_date IS NULL OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND bp.end_date >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+            WHERE pm.user_id=o.user_id AND pm.product_id=o.product_id AND pm.option_name=o.option_name
+            ORDER BY bp.start_date DESC NULLS LAST LIMIT 1
+          ), 0) AS unit_cost
+        FROM alwayz_orders o
+        WHERE o.user_id=$1${dateFilter}
+      )
+      SELECT period_key,
+        SUM(product_price)::NUMERIC(14,2)        AS gross_sales,
+        SUM(settlement_amount)::NUMERIC(14,2)    AS settlement,
+        SUM(unit_cost * quantity)::NUMERIC(14,2) AS total_cost,
+        SUM(quantity)::INTEGER                   AS qty
+      FROM order_costs
+      GROUP BY period_key
+      ORDER BY period_key DESC
+    `;
+    const { rows: periodRows } = await pool.query(periodQ, params);
+    const periods = periodRows.map(r => {
+      const gross=parseFloat(r.gross_sales)||0, settle=parseFloat(r.settlement)||0, cost=parseFloat(r.total_cost)||0;
+      const commission=gross-settle, ad=0, tax=-(commission/11)-(ad/11);
+      const profit=settle-cost-ad-tax;
+      return { period:r.period_key, qty:r.qty, settlement:Math.round(settle), total_cost:Math.round(cost), net_profit:Math.round(profit), margin_rate:settle>0?Math.round(profit/settle*1000)/10:0 };
+    });
+
     res.json({
       summary: {
         gross_sales:   Math.round(tGross),
@@ -4763,6 +4802,7 @@ router.get('/alwayz-profit', requireAuth, async (req, res) => {
         no_cost_count: products.filter(p=>!p.has_cost).length,
       },
       products,
+      periods,
     });
   } catch(e) { console.error('[alwayz-profit]', e.message); res.status(500).json({ error: e.message }); }
 });
