@@ -4678,6 +4678,71 @@ router.get('/alwayz-orders', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 발주 대상조회 + B2B 자동 도매처 매칭 ──────────────────────────────
+router.get('/alwayz-orders/for-dispatch', requireAuth, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const params = [req.user.id];
+    let df = '';
+    if (from) { params.push(from); df += ` AND SUBSTRING(o.order_date,1,10) >= $${params.length}`; }
+    if (to)   { params.push(to);   df += ` AND SUBSTRING(o.order_date,1,10) <= $${params.length}`; }
+
+    const q = `
+      SELECT o.id, o.order_id, o.order_date, o.product_id, o.product_name, o.option_name,
+             o.quantity, o.recipient, o.recipient_phone, o.address, o.zipcode, o.entrance_password,
+             pm.b2b_name, pm.b2b_unit,
+             (
+               SELECT bs.name FROM alwayz_product_mapping pm2
+               JOIN b2b_products bp ON bp.user_id=pm2.user_id AND bp.name=pm2.b2b_name AND bp.unit=pm2.b2b_unit
+               JOIN b2b_prices pr ON pr.user_id=pm2.user_id AND pr.b2b_product_id=bp.id
+                 AND pr.start_date <= CURRENT_DATE AND (pr.end_date IS NULL OR pr.end_date >= CURRENT_DATE)
+               JOIN b2b_suppliers bs ON bs.id=pr.supplier_id
+               WHERE pm2.user_id=o.user_id AND pm2.product_id=o.product_id AND pm2.option_name=o.option_name
+               ORDER BY pr.start_date DESC LIMIT 1
+             ) AS supplier_name
+      FROM alwayz_orders o
+      LEFT JOIN alwayz_product_mapping pm
+        ON pm.user_id=o.user_id AND pm.product_id=o.product_id AND pm.option_name=o.option_name
+      WHERE o.user_id=$1 AND o.ordered_at IS NULL${df}
+      ORDER BY o.product_name
+    `;
+    const { rows } = await pool.query(q, params);
+
+    const { rows: wsList } = await pool.query(
+      `SELECT id, name, COALESCE(form_key,'') AS form_key FROM wholesale_suppliers WHERE user_id=$1`, [req.user.id]
+    );
+    const wsByName = {};
+    wsList.forEach(w => { wsByName[w.name] = w; });
+
+    const groups = {}; const unmatched = [];
+    for (const r of rows) {
+      if (!r.supplier_name) {
+        unmatched.push({ ...r, reason: r.b2b_name ? '진행중 매입가 없음' : 'B2B 미연결' });
+        continue;
+      }
+      const ws = wsByName[r.supplier_name];
+      if (!ws || !ws.form_key) {
+        unmatched.push({ ...r, supplier_name: r.supplier_name, reason: '발주양식 미지정('+r.supplier_name+')' });
+        continue;
+      }
+      const key = ws.id;
+      if (!groups[key]) groups[key] = { supplier_id: ws.id, supplier_name: ws.name, form_key: ws.form_key, orders: [] };
+      groups[key].orders.push({
+        order_id:         r.order_id,
+        product_name:     r.b2b_name,
+        option_name:      '',
+        quantity:         r.quantity,
+        recipient:        r.recipient,
+        recipient_phone:  r.recipient_phone,
+        address:          r.address,
+        zipcode:          r.zipcode,
+        delivery_msg:     '',
+      });
+    }
+    res.json({ groups: Object.values(groups), unmatched, total: rows.length });
+  } catch(e) { console.error('[alwayz for-dispatch]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ─── 올웨이즈 SA광고 조회 ────────────────────────────────────────────────────────
 router.get('/alwayz-sa-ads', requireAuth, async (req, res) => {
   try {
