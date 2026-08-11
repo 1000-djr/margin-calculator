@@ -4691,6 +4691,7 @@ async function doOrdersUpload(toAdd) {
 
 // ── 필터링 업로드 ──────────────────────────────────────────────────────────────
 let _orderFilterParsedRows = [];  // 파싱된 전체 행 (필터 모달용)
+let _orderFilterGroups = [];      // 상품 단위 그룹 (필터 모달용)
 
 function handleOrdersFilterUpload(input) {
   const file = input.files[0];
@@ -4757,66 +4758,63 @@ function handleOrdersFilterUpload(input) {
 }
 
 function openOrderFilterModal() {
-  document.getElementById('orderFilterSearch').value = '';
+  const map = {};
+  _orderFilterParsedRows.forEach(r => {
+    const key = (r['노출상품ID']||'')+'|'+(r['옵션ID']||'')+'|'+(r['등록상품명']||'')+'|'+(r['등록옵션명']||'');
+    if (!map[key]) map[key] = { key, product_name:r['등록상품명']||'', option_name:r['등록옵션명']||'', product_id:r['노출상품ID']||'', option_id:r['옵션ID']||'', count:0, selected:true };
+    map[key].count++;
+  });
+  _orderFilterGroups = Object.values(map);
   document.getElementById('orderFilterModal').style.display = 'flex';
+  const s = document.getElementById('orderFilterSearch'); if (s) s.value = '';
   renderOrderFilterTable();
 }
 
 function closeOrderFilterModal() {
   document.getElementById('orderFilterModal').style.display = 'none';
   _orderFilterParsedRows = [];
+  _orderFilterGroups = [];
 }
 
 function renderOrderFilterTable() {
-  const q = document.getElementById('orderFilterSearch').value.trim().toLowerCase();
+  const q = (document.getElementById('orderFilterSearch').value||'').trim().toLowerCase();
   const tbody = document.getElementById('orderFilterTbody');
-  const filtered = q
-    ? _orderFilterParsedRows.filter(r => (r['등록상품명'] || '').toLowerCase().includes(q))
-    : _orderFilterParsedRows;
-
-  tbody.innerHTML = filtered.map((r, idx) => {
-    const origIdx = _orderFilterParsedRows.indexOf(r);
-    return `<tr style="border-bottom:1px solid var(--border)">
-      <td style="padding:7px 10px;text-align:center">
-        <input type="checkbox" class="order-filter-chk" data-idx="${origIdx}" checked style="accent-color:var(--primary)">
-      </td>
-      <td style="padding:7px 10px">${escHtml(r['등록상품명'] || '')}</td>
-      <td style="padding:7px 10px;color:var(--text-sub)">${escHtml(r['등록옵션명'] || '')}</td>
-      <td style="padding:7px 10px;color:var(--text-dim);font-size:12px">${escHtml(r['노출상품ID'] || '')}</td>
-      <td style="padding:7px 10px;color:var(--text-dim);font-size:12px">${escHtml(r['옵션ID'] || '')}</td>
-    </tr>`;
+  const shown = q ? _orderFilterGroups.filter(g => (g.product_name||'').toLowerCase().includes(q)) : _orderFilterGroups;
+  tbody.innerHTML = shown.map(g => {
+    const realIdx = _orderFilterGroups.indexOf(g);
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      + '<td style="padding:7px 10px;text-align:center"><input type="checkbox" class="order-filter-chk" '+(g.selected?'checked':'')+' onchange="_orderFilterGroups['+realIdx+'].selected=this.checked;updateOrderFilterCount()" style="accent-color:var(--primary)"></td>'
+      + '<td style="padding:7px 10px">'+escHtml(g.product_name)+'</td>'
+      + '<td style="padding:7px 10px;color:var(--text-sub)">'+escHtml(g.option_name)+'</td>'
+      + '<td style="padding:7px 10px;color:var(--text-dim);font-size:12px">'+escHtml(g.product_id)+'</td>'
+      + '<td style="padding:7px 10px;color:var(--text-dim);font-size:12px">'+escHtml(g.option_id)+' ('+g.count+'건)</td>'
+      + '</tr>';
   }).join('');
-
   updateOrderFilterCount();
 }
 
 function updateOrderFilterCount() {
-  const total = _orderFilterParsedRows.length;
-  const checked = document.querySelectorAll('.order-filter-chk:checked').length;
-  document.getElementById('orderFilterCount').textContent = `${total}건 중 ${checked}건 선택`;
-  document.getElementById('orderFilterSelectAll').checked = checked === total && total > 0;
-  // 체크박스 변경 이벤트 등록 (동적 생성 요소)
-  document.querySelectorAll('.order-filter-chk').forEach(chk => {
-    chk.onchange = updateOrderFilterCount;
-  });
+  const sel = _orderFilterGroups.filter(g=>g.selected);
+  const orderCount = sel.reduce((a,g)=>a+g.count,0);
+  document.getElementById('orderFilterCount').textContent = '상품 '+sel.length+'종 · 주문 '+orderCount+'건 선택';
+  const all = document.getElementById('orderFilterSelectAll');
+  if (all) all.checked = _orderFilterGroups.length>0 && _orderFilterGroups.every(g=>g.selected);
 }
 
 function setAllOrderFilter(checked) {
-  document.querySelectorAll('.order-filter-chk').forEach(chk => { chk.checked = checked; });
-  document.getElementById('orderFilterSelectAll').checked = checked;
-  updateOrderFilterCount();
+  const q = (document.getElementById('orderFilterSearch').value||'').trim().toLowerCase();
+  _orderFilterGroups.forEach(g => { if (!q || (g.product_name||'').toLowerCase().includes(q)) g.selected = checked; });
+  renderOrderFilterTable();
 }
 
 async function uploadFilteredOrders() {
-  const checkedIdxs = new Set(
-    [...document.querySelectorAll('.order-filter-chk:checked')].map(chk => parseInt(chk.dataset.idx))
-  );
-  if (!checkedIdxs.size) { alert('선택된 항목이 없습니다.'); return; }
-
-  const selected = _orderFilterParsedRows.filter((_, i) => checkedIdxs.has(i));
-
+  const selectedKeys = new Set(_orderFilterGroups.filter(g=>g.selected).map(g=>g.key));
+  if (!selectedKeys.size) { alert('선택된 상품이 없습니다.'); return; }
+  const selected = _orderFilterParsedRows.filter(r => {
+    const key = (r['노출상품ID']||'')+'|'+(r['옵션ID']||'')+'|'+(r['등록상품명']||'')+'|'+(r['등록옵션명']||'');
+    return selectedKeys.has(key);
+  });
   closeOrderFilterModal();
-  // 중복 체크는 DB ON CONFLICT DO NOTHING으로만 처리
   await doOrdersUpload(selected);
 }
 
