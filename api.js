@@ -4783,7 +4783,7 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
         } else if (!ourPhone || ourPhone.length < 10) {
           reason = '안심번호_소실(14일마스킹_과거건)';
         } else {
-          reason = '매칭실패_확인필요';
+          reason = '미발송_송장대기(도매처가_아직_송장미등록)';
         }
         unmatched.push({
           order_id: order.id,
