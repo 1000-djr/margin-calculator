@@ -2224,6 +2224,24 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       </div>
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">도매처별로 쿠팡+올웨이즈 주문을 합쳐 발주합니다. 입금은 도매처당 한 번. 발주서는 기본 합침, 필요시 매체별로 나눠 받으세요.</div>
       <div id="udResult" style="display:flex;flex-direction:column;gap:16px"></div>
+
+      <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
+          <div style="display:flex;gap:6px">
+            <button class="quick-pill" onclick="setUdInvQuickDate('yesterday')">어제</button>
+            <button class="quick-pill" onclick="setUdInvQuickDate('week')">최근 7일</button>
+            <button class="quick-pill active" onclick="setUdInvQuickDate('today')">오늘</button>
+          </div>
+          <input id="udInvFrom" type="date" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <span style="color:var(--text-dim)">~</span>
+          <input id="udInvTo" type="date" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="collectUnifiedInvoices()">🔍 송장 수집</button>
+          <span id="udInvSummary" style="font-size:13px;color:var(--text-dim)"></span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">도매처 송장을 쿠팡·올웨이즈 주문에 각각 매칭합니다. 엑셀은 매체별 양식이 달라 따로 받습니다.</div>
+        <div id="udInvResult"></div>
+      </div>
     </div>
   </div>
 
@@ -12993,6 +13011,64 @@ async function downloadAllUnified() {
   const ids=_udData.groups.filter(g=>g.form_key).map(g=>g.supplier_id);
   for(const sid of ids){await downloadUnifiedExcel(sid,'both');await new Promise(r=>setTimeout(r,500));}
   alert('전체 발주서 다운로드 완료 ('+ids.length+'개 도매처)');
+}
+
+// ── 통합 발주·송장 탭 — 송장 수집 ───────────────────────────────────────────────
+function setUdInvQuickDate(preset) {
+  event.target.parentElement.querySelectorAll('.quick-pill').forEach(b=>b.classList.remove('active'));
+  event.target.classList.add('active');
+  const kst=new Date(Date.now()+9*3600*1000); const fmt=d=>d.toISOString().slice(0,10);
+  let from,to;
+  if(preset==='yesterday'){const y=new Date(kst);y.setDate(y.getDate()-1);from=to=fmt(y);}
+  else if(preset==='week'){const w=new Date(kst);w.setDate(w.getDate()-6);from=fmt(w);to=fmt(kst);}
+  else{from=to=fmt(kst);}
+  document.getElementById('udInvFrom').value=from;
+  document.getElementById('udInvTo').value=to;
+}
+
+async function collectUnifiedInvoices() {
+  let from=document.getElementById('udInvFrom').value, to=document.getElementById('udInvTo').value;
+  if(!from){const kst=new Date(Date.now()+9*3600*1000);from=to=kst.toISOString().slice(0,10);document.getElementById('udInvFrom').value=from;document.getElementById('udInvTo').value=to;}
+  const summary=document.getElementById('udInvSummary'), result=document.getElementById('udInvResult');
+  summary.textContent='수집 중...'; result.innerHTML='';
+  try {
+    const [cp, aw] = await Promise.all([
+      fetch('/api/orders/collect-invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to,dryRun:false})}).then(r=>r.json()),
+      fetch('/api/alwayz-orders/collect-invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to,dryRun:false})}).then(r=>r.json())
+    ]);
+    // 쿠팡 송장 엑셀용 전역 변수 세팅 (downloadCoupangInvoiceExcel 재사용)
+    _invMatched = cp.matched_list || [];
+    const cpMatched = _invMatched.length;
+    const awMatched = aw.matched ?? 0;
+    summary.textContent='쿠팡 매칭 '+cpMatched+'건 · 올웨이즈 매칭 '+awMatched+'건';
+    let html='<div style="display:flex;gap:12px;flex-wrap:wrap">';
+    html+='<div style="flex:1;min-width:240px;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
+    html+='<div style="font-size:14px;font-weight:700;margin-bottom:8px"><span style="background:#e8f0fe;color:#1a73e8;padding:1px 8px;border-radius:4px;font-size:12px">쿠팡</span> 송장 '+cpMatched+'건</div>';
+    if(cpMatched>0) html+='<button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="downloadCoupangInvoiceExcel()">📥 쿠팡 송장 엑셀 (formV4)</button>';
+    else html+='<div style="font-size:12px;color:var(--text-dim)">매칭된 송장이 없습니다</div>';
+    html+='</div>';
+    html+='<div style="flex:1;min-width:240px;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
+    html+='<div style="font-size:14px;font-weight:700;margin-bottom:8px"><span style="background:#fef3e8;color:#e8871a;padding:1px 8px;border-radius:4px;font-size:12px">올웨이즈</span> 송장 '+awMatched+'건</div>';
+    if(awMatched>0) html+='<button class="btn btn-primary" style="font-size:13px;padding:6px 14px" onclick="downloadAlwayzInvoiceExcelUd()">📥 올웨이즈 송장 엑셀</button>';
+    else html+='<div style="font-size:12px;color:var(--text-dim)">매칭된 송장이 없습니다</div>';
+    html+='</div>';
+    html+='</div>';
+    result.innerHTML=html;
+    window._udInvFrom=from; window._udInvTo=to;
+  } catch(e){summary.textContent='오류: '+e.message;}
+}
+
+async function downloadAlwayzInvoiceExcelUd() {
+  const from=window._udInvFrom, to=window._udInvTo;
+  const res=await fetch('/api/alwayz-orders/invoice-excel-data?from='+from+'&to='+to);
+  const rows=await res.json();
+  if(rows.error) return alert(rows.error);
+  if(!rows.length) return alert('송장 있는 올웨이즈 주문이 없습니다');
+  const headers=['주문아이디','상품아이디','합배송아이디','판매자 상품코드','상품명','옵션','수량','상품가격','배송비','추가지원금','올웨이즈 부담 쿠폰 할인금','판매자 부담 쿠폰 할인금','총 쿠폰 할인금','예상 정산금액(수수료 제외)','주소','우편번호','공동현관 비밀번호','수령 방법','수령인','수령인 연락처','주문 시점','택배사','운송장번호','고유 코드'];
+  const data=rows.map(r=>[r.order_id,r.product_id,r.bundle_id,r.seller_product_code,r.product_name,r.option_name,r.quantity,Number(r.product_price)||0,Number(r.delivery_fee)||0,Number(r.extra_support)||0,Number(r.coupon_alwayz)||0,Number(r.coupon_seller)||0,Number(r.coupon_total)||0,Number(r.settlement_amount)||0,r.address,r.zipcode,r.entrance_password,r.receive_method,r.recipient,r.recipient_phone,r.order_date,r.courier||'',r.tracking_number||'',r.unique_code||'']);
+  const ws=XLSX.utils.aoa_to_sheet([headers,...data]); const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'주문 내역');
+  XLSX.writeFile(wb,'올웨이즈_송장업로드_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.xlsx');
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
