@@ -12871,13 +12871,13 @@ async function loadUdMatching() {
   if (summary) summary.textContent = '불러오는 중...';
   try {
     const [cpMap, awMap] = await Promise.all([
-      fetch('/api/order-mappings').then(r=>r.json()).catch(()=>[]),
+      fetch('/api/coupang-order-matching-list').then(r=>r.json()).catch(()=>[]),
       fetch('/api/alwayz-order-mappings').then(r=>r.json()).catch(()=>[])
     ]);
     _udmData.coupang = Array.isArray(cpMap) ? cpMap.map(m => ({
       platform:'coupang', key:m.option_id, product_name:m.registered_name, option_name:m.option_name||'',
       supplier_id:m.supplier_id, supplier_name:m.supplier_name||null, supplier_product_name:m.supplier_product_name||'',
-      matched: !!m.supplier_id
+      order_count:m.order_count, matched: !!m.supplier_id
     })) : [];
     _udmData.alwayz = Array.isArray(awMap) ? awMap.map(m => ({
       platform:'alwayz', product_id:m.product_id, option_name:m.option_name||'', product_name:m.registered_name,

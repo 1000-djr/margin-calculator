@@ -4506,6 +4506,29 @@ router.get('/supplier/:supplierId/products', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 쿠팡 발주매칭 목록 (주문서 전체 상품 + 매칭상태) ─────────────────────────────
+router.get('/coupang-order-matching-list', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        d.option_id,
+        MAX(d.product_name) AS registered_name,
+        MAX(d.option_name)  AS option_name,
+        MAX(d.order_date)   AS last_order_date,
+        COUNT(*)            AS order_count,
+        m.supplier_id, m.supplier_product_name, m.supplier_option_name,
+        ws.name AS supplier_name
+      FROM orders d
+      LEFT JOIN order_mappings m ON m.user_id=d.user_id AND m.option_id=d.option_id
+      LEFT JOIN wholesale_suppliers ws ON ws.id=m.supplier_id
+      WHERE d.user_id=$1 AND d.option_id IS NOT NULL AND d.option_id <> ''
+      GROUP BY d.option_id, m.supplier_id, m.supplier_product_name, m.supplier_option_name, ws.name
+      ORDER BY MAX(d.order_date) DESC
+    `, [req.user.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 발주 매칭 CRUD ──────────────────────────────────────────────────────────
 router.get('/order-mappings', requireAuth, async (req, res) => {
   try {
