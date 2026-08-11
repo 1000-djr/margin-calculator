@@ -12935,18 +12935,66 @@ function renderUdMatching() {
 }
 
 function openUdmEdit(platform, idx) {
-  if (platform === 'coupang') {
-    const item = _udmData.coupang[idx];
-    switchTab('supplier');
-    if (typeof setSupplierSubTab==='function') setSupplierSubTab('order');
-    setTimeout(() => {
-      if (document.getElementById('omOptionId')) document.getElementById('omOptionId').value = item.key||'';
-      if (document.getElementById('omRegisteredName')) document.getElementById('omRegisteredName').value = item.product_name||'';
-      if (document.getElementById('omOptionName')) document.getElementById('omOptionName').value = item.option_name||'';
-    }, 300);
-    return;
-  }
+  if (platform === 'coupang') { openUdmCoupangForm(idx); return; }
   openUdmAlwayzForm(idx);
+}
+
+async function openUdmCoupangForm(idx) {
+  const item = _udmData.coupang[idx];
+  const ws = await fetch('/api/wholesale-suppliers').then(r=>r.json()).catch(()=>[]);
+  const supplierOpts = (Array.isArray(ws)?ws:[]).map(w =>
+    '<option value="'+w.id+'"'+(String(w.id)===String(item.supplier_id||'')?' selected':'')+'>'+escHtml(w.name)+'</option>'
+  ).join('');
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = '<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;width:480px;max-width:94vw">'
+    +'<div style="font-size:16px;font-weight:700;margin-bottom:4px">쿠팡 발주매칭</div>'
+    +'<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">'+escHtml(item.product_name||'')+(item.option_name?' · '+escHtml(item.option_name):'')+'<br><span style="font-size:11px">옵션ID: '+escHtml(item.key||'')+'</span></div>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">발주처(도매처)</label>'
+    +'<select id="udmCpSupplier" onchange="udmCpSearchProduct()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;font-family:var(--sans)"><option value="">— 선택 —</option>'+supplierOpts+'</select>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">도매처 상품명(발주서에 찍힘)</label>'
+    +'<input id="udmCpProductName" type="text" value="'+escHtml(item.supplier_product_name||'')+'" placeholder="입력하면 도매처 상품 검색" oninput="udmCpSearchProduct()" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px;font-family:var(--sans)">'
+    +'<div id="udmCpSearchResult" style="max-height:160px;overflow-y:auto;margin-bottom:12px"></div>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">도매처 옵션명 (선택)</label>'
+    +'<input id="udmCpOptionName" type="text" value="'+escHtml(item.supplier_option_name||'')+'" placeholder="예: 10kg 박스" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:12px;font-family:var(--sans)">'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="this.closest(\'[style*=fixed]\').remove()">취소</button>'
+    +'<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="saveUdmCoupang('+idx+',this)">저장</button>'
+    +'</div></div>';
+  document.body.appendChild(modal);
+}
+
+async function udmCpSearchProduct() {
+  const supplierId = document.getElementById('udmCpSupplier')?.value;
+  const q = (document.getElementById('udmCpProductName')?.value||'').trim();
+  const box = document.getElementById('udmCpSearchResult');
+  if (!box) return;
+  if (!supplierId || q.length < 1) { box.innerHTML = ''; return; }
+  try {
+    const items = await fetch('/api/order-mappings/search-supplier-product?supplier_id='+encodeURIComponent(supplierId)+'&q='+encodeURIComponent(q)).then(r=>r.json());
+    if (!Array.isArray(items)||!items.length) { box.innerHTML='<div style="font-size:12px;color:var(--text-dim);padding:6px">검색 결과 없음 (직접 입력 가능)</div>'; return; }
+    box.innerHTML = items.slice(0,10).map(it =>
+      '<div onclick="document.getElementById(\'udmCpProductName\').value=this.dataset.name;document.getElementById(\'udmCpSearchResult\').innerHTML=\'\'" data-name="'+escHtml(it.name||'')+'" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+escHtml(it.name||'')+'</div>'
+    ).join('');
+  } catch(e) { box.innerHTML = ''; }
+}
+
+async function saveUdmCoupang(idx, btn) {
+  const item = _udmData.coupang[idx];
+  const supplier_id = document.getElementById('udmCpSupplier')?.value || null;
+  const supplier_product_name = (document.getElementById('udmCpProductName')?.value||'').trim();
+  const supplier_option_name = (document.getElementById('udmCpOptionName')?.value||'').trim();
+  if (!supplier_id) { alert('도매처를 선택하세요'); return; }
+  btn.disabled = true; btn.textContent = '저장 중...';
+  try {
+    const r = await fetch('/api/order-mappings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ option_id:item.key, registered_name:item.product_name, option_name:item.option_name, supplier_id, supplier_product_name, supplier_option_name })
+    });
+    if (!r.ok) { const e=await r.json(); throw new Error(e.error); }
+    btn.closest('[style*=fixed]').remove();
+    await loadUdMatching();
+  } catch(e) { alert('저장 실패: '+e.message); btn.disabled=false; btn.textContent='저장'; }
 }
 
 async function openUdmAlwayzForm(idx) {
