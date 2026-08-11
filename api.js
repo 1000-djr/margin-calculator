@@ -4678,6 +4678,95 @@ router.get('/alwayz-orders', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 수익분석 (결제일 기준, 상품별 집계 + 총계) ─────────────────────────
+router.get('/alwayz-profit', requireAuth, async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    const params = [req.user.id];
+    let dateFilter = '';
+    if (start) { params.push(start); dateFilter += ` AND SUBSTRING(o.order_date,1,10) >= $${params.length}`; }
+    if (end)   { params.push(end);   dateFilter += ` AND SUBSTRING(o.order_date,1,10) <= $${params.length}`; }
+
+    const q = `
+      WITH order_costs AS (
+        SELECT
+          o.product_id,
+          o.option_name,
+          MAX(o.product_name) AS product_name,
+          o.quantity,
+          o.product_price,
+          o.settlement_amount,
+          COALESCE((
+            SELECT bp.cost
+            FROM alwayz_product_mapping pm
+            JOIN b2b_products b2bp
+              ON b2bp.user_id = pm.user_id AND b2bp.name = pm.b2b_name AND b2bp.unit = pm.b2b_unit
+            JOIN b2b_prices bp
+              ON bp.user_id = pm.user_id AND bp.b2b_product_id = b2bp.id
+             AND (bp.start_date IS NULL OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND bp.start_date <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+             AND (bp.end_date IS NULL OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' AND bp.end_date >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+            WHERE pm.user_id = o.user_id AND pm.product_id = o.product_id AND pm.option_name = o.option_name
+            ORDER BY bp.start_date DESC NULLS LAST
+            LIMIT 1
+          ), 0) AS unit_cost
+        FROM alwayz_orders o
+        WHERE o.user_id = $1${dateFilter}
+        GROUP BY o.product_id, o.option_name, o.quantity, o.product_price, o.settlement_amount, o.order_date, o.user_id
+      )
+      SELECT
+        product_id,
+        option_name,
+        MAX(product_name) AS product_name,
+        SUM(quantity)::INTEGER                   AS qty,
+        SUM(product_price)::NUMERIC(14,2)        AS gross_sales,
+        SUM(settlement_amount)::NUMERIC(14,2)    AS settlement,
+        SUM(unit_cost * quantity)::NUMERIC(14,2) AS total_cost,
+        BOOL_OR(unit_cost > 0)                   AS has_cost
+      FROM order_costs
+      GROUP BY product_id, option_name
+      ORDER BY settlement DESC
+    `;
+    const { rows } = await pool.query(q, params);
+
+    let tGross=0, tSettle=0, tCost=0, tProfit=0;
+    const products = rows.map(r => {
+      const gross  = parseFloat(r.gross_sales)||0;
+      const settle = parseFloat(r.settlement)||0;
+      const cost   = parseFloat(r.total_cost)||0;
+      const commission = gross - settle;
+      const ad  = 0;
+      const tax = -(commission/11) - (ad/11);
+      const profit = settle - cost - ad - tax;
+      tGross+=gross; tSettle+=settle; tCost+=cost; tProfit+=profit;
+      return {
+        product_id:   r.product_id,
+        product_name: r.product_name,
+        option_name:  r.option_name,
+        qty:          r.qty,
+        gross_sales:  Math.round(gross),
+        settlement:   Math.round(settle),
+        commission:   Math.round(commission),
+        total_cost:   Math.round(cost),
+        has_cost:     r.has_cost,
+        net_profit:   Math.round(profit),
+        margin_rate:  settle>0 ? Math.round(profit/settle*1000)/10 : 0,
+      };
+    });
+    res.json({
+      summary: {
+        gross_sales:   Math.round(tGross),
+        settlement:    Math.round(tSettle),
+        total_cost:    Math.round(tCost),
+        net_profit:    Math.round(tProfit),
+        margin_rate:   tSettle>0 ? Math.round(tProfit/tSettle*1000)/10 : 0,
+        product_count: products.length,
+        no_cost_count: products.filter(p=>!p.has_cost).length,
+      },
+      products,
+    });
+  } catch(e) { console.error('[alwayz-profit]', e.message); res.status(500).json({ error: e.message }); }
+});
+
 // ─── 올웨이즈 원가표 조회 (주문서 상품 전체 + 저장된 원가 LEFT JOIN) ────────────
 router.get('/alwayz-cost-mapping', requireAuth, async (req, res) => {
   try {

@@ -770,6 +770,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
     <button class="tab" onclick="switchTab('supplier', this)">🏪 도매처</button>
     <button class="tab" onclick="switchTab('alwayz-orders', this)">🌽 올웨(주문서)</button>
+    <button class="tab" onclick="switchTab('alwayz-profit', this)">🌽 올웨(수익분석)</button>
   </div>
 
   <!-- ══ 마진 계산 탭 ══════════════════════════════════════════════ -->
@@ -2114,6 +2115,23 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 
 
+  <!-- ══ 올웨이즈 수익분석 탭 ══════════════════════════════════════════════ -->
+  <div class="panel" id="tab-alwayz-profit">
+    <div style="padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <h2 style="font-size:18px;font-weight:700;margin:0">🌽 올웨이즈 수익분석</h2>
+        <input id="alwayzProfitFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <span style="color:var(--text-dim)">~</span>
+        <input id="alwayzProfitTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+        <span style="font-size:12px;color:var(--text-dim)">(결제일 기준)</span>
+        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadAlwayzProfit()">🔍 분석</button>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">순익 = 예상정산금액 − 원가 + 매입세액공제(수수료·광고비의 1/11). 광고비는 추후 연결.</div>
+      <div id="alwayzProfitSummary" style="margin-bottom:16px"></div>
+      <div id="alwayzProfitResult" class="data-table-wrap"></div>
+    </div>
+  </div>
+
 <!-- ══ 올웨이즈 필터링 모달 ══════════════════════════════════════════════ -->
 <div id="alwayzFilterModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:var(--surface);border-radius:16px;padding:28px 32px;width:760px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,0.3)">
@@ -2950,7 +2968,8 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
   orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns',
-  'alwayz-orders': 'alwayz-orders'
+  'alwayz-orders': 'alwayz-orders',
+  'alwayz-profit': 'alwayz-profit'
 };
 const HASH_TO_TAB = Object.fromEntries(Object.entries(TAB_TO_HASH).map(([k, v]) => [v, k]));
 
@@ -2975,6 +2994,7 @@ function _activateTabUI(name) {
   if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
   if (name === 'alwayz-orders') { loadAlwayzOrders(); }
+  if (name === 'alwayz-profit') { loadAlwayzProfit(); }
 }
 
 // ── 탭 전환 (UI + 해시 업데이트) ─────────────────────────────────────────────
@@ -12314,6 +12334,63 @@ async function loadAlwayzOrders() {
     result.innerHTML = html;
   } catch(e) { if (summary) summary.textContent = '오류: '+e.message; }
   renderAlwayzUnlinked();
+}
+
+// ── 올웨이즈 수익분석 ────────────────────────────────────────────────────────
+function initAlwayzProfitDates() {
+  const kst  = new Date(Date.now()+9*3600*1000);
+  const fmt  = d => d.toISOString().slice(0,10);
+  const first = fmt(kst).slice(0,8)+'01';
+  if (!document.getElementById('alwayzProfitFrom').value) document.getElementById('alwayzProfitFrom').value = first;
+  if (!document.getElementById('alwayzProfitTo').value)   document.getElementById('alwayzProfitTo').value   = fmt(kst);
+}
+async function loadAlwayzProfit() {
+  initAlwayzProfitDates();
+  const from  = document.getElementById('alwayzProfitFrom').value;
+  const to    = document.getElementById('alwayzProfitTo').value;
+  const sumEl = document.getElementById('alwayzProfitSummary');
+  const resEl = document.getElementById('alwayzProfitResult');
+  sumEl.innerHTML = '<div style="color:var(--text-dim)">분석 중...</div>';
+  resEl.innerHTML = '';
+  try {
+    let url = '/api/alwayz-profit';
+    const qs = [];
+    if (from) qs.push('start='+from);
+    if (to)   qs.push('end='+to);
+    if (qs.length) url += '?'+qs.join('&');
+    const res = await fetch(url);
+    const j   = await res.json();
+    if (j.error) { sumEl.innerHTML = '<div style="color:red">오류: '+j.error+'</div>'; return; }
+    const s    = j.summary;
+    const card = (label, val, color) =>
+      '<div style="flex:1;min-width:130px;border:1px solid var(--border);border-radius:12px;padding:14px 16px;background:var(--surface)">'
+      + '<div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">'+label+'</div>'
+      + '<div style="font-size:20px;font-weight:700'+(color?';color:'+color:'')+'">' +val+'</div></div>';
+    sumEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap">'
+      + card('정산금액',  Number(s.settlement).toLocaleString()+'원')
+      + card('원가',      Number(s.total_cost).toLocaleString()+'원')
+      + card('순이익',    Number(s.net_profit).toLocaleString()+'원', s.net_profit>=0?'var(--green)':'red')
+      + card('마진율',    s.margin_rate+'%', s.margin_rate>=0?'var(--green)':'red')
+      + '</div>'
+      + (s.no_cost_count>0 ? '<div style="margin-top:10px;font-size:13px;color:var(--warning,#b8860b)">⚠️ 원가 미연결 '+s.no_cost_count+'종 — 주문서 탭에서 B2B 연결하면 정확해집니다.</div>' : '');
+    if (!j.products.length) { resEl.innerHTML = '<div style="padding:20px;color:var(--text-dim)">데이터가 없습니다.</div>'; return; }
+    let html = '<table class="data-table"><thead><tr>'
+      + '<th>상품명</th><th>옵션</th><th>판매수</th><th>정산금액</th><th>원가</th><th>순이익</th><th>마진율</th>'
+      + '</tr></thead><tbody>';
+    j.products.forEach(p => {
+      html += '<tr>'
+        + '<td>'+escHtml(p.product_name||'')+'</td>'
+        + '<td>'+escHtml(p.option_name||'')+'</td>'
+        + '<td style="text-align:center">'+p.qty+'</td>'
+        + '<td style="text-align:right">'+Number(p.settlement).toLocaleString()+'</td>'
+        + '<td style="text-align:right">'+(p.has_cost ? Number(p.total_cost).toLocaleString() : '<span style="color:var(--warning,#b8860b)">미연결</span>')+'</td>'
+        + '<td style="text-align:right;font-weight:600;color:'+(p.net_profit>=0?'var(--green)':'red')+'">'+Number(p.net_profit).toLocaleString()+'</td>'
+        + '<td style="text-align:right">'+p.margin_rate+'%</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    resEl.innerHTML = html;
+  } catch(e) { sumEl.innerHTML = '<div style="color:red">오류: '+e.message+'</div>'; }
 }
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
