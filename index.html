@@ -2182,12 +2182,20 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
         <div id="alwayzDispResult" style="display:flex;flex-direction:column;gap:16px"></div>
 
         <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
             <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
+            <div style="display:flex;gap:6px">
+              <button class="quick-pill" id="alwInvQpYesterday" onclick="setAlwayzInvQuickDate('yesterday')">어제</button>
+              <button class="quick-pill" id="alwInvQpWeek" onclick="setAlwayzInvQuickDate('week')">최근 7일</button>
+              <button class="quick-pill" id="alwInvQpMonth" onclick="setAlwayzInvQuickDate('month')">이번 달</button>
+            </div>
+            <input id="alwayzInvFrom" type="date" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+            <span style="color:var(--text-dim)">~</span>
+            <input id="alwayzInvTo" type="date" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
             <button class="btn btn-primary" style="font-size:13px;padding:7px 16px" onclick="collectAlwayzInvoices(true)">🔍 송장 수집 (미리보기)</button>
             <span id="alwayzInvSummary" style="font-size:13px;color:var(--text-dim)"></span>
           </div>
-          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">발주 기간과 동일한 날짜로 조회됩니다. 도매처 송장을 주문아이디(1차)·전화번호(2차)로 매칭합니다.</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">도매처 송장을 주문아이디(1차)·전화번호(2차)로 매칭합니다.</div>
           <div id="alwayzInvResult"></div>
         </div>
       </div>
@@ -12629,6 +12637,8 @@ function initAlwayzDispatch() {
   const y = new Date(kst); y.setDate(y.getDate()-1);
   if (!document.getElementById('alwayzDispFrom').value) document.getElementById('alwayzDispFrom').value = fmt(y);
   if (!document.getElementById('alwayzDispTo').value) document.getElementById('alwayzDispTo').value = fmt(kst);
+  if (!document.getElementById('alwayzInvFrom').value) document.getElementById('alwayzInvFrom').value = document.getElementById('alwayzDispFrom').value;
+  if (!document.getElementById('alwayzInvTo').value) document.getElementById('alwayzInvTo').value = document.getElementById('alwayzDispTo').value;
   if (!Object.keys(_orderForms).length) {
     fetch('/api/order-forms').then(r=>r.json()).then(j=>{ _orderForms = j.forms || {}; });
   }
@@ -12747,10 +12757,28 @@ async function downloadAllAlwayzDispatch() {
 // ── 올웨이즈 송장 수집 ────────────────────────────────────────────────────────
 let _alwayzInvData = null;
 
+function setAlwayzInvQuickDate(preset) {
+  ['Yesterday','Week','Month'].forEach(p => {
+    const el = document.getElementById('alwInvQp'+p);
+    if (el) el.classList.remove('active');
+  });
+  const map = { yesterday:'Yesterday', week:'Week', month:'Month' };
+  const btn = document.getElementById('alwInvQp'+(map[preset]||'Week'));
+  if (btn) btn.classList.add('active');
+  const kst = new Date(Date.now()+9*3600*1000);
+  const fmt = d => d.toISOString().slice(0,10);
+  let from, to;
+  if (preset === 'yesterday') { const y=new Date(kst); y.setDate(y.getDate()-1); from=to=fmt(y); }
+  else if (preset === 'month') { from=fmt(kst).slice(0,8)+'01'; to=fmt(kst); }
+  else { const w=new Date(kst); w.setDate(w.getDate()-6); from=fmt(w); to=fmt(kst); }
+  document.getElementById('alwayzInvFrom').value = from;
+  document.getElementById('alwayzInvTo').value = to;
+}
+
 async function collectAlwayzInvoices(dryRun) {
-  const from = document.getElementById('alwayzDispFrom').value;
-  const to = document.getElementById('alwayzDispTo').value;
-  if (!from || !to) return alert('발주 탭 기간을 먼저 설정하세요');
+  const from = document.getElementById('alwayzInvFrom').value || document.getElementById('alwayzDispFrom').value;
+  const to = document.getElementById('alwayzInvTo').value || document.getElementById('alwayzDispTo').value;
+  if (!from || !to) return alert('송장 수집 기간을 먼저 설정하세요');
   const summary = document.getElementById('alwayzInvSummary');
   const result = document.getElementById('alwayzInvResult');
   summary.textContent = dryRun ? '수집 중...' : '저장 중...';
@@ -12787,8 +12815,8 @@ async function collectAlwayzInvoices(dryRun) {
 }
 
 async function downloadAlwayzInvoiceExcel() {
-  const from = document.getElementById('alwayzDispFrom').value;
-  const to = document.getElementById('alwayzDispTo').value;
+  const from = document.getElementById('alwayzInvFrom').value || document.getElementById('alwayzDispFrom').value;
+  const to = document.getElementById('alwayzInvTo').value || document.getElementById('alwayzDispTo').value;
   const res = await fetch('/api/alwayz-orders/invoice-excel-data?from='+from+'&to='+to);
   const rows = await res.json();
   if (rows.error) return alert(rows.error);
