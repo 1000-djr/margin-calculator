@@ -12919,16 +12919,16 @@ function renderUdMatching() {
     const badge = x.platform==='coupang'
       ? '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#E6F1FB;color:#0C447C">쿠팡</span>'
       : '<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#FAEEDA;color:#633806">올웨이즈</span>';
-    html += '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;background:var(--surface)">';
-    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'+badge
+    html += '<div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;background:var(--surface);display:flex;align-items:center;gap:16px">';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(x.matched?'6px':'0')+';flex-wrap:wrap">'+badge
       +'<span style="font-size:14px;font-weight:600">'+escHtml(x.product_name||'')+'</span>'
       +(x.option_name?'<span style="font-size:13px;color:var(--text-sub)">· '+escHtml(x.option_name)+'</span>':'')
-      +(!x.matched?'<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#fef3e8;color:#b8860b;margin-left:auto">미매칭</span>':'')
+      +(x.matched?'':'<span style="font-size:11px;padding:2px 8px;border-radius:4px;background:#fef3e8;color:#b8860b">미매칭</span>')
       +'</div>';
-    if (x.matched) {
-      html += '<div style="font-size:13px;color:var(--text-sub)">🏪 '+escHtml(x.supplier_name||'')+' → '+escHtml(x.supplier_product_name||'')+'</div>';
-    }
-    html += '<div style="margin-top:8px"><button class="btn" style="font-size:12px;padding:5px 12px;background:var(--surface2);border:1px solid var(--border)" onclick="openUdmEdit(\''+x.platform+'\','+idx+')">'+(x.matched?'수정':'도매처 지정')+'</button></div>';
+    if (x.matched) html += '<div style="font-size:13px;color:var(--text-sub)">🏪 '+escHtml(x.supplier_name||'')+' → '+escHtml(x.supplier_product_name||'')+'</div>';
+    html += '</div>';
+    html += '<button class="btn '+(x.matched?'':'btn-primary')+'" style="font-size:14px;padding:10px 20px;white-space:nowrap;flex-shrink:0'+(x.matched?';background:var(--surface2);border:1px solid var(--border)':'')+'" onclick="openUdmEdit(\''+x.platform+'\','+idx+')">'+(x.matched?'수정':'도매처 지정')+'</button>';
     html += '</div>';
   });
   result.innerHTML = html;
