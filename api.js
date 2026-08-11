@@ -4626,38 +4626,6 @@ async function maskOldOrders() {
   return count;
 }
 
-// ─── [임시 디버그] 도매처 송장 전화번호 형식 확인 ─────────────────────────────────
-router.post('/orders/debug-invoice-phones', requireAuth, async (req, res) => {
-  try {
-    const testPhones = (req.body && req.body.phones) || [];  // 확인할 안심번호 배열
-    const { rows: linkedSuppliers } = await pool.query(
-      `SELECT id, name FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
-      [req.user.id]
-    );
-    // 전체 도매처 송장 수집 + 전화번호 셋 구성
-    const allPhones = new Set();
-    const perSupplier = {};
-    for (const s of linkedSuppliers) {
-      try {
-        const invoices = await fetchSupplierInvoices(req.user.id, s.id);
-        perSupplier[s.name||s.id] = invoices.length;
-        invoices.forEach(inv => { if (inv.receiver_phone) allPhones.add(inv.receiver_phone); });
-      } catch(e) { perSupplier[s.name||s.id] = 'ERR:'+e.message; }
-    }
-    // 테스트 안심번호들이 수집된 송장에 있는지
-    const lookup = {};
-    testPhones.forEach(p => {
-      const norm = normalizePhone(p);
-      lookup[p] = { normalized: norm, found: allPhones.has(norm) };
-    });
-    res.json({
-      supplier_counts: perSupplier,
-      total_unique_phones: allPhones.size,
-      lookup,
-    });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
 // ─── 도매처 송장 수집+매칭 ────────────────────────────────────────────────────────
 router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   try {
@@ -4808,24 +4776,6 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
       supplier_errors: supplierErrors,
       invoice_count_by_supplier: invoiceCountBySupplier,
     });
-  } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
-});
-
-// ─── 어드민플러스 발주 주문 송장 조회 테스트 ─────────────────────────────────────
-router.get('/admin/adminplus-invoice-test', requireRealAdmin, async (req, res) => {
-  try {
-    const supplierId = req.query.supplier_id;
-    if (!supplierId) return res.status(400).json({ error: 'supplier_id 필요' });
-    const { rows } = await pool.query(
-      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND api_linked=true AND api_type='adminplus'`,
-      [supplierId]
-    );
-    if (!rows.length) return res.status(400).json({ error: '도매처 API 설정 없음 (id 불일치 또는 미연결)' });
-    const cfg = getSupplierApiConfig(rows[0]);
-    if (!cfg) return res.status(400).json({ error: '도매처 API 설정 파싱 실패' });
-    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
-    const result = await adminplusGetOrders(token, { limit: '5' });
-    res.json({ status: result.status, sample: result.data });
   } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
 });
 
