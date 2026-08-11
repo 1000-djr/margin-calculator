@@ -2102,9 +2102,9 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
   <!-- ══ 통합 발주·송장 탭 ══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-unified-dispatch">
     <div style="padding:16px">
-      <h2 style="font-size:18px;font-weight:700;margin:0 0 14px">🚚 발주 (쿠팡+올웨이즈 통합)</h2>
+      <h2 style="font-size:18px;font-weight:700;margin:0 0 12px">🚚 발주·송장 (쿠팡+올웨이즈 통합)</h2>
 
-      <!-- 보내는사람 설정 (접이식) -->
+      <!-- 보내는사람 설정 (접이식) — 서브탭 공통 -->
       <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:12px;overflow:hidden">
         <div id="dispatchSenderSummary" onclick="toggleDispatchSender()"
              style="padding:14px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;background:var(--surface2)">
@@ -2135,27 +2135,42 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-        <div style="display:flex;gap:6px">
-          <button class="quick-pill active" onclick="setUdQuickDate('order_cycle')">발주분</button>
-          <button class="quick-pill" onclick="setUdQuickDate('yesterday')">어제</button>
-          <button class="quick-pill" onclick="setUdQuickDate('week')">최근 7일</button>
-          <button class="quick-pill" onclick="setUdQuickDate('today')">오늘</button>
-        </div>
-        <span id="udCycleLabel" style="font-size:12px;color:var(--text-dim)"></span>
-        <input id="udFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <span style="color:var(--text-dim)">~</span>
-        <input id="udTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
-        <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadUnifiedDispatch()">🔍 발주 대상 조회</button>
-        <span id="udSummary" style="font-size:13px;color:var(--text-dim)"></span>
-        <button id="udAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllUnified()">📦 전체 발주서</button>
+      <!-- 서브탭 버튼 -->
+      <div style="display:flex;gap:6px;margin:14px 0;border-bottom:1px solid var(--border);padding-bottom:0">
+        <button id="udtab-matching" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setUdSubTab('matching')">📋 발주매칭</button>
+        <button id="udtab-dispatch" class="tab" style="padding:6px 16px;font-size:13px" onclick="setUdSubTab('dispatch')">🚚 발주</button>
+        <button id="udtab-invoice" class="tab" style="padding:6px 16px;font-size:13px" onclick="setUdSubTab('invoice')">📮 송장</button>
       </div>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">도매처별로 쿠팡+올웨이즈 주문을 합쳐 발주합니다. 입금은 도매처당 한 번. 발주서는 기본 합침, 필요시 매체별로 나눠 받으세요.</div>
-      <div id="udResult" style="display:flex;flex-direction:column;gap:16px"></div>
 
-      <div style="margin-top:24px;border-top:2px solid var(--border);padding-top:20px">
+      <!-- 발주매칭 서브패널 (다음 단계에서 채움) -->
+      <div id="udpanel-matching">
+        <div style="padding:20px;color:var(--text-dim)">발주매칭 화면 (준비 중)</div>
+      </div>
+
+      <!-- 발주 서브패널 -->
+      <div id="udpanel-dispatch" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="display:flex;gap:6px">
+            <button class="quick-pill active" onclick="setUdQuickDate('order_cycle')">발주분</button>
+            <button class="quick-pill" onclick="setUdQuickDate('yesterday')">어제</button>
+            <button class="quick-pill" onclick="setUdQuickDate('week')">최근 7일</button>
+            <button class="quick-pill" onclick="setUdQuickDate('today')">오늘</button>
+          </div>
+          <span id="udCycleLabel" style="font-size:12px;color:var(--text-dim)"></span>
+          <input id="udFrom" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <span style="color:var(--text-dim)">~</span>
+          <input id="udTo" type="date" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--sans);background:var(--surface);color:var(--text)">
+          <button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="loadUnifiedDispatch()">🔍 발주 대상 조회</button>
+          <span id="udSummary" style="font-size:13px;color:var(--text-dim)"></span>
+          <button id="udAllBtn" class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);display:none" onclick="downloadAllUnified()">📦 전체 발주서</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">도매처별로 쿠팡+올웨이즈 주문을 합쳐 발주합니다. 입금은 도매처당 한 번. 발주서는 기본 합침, 필요시 매체별로 나눠 받으세요.</div>
+        <div id="udResult" style="display:flex;flex-direction:column;gap:16px"></div>
+      </div>
+
+      <!-- 송장 서브패널 -->
+      <div id="udpanel-invoice" style="display:none">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-          <h3 style="font-size:16px;font-weight:700;margin:0">📮 송장 수집</h3>
           <div style="display:flex;gap:6px">
             <button class="quick-pill" onclick="setUdInvQuickDate('yesterday')">어제</button>
             <button class="quick-pill" onclick="setUdInvQuickDate('week')">최근 7일</button>
@@ -12821,6 +12836,18 @@ async function downloadAlwayzInvoiceExcel() {
 
 // ── 통합 발주·송장 ────────────────────────────────────────────────────────────
 let _udData = null;
+let _udSubTab = 'matching';
+
+function setUdSubTab(name) {
+  _udSubTab = name;
+  ['matching','dispatch','invoice'].forEach(t => {
+    const panel = document.getElementById('udpanel-'+t);
+    const btn = document.getElementById('udtab-'+t);
+    if (panel) panel.style.display = (name===t) ? '' : 'none';
+    if (btn) btn.classList.toggle('active', name===t);
+  });
+  if (name === 'matching' && typeof loadUdMatching === 'function') loadUdMatching();
+}
 
 function initUnifiedDispatch() {
   if (!document.getElementById('udFrom').value) {
@@ -12835,6 +12862,7 @@ function initUnifiedDispatch() {
   }
   if (!Object.keys(_orderForms).length) fetch('/api/order-forms').then(r=>r.json()).then(j=>{_orderForms=j.forms||{};});
   if (typeof loadDispatchSender === 'function') loadDispatchSender();
+  setUdSubTab(_udSubTab || 'matching');
 }
 
 function setUdQuickDate(preset) {
