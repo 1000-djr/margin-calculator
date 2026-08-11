@@ -4743,6 +4743,19 @@ router.get('/alwayz-orders/for-dispatch', requireAuth, async (req, res) => {
   } catch(e) { console.error('[alwayz for-dispatch]', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 발주완료 표시 ──────────────────────────────────────────────────────
+router.post('/alwayz-orders/mark-dispatched', requireAuth, async (req, res) => {
+  const { order_ids } = req.body || {};
+  if (!Array.isArray(order_ids) || !order_ids.length) return res.status(400).json({ error: 'order_ids 필요' });
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE alwayz_orders SET ordered_at = NOW() WHERE user_id=$1 AND order_id = ANY($2)`,
+      [req.user.id, order_ids]
+    );
+    res.json({ ok: true, updated: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 올웨이즈 SA광고 조회 ────────────────────────────────────────────────────────
 router.get('/alwayz-sa-ads', requireAuth, async (req, res) => {
   try {
