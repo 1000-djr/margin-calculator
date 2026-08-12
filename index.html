@@ -50,6 +50,9 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
 .tab { padding: 7px 18px; border-radius: 8px; border: none; background: transparent; color: var(--text-dim); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
 .tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 .tab:hover:not(.active) { color: var(--text-sub); }
+.subtab { padding:8px 16px; font-size:14px; font-weight:500; background:transparent; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; color:var(--text-dim); cursor:pointer; white-space:nowrap; }
+.subtab:hover { color:var(--text); }
+.subtab.active { color:var(--text); border-bottom-color:var(--accent, #1a73e8); font-weight:700; }
 .section-label { font-size: 11px; font-weight: 600; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px; margin-top: 24px; }
 .section-label:first-child { margin-top: 0; }
 .card { background: var(--surface); border-radius: var(--radius); padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow); border: 1px solid rgba(0,0,0,0.04); }
@@ -766,12 +769,7 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
   <div class="tabs">
     <button class="tab active" onclick="switchTab('calc', this)">💰 마진 계산</button>
     <button class="tab" onclick="switchTab('b2b', this)">📦 B2B 매입가</button>
-    <button class="tab" onclick="switchTab('orders', this)">📋 주문서</button>
-    <button class="tab" onclick="switchTab('ads', this)">📢 광고</button>
-    <button class="tab" onclick="switchTab('coupons', this)">🎟 쿠폰</button>
-    <button class="tab" onclick="switchTab('traffic', this)">🚦 트래픽관리</button>
-    <button class="tab" onclick="switchTab('profit', this)">📊 수익분석</button>
-    <button class="tab" onclick="switchTab('returns', this)">↩ 반품관리</button>
+    <button class="tab" onclick="switchTab('coupang', this)">🟡 쿠팡</button>
     <button class="tab" onclick="switchTab('supplier', this)">🏪 도매처</button>
     <button class="tab" onclick="switchTab('alwayz', this)">🌽 올웨이즈</button>
     <button class="tab" onclick="switchTab('unified-dispatch', this)">🚚 발주·송장</button>
@@ -1083,8 +1081,20 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
   </div>
 
-  <!-- ══ 주문서 탭 ══════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-orders">
+  <!-- ══ 쿠팡 탭 (주문서·광고·쿠폰·트래픽·수익분석·반품관리) ══════════════════════════════════════════════ -->
+  <div class="panel" id="tab-coupang">
+    <!-- 쿠팡 서브탭 바 -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:18px;overflow-x:auto">
+      <button id="cptab-orders"  class="subtab active" onclick="setCoupangSubTab('orders')">📋 주문서</button>
+      <button id="cptab-ads"     class="subtab"        onclick="setCoupangSubTab('ads')">📢 광고</button>
+      <button id="cptab-coupons" class="subtab"        onclick="setCoupangSubTab('coupons')">🎟 쿠폰</button>
+      <button id="cptab-traffic" class="subtab"        onclick="setCoupangSubTab('traffic')">🚦 트래픽관리</button>
+      <button id="cptab-profit"  class="subtab"        onclick="setCoupangSubTab('profit')">📊 수익분석</button>
+      <button id="cptab-returns" class="subtab"        onclick="setCoupangSubTab('returns')">↩ 반품관리</button>
+    </div>
+
+  <!-- ── 주문서 서브패널 ── -->
+  <div id="cppanel-orders">
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>주문서 업로드</span>
       <div style="display:flex;gap:6px">
@@ -1173,8 +1183,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     <div id="ordersPagination" style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:10px;flex-wrap:wrap"></div>
   </div>
 
-  <!-- ══ 광고 탭 ════════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-ads">
+  <!-- ── 광고 서브패널 ── -->
+  <div id="cppanel-ads" style="display:none">
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>광고 리포트 업로드</span>
       <div style="display:flex;align-items:center;gap:6px">
@@ -1442,8 +1452,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
   </div>
 
-  <!-- ══ 쿠폰 탭 ════════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-coupons">
+  <!-- ── 쿠폰 서브패널 ── -->
+  <div id="cppanel-coupons" style="display:none">
 
     <!-- ── 할인 계산 방식 토글 ────────────────────────────────────── -->
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)">
@@ -1571,8 +1581,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
   </div>
 
-  <!-- ══ 트래픽관리 탭 ════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-traffic">
+  <!-- ── 트래픽관리 서브패널 ── -->
+  <div id="cppanel-traffic" style="display:none">
 
     <!-- ── 상단 버튼 ─────────────────────────────────────────────── -->
     <div class="btn-row" style="margin-bottom:12px">
@@ -1636,8 +1646,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
   </div>
 
-  <!-- ══ 수익분석 탭 ════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-profit">
+  <!-- ── 수익분석 서브패널 ── -->
+  <div id="cppanel-profit" style="display:none">
     <div class="section-label">기간 선택</div>
     <div class="card">
       <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
@@ -1714,8 +1724,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
   </div>
 
-  <!-- ══ 반품 관리 탭 ══════════════════════════════════════════════════ -->
-  <div class="panel" id="tab-returns">
+  <!-- ── 반품관리 서브패널 ── -->
+  <div id="cppanel-returns" style="display:none">
 
     <!-- ── 반품 섹션 ── -->
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
@@ -1797,7 +1807,9 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       </div>
     </div>
 
-  </div>
+  </div><!-- /cppanel-returns -->
+
+  </div><!-- /tab-coupang -->
 
   <!-- ══ 도매처(더그린) 탭 ══════════════════════════════════════════════ -->
   <div class="panel" id="tab-supplier">
@@ -3049,7 +3061,7 @@ let profitPeriodMode = 'day'; // 'day' | 'week' | 'month'
 // ── 탭 ↔ URL 해시 매핑 ────────────────────────────────────────────────────────
 const TAB_TO_HASH = {
   calc: 'margin', b2b: 'b2b',
-  orders: 'orders', ads: 'ads', coupons: 'coupons', traffic: 'traffic', profit: 'analytics', returns: 'returns',
+  coupang: 'coupang',
   supplier: 'supplier',
   'alwayz': 'alwayz',
   'unified-dispatch': 'unified-dispatch'
@@ -3069,12 +3081,7 @@ function _activateTabUI(name) {
   if (btn) btn.classList.add('active');
   if (name === 'b2b')      { renderB2B(); }
   if (name === 'calc')   { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
-  if (name === 'orders') { renderOrders(); loadOrdersSummary(); }
-  if (name === 'ads')      { renderAds(); loadAdsSummary(); }
-  if (name === 'coupons')  { applyDiscountModeUI(); loadAndRenderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
-  if (name === 'traffic')  { loadTrafficSlots(); }
-  if (name === 'profit')   { renderProfit(); }
-  if (name === 'returns')  { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
+  if (name === 'coupang')  { setCoupangSubTab(_coupangSubTab || 'orders'); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
   if (name === 'alwayz') { setAlwayzSubTab(_alwayzSubTab || 'orders'); }
   if (name === 'unified-dispatch') { initUnifiedDispatch(); }
@@ -7059,7 +7066,7 @@ function editCoupon(id) {
   document.getElementById('couponFormTitle').textContent = '쿠폰 수정';
   document.getElementById('couponSaveBtn').textContent   = '수정 저장';
   document.getElementById('couponCancelBtn').style.display = '';
-  document.getElementById('tab-coupons').scrollTop = 0;
+  document.getElementById('cppanel-coupons').scrollTop = 0;
 }
 
 async function saveCoupon() {
@@ -10063,7 +10070,7 @@ function editTrafficSlot(id) {
   document.getElementById('trafficFormTitle').textContent   = '트래픽 슬롯 수정';
   document.getElementById('trafficSaveBtn').textContent     = '수정';
   document.getElementById('trafficCancelBtn').style.display = '';
-  document.getElementById('tab-traffic').querySelector('.card').scrollIntoView({ behavior: 'smooth' });
+  document.getElementById('cppanel-traffic').querySelector('.card').scrollIntoView({ behavior: 'smooth' });
 }
 
 function resetTrafficForm() {
@@ -10197,11 +10204,6 @@ function openAdAnalysis() {
 
 function closeAdAnalysis() {
   document.getElementById('adAnalysisView').style.display = 'none';
-  // 광고 탭 다시 표시
-  const activeTab = document.querySelector('.tab.active');
-  const panelId   = activeTab ? activeTab.dataset.tab : 'tab-ads';
-  const panel     = document.getElementById(panelId || 'tab-ads');
-  if (panel) panel.style.display = '';
 }
 
 function setAdAnalysisPeriod(p) {
@@ -10255,9 +10257,10 @@ function _setAdTabUI(tab) {
 
 function goToCostMatching() {
   closeAdAnalysis();
-  // 수익분석 탭 버튼 찾아서 전환
-  const profitTab = Array.from(document.querySelectorAll('.tab')).find(el => el.textContent.includes('수익분석'));
-  if (profitTab) switchTab('profit', profitTab);
+  // 쿠팡 탭으로 전환 후 수익분석 서브탭 활성화
+  const coupangTab = Array.from(document.querySelectorAll('.tab')).find(el => el.textContent.includes('쿠팡'));
+  if (coupangTab) switchTab('coupang', coupangTab);
+  setCoupangSubTab('profit');
   setTimeout(() => {
     const el = document.getElementById('profitMatchSection');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -11623,6 +11626,23 @@ function _supplierColor(id) {
     _supplierColorMap[id] = _supplierColors[keys.length % _supplierColors.length];
   }
   return _supplierColorMap[id];
+}
+
+let _coupangSubTab = 'orders';
+function setCoupangSubTab(name) {
+  _coupangSubTab = name;
+  ['orders','ads','coupons','traffic','profit','returns'].forEach(t => {
+    const panel = document.getElementById('cppanel-'+t);
+    const btn = document.getElementById('cptab-'+t);
+    if (panel) panel.style.display = (name===t) ? '' : 'none';
+    if (btn) btn.classList.toggle('active', name===t);
+  });
+  if (name === 'orders')  { renderOrders(); loadOrdersSummary(); }
+  if (name === 'ads')     { renderAds(); loadAdsSummary(); }
+  if (name === 'coupons') { applyDiscountModeUI(); loadAndRenderFixedDiscounts(); renderCoupons(); loadCouponsSummary(); }
+  if (name === 'traffic') { loadTrafficSlots(); }
+  if (name === 'profit')  { renderProfit(); }
+  if (name === 'returns') { renderReturns(); loadReturnsSummary(); renderCancelShipments(); loadCancelSummary(); loadReturnSyncStatus(); }
 }
 
 let _alwayzSubTab = 'orders';
