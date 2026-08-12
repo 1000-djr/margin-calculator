@@ -5599,6 +5599,30 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
 });
 
+// ── [임시 디버그] 송장수집 도매처 쿼리 확인 ──────────────────────────────────
+router.get('/debug-collect-check', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // collect-invoices와 똑같은 도매처 쿼리
+    const { rows: linked } = await pool.query(
+      `SELECT id, name, api_linked, api_type, api_client_id IS NOT NULL AS has_client_id, api_client_secret_enc IS NOT NULL AS has_secret FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
+      [userId]
+    );
+    // 조건 없이 전체 (비교용)
+    const { rows: all } = await pool.query(
+      `SELECT id, name, api_linked, api_type, pg_typeof(api_linked) AS linked_type FROM wholesale_suppliers WHERE user_id=$1 ORDER BY id`,
+      [userId]
+    );
+    res.json({
+      user_id: userId,
+      collect_query_count: linked.length,
+      collect_query_result: linked,
+      all_suppliers_count: all.length,
+      all_suppliers: all,
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
 module.exports.fetchSupplierBalancesForUser = fetchSupplierBalancesForUser;
