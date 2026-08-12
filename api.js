@@ -4931,6 +4931,27 @@ router.post('/alwayz-orders/collect-invoices', requireAuth, async (req, res) => 
   } catch(e) { console.error('[alwayz collect-invoices]', e.message); res.status(500).json({ error: e.message }); }
 });
 
+// ─── 올웨이즈 주문 1건 삭제 ────────────────────────────────────────────────────
+router.delete('/alwayz-orders/:id', requireAuth, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM alwayz_orders WHERE id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+    res.json({ ok: true, deleted: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── 올웨이즈 상품 종류 통째로 삭제 (product_name + option_name 일치 전체) ────
+router.post('/alwayz-orders/delete-by-product', requireAuth, async (req, res) => {
+  const { product_name, option_name } = req.body || {};
+  if (!product_name) return res.status(400).json({ error: 'product_name 필수' });
+  try {
+    const { rowCount } = await pool.query(
+      "DELETE FROM alwayz_orders WHERE user_id=$1 AND product_name=$2 AND COALESCE(option_name,'')=COALESCE($3,'')",
+      [req.user.id, product_name, option_name||'']
+    );
+    res.json({ ok: true, deleted: rowCount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ─── 올웨이즈 송장 엑셀용 데이터 ───────────────────────────────────────────────
 router.get('/alwayz-orders/invoice-excel-data', requireAuth, async (req, res) => {
   try {

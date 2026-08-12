@@ -12383,7 +12383,8 @@ function buildAlwayzLinkTable(list, mode) {
       + '<td style="padding:6px">'+escHtml(r.option_name||'')+'</td>'
       + '<td style="padding:6px;text-align:center">'+(r.order_count||0)+'</td>'
       + '<td style="padding:6px"><select id="'+selId+'" style="min-width:200px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px">'+opts+'</select></td>'
-      + '<td style="padding:6px"><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzLink('+i+',\''+mode+'\',this)">'+(mode==='unlink'?'연결':'수정')+'</button></td>'
+      + '<td style="padding:6px"><button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="saveAlwayzLink('+i+',\''+mode+'\',this)">'+(mode==='unlink'?'연결':'수정')+'</button>'
+      + '<button onclick="deleteAlwayzOrdersByProduct(\''+escHtml(r.product_name||'')+'\',\''+escHtml(r.option_name||'')+'\',this)" style="font-size:12px;padding:6px 12px;background:#fee;color:#c33;border:1px solid #fcc;border-radius:6px;margin-left:6px;cursor:pointer">상품 삭제</button></td>'
       + '</tr>';
   });
   html += '</tbody></table>';
@@ -12412,6 +12413,32 @@ async function saveAlwayzLink(i, mode, btn) {
   } catch(e) { alert('오류: '+e.message); }
 }
 
+async function deleteAlwayzOrder(id, btn) {
+  if (!confirm('이 주문을 삭제할까요?')) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/alwayz-orders/'+id, { method:'DELETE' });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    const tr = btn.closest('tr'); if (tr) tr.remove();
+  } catch(e) { alert('삭제 실패: '+e.message); btn.disabled=false; }
+}
+
+async function deleteAlwayzOrdersByProduct(productName, optionName, btn) {
+  if (!confirm('"'+productName+'" 상품의 모든 주문을 삭제할까요?\n(같은 상품+옵션 전체가 삭제됩니다)')) return;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/alwayz-orders/delete-by-product', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ product_name: productName, option_name: optionName })
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    alert(j.deleted+'건 삭제됨');
+    loadAlwayzOrders();
+  } catch(e) { alert('삭제 실패: '+e.message); if(btn) btn.disabled=false; }
+}
+
 async function loadAlwayzOrders() {
   const from    = document.getElementById('alwayzFrom')?.value;
   const to      = document.getElementById('alwayzTo')?.value;
@@ -12434,7 +12461,7 @@ async function loadAlwayzOrders() {
       return;
     }
     let html = '<table class="data-table"><thead><tr>';
-    ['주문시점','상품명','옵션','수량','상품가격','정산금액','수령인','택배사','송장번호'].forEach(h => html += '<th>'+h+'</th>');
+    ['주문시점','상품명','옵션','수량','상품가격','정산금액','수령인','택배사','송장번호','삭제'].forEach(h => html += '<th>'+h+'</th>');
     html += '</tr></thead><tbody>';
     rows.forEach(r => {
       html += '<tr>'
@@ -12447,6 +12474,7 @@ async function loadAlwayzOrders() {
         + '<td>'+(r.recipient||'')+'</td>'
         + '<td>'+(r.courier||'')+'</td>'
         + '<td>'+(r.tracking_number||'')+'</td>'
+        + '<td><button onclick="deleteAlwayzOrder('+r.id+', this)" style="font-size:11px;padding:3px 8px;background:#fee;color:#c33;border:1px solid #fcc;border-radius:6px;cursor:pointer">삭제</button></td>'
         + '</tr>';
     });
     html += '</tbody></table>';
