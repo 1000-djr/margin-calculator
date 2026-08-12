@@ -4069,6 +4069,14 @@ router.get('/order-forms', requireAuth, (req, res) => {
   res.json({ forms: ORDER_FORMS });
 });
 
+// ── 발주 양식 목록 (key+label만) ─────────────────────────────────────────────
+router.get('/order-forms/list', requireAuth, async (req, res) => {
+  try {
+    const list = Object.entries(ORDER_FORMS).map(([key, f]) => ({ key, label: f.label || key }));
+    res.json(list);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── 발주 완료 기록 ────────────────────────────────────────────────────────────
 router.post('/orders/mark-dispatched', requireAuth, async (req, res) => {
   const { order_ids, supplier_id } = req.body;

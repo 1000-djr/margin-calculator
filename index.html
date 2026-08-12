@@ -1915,12 +1915,6 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
             <div style="font-size:13px;color:var(--text-dim);font-weight:600;margin-bottom:6px">발주 양식 <span style="font-weight:400;color:var(--text-dim)">(선택)</span></div>
             <select id="wsFormKey" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:15px;font-family:var(--sans)">
               <option value="">(없음)</option>
-              <option value="thegreen">더그린 양식</option>
-              <option value="neulpureun">늘푸른우리 양식</option>
-              <option value="ecofarm">에코앤팜 양식</option>
-              <option value="jungdaun">정다운 양식</option>
-              <option value="rang">랑 양식</option>
-              <option value="manipham">마니팜 양식</option>
             </select>
           </div>
           <!-- API 연동 섹션 -->
@@ -9769,6 +9763,15 @@ async function runCoupangSync() {
 
 // ── 도매처 관리 ──────────────────────────────────────────────────────────────
 let wholesaleSuppliers = [];
+let _orderFormsList = [];
+async function loadOrderFormsList() {
+  try { _orderFormsList = await fetch('/api/order-forms/list').then(r=>r.json()); } catch(e) { _orderFormsList = []; }
+}
+function fillFormKeySelect(selected) {
+  const sel = document.getElementById('wsFormKey');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">(없음)</option>' + _orderFormsList.map(f=>'<option value="'+f.key+'"'+(f.key===selected?' selected':'')+'>'+escHtml(f.label)+' 양식</option>').join('');
+}
 let editingWsId = null;
 
 function openWholesaleModal() {
@@ -9781,12 +9784,14 @@ function closeWholesaleModal() {
 }
 
 async function loadWholesaleSuppliers() {
+  if (!_orderFormsList.length) await loadOrderFormsList();
   if (currentUser) {
     try {
       const res = await fetch('/api/wholesale-suppliers');
       wholesaleSuppliers = await res.json();
     } catch (e) { wholesaleSuppliers = []; }
   }
+  fillFormKeySelect('');
   renderWholesaleList();
 }
 
@@ -9814,7 +9819,7 @@ function renderWholesaleList() {
            style="font-size:13px;color:var(--accent);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%"
            title="${escHtml(s.url)}">${escHtml((() => { try { return new URL(s.url).hostname; } catch(e) { return s.url; } })())}</a>
         ${s.api_client_id_masked ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${escHtml(s.api_type)} · ID: ${escHtml(s.api_client_id_masked)}</div>` : ''}
-        ${s.form_key ? `<div style="font-size:12px;color:#5856d6;margin-top:3px">📋 ${escHtml({thegreen:'더그린',neulpureun:'늘푸른우리',ecofarm:'에코앤팜',jungdaun:'정다운',rang:'랑',manipham:'마니팜'}[s.form_key] || s.form_key)} 양식</div>` : '<div style="font-size:12px;color:var(--text-dim);margin-top:3px">발주양식 미지정</div>'}
+        ${s.form_key ? `<div style="font-size:12px;color:#5856d6;margin-top:3px">📋 ${escHtml((_orderFormsList.find(f=>f.key===s.form_key)?.label) || s.form_key)} 양식</div>` : '<div style="font-size:12px;color:var(--text-dim);margin-top:3px">발주양식 미지정</div>'}
         <div id="ws-test-result-${s.id}" style="font-size:12px;margin-top:4px"></div>
       </div>
       ${testBtn}
@@ -9847,7 +9852,7 @@ function editWholesaleSupplier(id) {
   editingWsId = s.id;
   document.getElementById('wsName').value = s.name;
   document.getElementById('wsUrl').value  = s.url;
-  document.getElementById('wsFormKey').value = s.form_key || '';
+  fillFormKeySelect(s.form_key || '');
   // API 필드 복원 (secret은 빈칸 - 수정 시 비우면 기존 유지)
   const sec = document.getElementById('wsApiSection');
   if (s.api_linked && s.api_type) {
@@ -9877,7 +9882,7 @@ function cancelWsEdit() {
   editingWsId = null;
   document.getElementById('wsName').value = '';
   document.getElementById('wsUrl').value  = '';
-  document.getElementById('wsFormKey').value = '';
+  fillFormKeySelect('');
   document.getElementById('wsApiType').value = '';
   document.getElementById('wsApiClientId').value = '';
   document.getElementById('wsApiClientSecret').value = '';
@@ -11123,6 +11128,7 @@ function setDispatchQuickDate(type) {
 async function initDispatchTab() {
   await loadDispatchSender();
   await loadWholesaleSuppliers();  // 발주처 변경 드롭다운용 (form_key 포함)
+  await loadOrderFormsList();      // 양식 목록 (드롭다운 자동 생성용)
   // 발주 양식 로드
   try {
     const r = await fetch('/api/order-forms');
