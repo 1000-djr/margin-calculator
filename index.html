@@ -12232,19 +12232,55 @@ function handleAlwayzOrdersUpload(input) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
       if (rows.length < 2) { alert('데이터가 없습니다'); return; }
+      // 헤더(1행)에서 각 컬럼 위치 찾기
+      const header = (rows[0]||[]).map(h => String(h||'').trim());
+      const col = (names) => {
+        for (const nm of names) {
+          const idx = header.findIndex(h => h === nm);
+          if (idx >= 0) return idx;
+        }
+        return -1;
+      };
+      const C = {
+        order_id: col(['주문아이디']),
+        product_id: col(['상품아이디']),
+        bundle_id: col(['합배송아이디']),
+        seller_product_code: col(['판매자 상품코드']),
+        product_name: col(['상품명']),
+        option_name: col(['옵션']),
+        quantity: col(['수량']),
+        product_price: col(['상품가격']),
+        delivery_fee: col(['배송비']),
+        extra_support: col(['추가지원금']),
+        coupon_alwayz: col(['올웨이즈 부담 쿠폰 할인금']),
+        coupon_seller: col(['판매자 부담 쿠폰 할인금']),
+        coupon_total: col(['총 쿠폰 할인금']),
+        settlement_amount: col(['예상 정산금액(수수료 제외)','예상 정산금액']),
+        address: col(['주소']),
+        zipcode: col(['우편번호']),
+        entrance_password: col(['공동현관 비밀번호']),
+        receive_method: col(['수령 방법']),
+        recipient: col(['수령인']),
+        recipient_phone: col(['수령인 연락처']),
+        order_date: col(['주문 시점','주문시점']),
+        courier: col(['택배사']),
+        tracking_number: col(['운송장번호']),
+      };
+      if (C.order_id < 0) { alert('주문아이디 열을 찾을 수 없습니다. 올웨이즈 주문서 양식이 맞는지 확인하세요.'); return; }
+      const g = (r, idx) => (idx >= 0 && r[idx] != null) ? r[idx] : '';
       const items = [];
       for (let i = 1; i < rows.length; i++) {
         const r = rows[i];
-        if (!r[0]) continue;
+        if (!g(r, C.order_id)) continue;
         items.push({
-          order_id:String(r[0]||''), product_id:String(r[1]||''), bundle_id:String(r[2]||''),
-          seller_product_code:String(r[3]||''), product_name:String(r[4]||''), option_name:String(r[5]||''),
-          quantity:parseInt(r[6])||1, product_price:parseFloat(r[7])||0, delivery_fee:parseFloat(r[8])||0,
-          extra_support:parseFloat(r[9])||0, coupon_alwayz:parseFloat(r[10])||0, coupon_seller:parseFloat(r[11])||0,
-          coupon_total:parseFloat(r[12])||0, settlement_amount:parseFloat(r[13])||0, address:String(r[14]||''),
-          zipcode:String(r[15]||''), entrance_password:String(r[16]||''), receive_method:String(r[17]||''),
-          recipient:String(r[18]||''), recipient_phone:String(r[19]||''), order_date:String(r[20]||''),
-          courier:String(r[21]||''), tracking_number:String(r[22]||''),
+          order_id:String(g(r,C.order_id)), product_id:String(g(r,C.product_id)), bundle_id:String(g(r,C.bundle_id)),
+          seller_product_code:String(g(r,C.seller_product_code)), product_name:String(g(r,C.product_name)), option_name:String(g(r,C.option_name)),
+          quantity:parseInt(g(r,C.quantity))||1, product_price:parseFloat(g(r,C.product_price))||0, delivery_fee:parseFloat(g(r,C.delivery_fee))||0,
+          extra_support:parseFloat(g(r,C.extra_support))||0, coupon_alwayz:parseFloat(g(r,C.coupon_alwayz))||0, coupon_seller:parseFloat(g(r,C.coupon_seller))||0,
+          coupon_total:parseFloat(g(r,C.coupon_total))||0, settlement_amount:parseFloat(g(r,C.settlement_amount))||0, address:String(g(r,C.address)),
+          zipcode:String(g(r,C.zipcode)), entrance_password:String(g(r,C.entrance_password)), receive_method:String(g(r,C.receive_method)),
+          recipient:String(g(r,C.recipient)), recipient_phone:String(g(r,C.recipient_phone)), order_date:String(g(r,C.order_date)),
+          courier:String(g(r,C.courier)), tracking_number:String(g(r,C.tracking_number)),
         });
       }
       if (!items.length) { alert('업로드할 주문이 없습니다'); return; }
