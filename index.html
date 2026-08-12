@@ -961,6 +961,12 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
         <div class="field"><label>적용 시작일</label><input type="date" id="b2bFormStartDate"></div>
         <div class="field"><label>적용 종료일 <span style="font-weight:400;color:var(--text-dim)">(미입력 시 진행중)</span></label><input type="date" id="b2bFormEndDate"></div>
       </div>
+      <div class="field-row">
+        <div class="field" style="flex:1">
+          <label>도매처 상품명 <span style="font-weight:400;color:var(--text-dim)">(발주용, 선택)</span></label>
+          <input id="b2bSupplierProductName" type="text" placeholder="예: 가정용 참외 1kg 특" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--sans);background:var(--surface);color:var(--text);width:100%;box-sizing:border-box">
+        </div>
+      </div>
       <div class="btn-row" style="margin-top:12px">
         <button class="btn btn-primary" id="b2bSaveBtn" onclick="saveB2BPrice()">+ 이력 추가</button>
         <button class="btn" id="b2bCancelBtn" onclick="resetB2BPriceForm()" style="display:none">취소</button>
@@ -2328,6 +2334,10 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
           <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">종료일 <span style="color:var(--text-dim)">(선택)</span></label>
           <input id="sb2bEndDate" type="date" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none">
         </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">도매처 상품명 <span style="font-weight:400">(발주용, 선택)</span></label>
+        <input id="sb2bSupplierProductName" type="text" placeholder="예: 가정용 참외 1kg 특" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none;box-sizing:border-box">
       </div>
       <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--text-dim);line-height:1.5">
         💡 이 매입가가 적용되기 시작한 날짜를 선택하세요. 수익분석에서 이 날짜 이후 주문에 이 원가가 적용됩니다.
@@ -4134,7 +4144,8 @@ async function saveB2BPrice() {
   if (!cost)         { alert('공급가를 입력하세요'); return; }
   if (!startDate)    { alert('적용 시작일을 입력하세요'); return; }
 
-  const payload = { product_name: productName, unit, supplier_name: supplierName, cost, start_date: startDate, end_date: endDate || null };
+  const supplierProductName = document.getElementById('b2bSupplierProductName')?.value || '';
+  const payload = { product_name: productName, unit, supplier_name: supplierName, cost, start_date: startDate, end_date: endDate || null, supplier_product_name: supplierProductName };
 
   if (editingB2BPriceId !== null) {
     if (currentUser) {
@@ -11828,6 +11839,7 @@ function openSupplierB2BModalDirect(mapKey) {
   document.getElementById('sb2bCost').value = p.price != null ? p.price : '';
   document.getElementById('sb2bStartDate').value = new Date().toISOString().slice(0, 10);
   document.getElementById('sb2bEndDate').value = '';
+  document.getElementById('sb2bSupplierProductName').value = p.name || '';
   document.getElementById('sb2bError').style.display = 'none';
   document.getElementById('sb2bError').textContent = '';
   const desc = document.getElementById('sb2bModalDesc');
@@ -11989,6 +12001,7 @@ function openSupplierB2BModal(code) {
   document.getElementById('sb2bCost').value = p.price != null ? p.price : '';
   document.getElementById('sb2bStartDate').value = new Date().toISOString().slice(0, 10);
   document.getElementById('sb2bEndDate').value = '';
+  document.getElementById('sb2bSupplierProductName').value = p.name || '';
   document.getElementById('sb2bError').style.display = 'none';
   document.getElementById('sb2bError').textContent = '';
   const btn = document.getElementById('sb2bSaveBtn');
@@ -12011,6 +12024,7 @@ async function saveSupplierToB2B() {
   const cost = document.getElementById('sb2bCost').value;
   const start_date = document.getElementById('sb2bStartDate').value;
   const end_date = document.getElementById('sb2bEndDate').value;
+  const supplier_product_name = document.getElementById('sb2bSupplierProductName')?.value.trim() || '';
   const errEl = document.getElementById('sb2bError');
   errEl.style.display = 'none';
   if (!product_name || !supplier_name || !cost || !start_date) {
@@ -12025,7 +12039,7 @@ async function saveSupplierToB2B() {
     const r = await fetch('/api/b2b-prices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_name, unit, supplier_name, cost: parseFloat(cost), start_date, end_date: end_date || undefined })
+      body: JSON.stringify({ product_name, unit, supplier_name, cost: parseFloat(cost), start_date, end_date: end_date || undefined, supplier_product_name })
     });
     const j = await r.json();
     if (r.status === 409) {

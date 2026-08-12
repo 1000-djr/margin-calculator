@@ -2375,7 +2375,8 @@ router.get('/b2b-prices/match', requireAuth, async (req, res) => {
       SELECT bp.id, bp.cost,
              bp.start_date::text, bp.end_date::text,
              p.name AS product_name, p.unit,
-             s.name AS supplier_name
+             s.name AS supplier_name,
+             bp.supplier_product_name
       FROM b2b_prices bp
       JOIN b2b_products p ON p.id = bp.b2b_product_id
       JOIN b2b_suppliers s ON s.id = bp.supplier_id
@@ -2397,7 +2398,8 @@ router.get('/b2b-prices', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT bp.id, bp.cost, bp.start_date, bp.end_date,
              p.name AS product_name, p.unit,
-             s.name AS supplier_name
+             s.name AS supplier_name,
+             bp.supplier_product_name
       FROM b2b_prices bp
       JOIN b2b_products p ON p.id = bp.b2b_product_id
       JOIN b2b_suppliers s ON s.id = bp.supplier_id
@@ -2409,21 +2411,21 @@ router.get('/b2b-prices', requireAuth, async (req, res) => {
 });
 
 router.post('/b2b-prices', requireAuth, async (req, res) => {
-  const { product_name, unit, supplier_name, cost, start_date, end_date } = req.body;
+  const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name } = req.body;
   if (!product_name || !supplier_name || !cost || !start_date)
     return res.status(400).json({ error: 'product_name, supplier_name, cost, start_date 필수' });
   try {
     const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
     const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
     const { rows } = await pool.query(
-      `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date,supplier_product_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (user_id,b2b_product_id,supplier_id,start_date) DO NOTHING
        RETURNING id, cost, start_date, end_date`,
-      [req.user.id, productId, supplierId, cost, start_date, end_date || null]
+      [req.user.id, productId, supplierId, cost, start_date, end_date || null, supplier_product_name || '']
     );
     if (!rows.length) return res.status(409).json({ error: '동일 상품+공급처+시작일 중복' });
-    res.status(201).json({ id: rows[0].id, product_name, unit: unit||'', supplier_name, cost: parseFloat(rows[0].cost), start_date: rows[0].start_date.toISOString().slice(0,10), end_date: rows[0].end_date ? rows[0].end_date.toISOString().slice(0,10) : '' });
+    res.status(201).json({ id: rows[0].id, product_name, unit: unit||'', supplier_name, cost: parseFloat(rows[0].cost), start_date: rows[0].start_date.toISOString().slice(0,10), end_date: rows[0].end_date ? rows[0].end_date.toISOString().slice(0,10) : '', supplier_product_name: supplier_product_name || '' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2432,16 +2434,16 @@ router.post('/b2b-prices/bulk', requireAuth, async (req, res) => {
   let inserted = 0, dupCount = 0;
   const errorRows = [];
   for (const item of items) {
-    const { product_name, unit, supplier_name, cost, start_date, end_date } = item;
+    const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name } = item;
     if (!product_name || !supplier_name || !cost || !start_date) { errorRows.push(`skip: ${product_name}`); continue; }
     try {
       const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
       const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
       const r = await pool.query(
-        `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date)
-         VALUES ($1,$2,$3,$4,$5,$6)
+        `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date,supplier_product_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
          ON CONFLICT (user_id,b2b_product_id,supplier_id,start_date) DO NOTHING`,
-        [req.user.id, productId, supplierId, cost, start_date, end_date || null]
+        [req.user.id, productId, supplierId, cost, start_date, end_date || null, supplier_product_name || '']
       );
       if (r.rowCount > 0) inserted++; else dupCount++;
     } catch(e) { errorRows.push(`${product_name}: ${e.message}`); }
@@ -2450,16 +2452,16 @@ router.post('/b2b-prices/bulk', requireAuth, async (req, res) => {
 });
 
 router.put('/b2b-prices/:id', requireAuth, async (req, res) => {
-  const { product_name, unit, supplier_name, cost, start_date, end_date } = req.body;
+  const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name } = req.body;
   if (!product_name || !supplier_name || !cost || !start_date)
     return res.status(400).json({ error: '필수값 누락' });
   try {
     const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
     const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
     await pool.query(
-      `UPDATE b2b_prices SET b2b_product_id=$3,supplier_id=$4,cost=$5,start_date=$6,end_date=$7
+      `UPDATE b2b_prices SET b2b_product_id=$3,supplier_id=$4,cost=$5,start_date=$6,end_date=$7,supplier_product_name=$8
        WHERE id=$1 AND user_id=$2`,
-      [req.params.id, req.user.id, productId, supplierId, cost, start_date, end_date || null]
+      [req.params.id, req.user.id, productId, supplierId, cost, start_date, end_date || null, supplier_product_name || '']
     );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
