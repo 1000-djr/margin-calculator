@@ -1920,6 +1920,7 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
               <option value="ecofarm">에코앤팜 양식</option>
               <option value="jungdaun">정다운 양식</option>
               <option value="rang">랑 양식</option>
+              <option value="manipham">마니팜 양식</option>
             </select>
           </div>
           <!-- API 연동 섹션 -->
@@ -9813,7 +9814,7 @@ function renderWholesaleList() {
            style="font-size:13px;color:var(--accent);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%"
            title="${escHtml(s.url)}">${escHtml((() => { try { return new URL(s.url).hostname; } catch(e) { return s.url; } })())}</a>
         ${s.api_client_id_masked ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${escHtml(s.api_type)} · ID: ${escHtml(s.api_client_id_masked)}</div>` : ''}
-        ${s.form_key ? `<div style="font-size:12px;color:#5856d6;margin-top:3px">📋 ${escHtml({thegreen:'더그린',neulpureun:'늘푸른우리',ecofarm:'에코앤팜',jungdaun:'정다운',rang:'랑'}[s.form_key] || s.form_key)} 양식</div>` : '<div style="font-size:12px;color:var(--text-dim);margin-top:3px">발주양식 미지정</div>'}
+        ${s.form_key ? `<div style="font-size:12px;color:#5856d6;margin-top:3px">📋 ${escHtml({thegreen:'더그린',neulpureun:'늘푸른우리',ecofarm:'에코앤팜',jungdaun:'정다운',rang:'랑',manipham:'마니팜'}[s.form_key] || s.form_key)} 양식</div>` : '<div style="font-size:12px;color:var(--text-dim);margin-top:3px">발주양식 미지정</div>'}
         <div id="ws-test-result-${s.id}" style="font-size:12px;margin-top:4px"></div>
       </div>
       ${testBtn}
