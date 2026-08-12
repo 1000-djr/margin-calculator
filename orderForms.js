@@ -121,6 +121,29 @@ const ORDER_FORMS = {
       { header: '보내는 분 주소',           source: 'sender_address' },
     ],
   },
+
+  manipham: {
+    label: '마니팜',
+    sheet: 'Sheet1',
+    columns: [
+      { header: '주문일시',              source: 'today' },
+      { header: '품목명',                source: 'product_name' },
+      { header: '박스수량',              source: 'qty' },
+      { header: '주문자\n성명',          source: 'sender_name' },
+      { header: '주문자\n전화번호',       source: 'sender_phone' },
+      { header: '받는분\n성명',          source: 'recipient_name' },
+      { header: '받는분\n전화번호',       source: 'recipient_phone' },
+      { header: '받는분\n우편번호',       source: 'recipient_zipcode' },
+      { header: '받는분주소\n(전체, 분할)', source: 'recipient_address' },
+      { header: '배송메세지1',           source: 'delivery_msg' },
+      { header: '공급가',                source: 'empty' },
+      { header: '택배사',                source: 'empty' },
+      { header: '송장번호',              source: 'empty' },
+      { header: '코드',                  source: 'empty' },
+      { header: '고객주문번호',           source: 'order_number' },
+      { header: '주문자주소',            source: 'sender_address' },
+    ],
+  },
 };
 
 module.exports = { ORDER_FORMS };

@@ -11363,6 +11363,7 @@ function _buildDispatchWorkbook(group, sender) {
       case 'sender_name':       return sender.name    || '';
       case 'sender_phone':      return sender.phone   || '';
       case 'sender_address':    return sender.address || '';
+      case 'today':             return new Date().toISOString().slice(0,10);
       case 'order_number':      return o.order_number || '';
       case 'empty':             return '';
       default:                  return '';
@@ -12888,6 +12889,7 @@ async function downloadAlwayzDispatchExcel(supplierId) {
       case 'sender_name':       return sender.sender_name || '';
       case 'sender_phone':      return sender.sender_phone || '';
       case 'sender_address':    return sender.sender_address || '';
+      case 'today':             return new Date().toISOString().slice(0,10);
       case 'order_number':      return o.order_id || '';
       case 'empty':             return '';
       default:                  return '';
@@ -13460,6 +13462,7 @@ async function downloadUnifiedExcel(supplierId, mode, skipConfirm) {
     case 'sender_name':       return sender.sender_name||'';
     case 'sender_phone':      return sender.sender_phone||'';
     case 'sender_address':    return sender.sender_address||'';
+    case 'today':             return new Date().toISOString().slice(0,10);
     case 'order_number':      return o.order_number||'';
     case 'empty':             return '';
     default:                  return '';
