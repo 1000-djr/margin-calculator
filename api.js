@@ -4104,6 +4104,40 @@ router.get('/debug-supplier-orders/:id', requireAuth, async (req, res) => {
   } catch(e) { res.json({ error: e.message, stack: e.stack?.slice(0,300) }); }
 });
 
+// ── [임시 디버그] 도매처 customer_order_code 값 확인 ─────────────────────────
+router.get('/debug-supplier-codes/:id', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2 AND api_linked=true AND api_type='adminplus'`,
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.json({ error: '도매처 없음' });
+    const cfg = getSupplierApiConfig(rows[0]);
+    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+    const result = await adminplusGetOrders(token, { limit: '20' });
+    const orders = result.data?.data?.orders || [];
+    const samples = orders.slice(0, 20).map(o => {
+      const prods = o.order_producs || o.order_products || [];
+      return {
+        order_code: o.order_code,
+        receiver_name: o.receiver_name,
+        receiver_hp: o.receiver_hp,
+        products: prods.map(p => ({
+          customer_order_code: p.customer_order_code,
+          product_name: p.product_name,
+          tracking_number: p.tracking_number,
+          is_delivered: p.is_delivered,
+        })),
+      };
+    });
+    res.json({
+      total_orders: orders.length,
+      with_code: samples.filter(s => s.products.some(p => p.customer_order_code && p.customer_order_code.trim())).length,
+      samples,
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 // ── 발주 양식 정의 반환 ───────────────────────────────────────────────────────
 router.get('/order-forms', requireAuth, (req, res) => {
   res.json({ forms: ORDER_FORMS });
