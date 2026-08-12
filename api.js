@@ -4074,108 +4074,6 @@ router.delete('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── [임시 디버그] 도매처 주문 응답 구조 확인 ─────────────────────────────────
-router.get('/debug-supplier-orders/:id', requireAuth, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2 AND api_linked=true AND api_type='adminplus'`,
-      [req.params.id, req.user.id]
-    );
-    if (!rows.length) return res.json({ error: '도매처 API 설정 없음' });
-    const cfg = getSupplierApiConfig(rows[0]);
-    if (!cfg) return res.json({ error: 'API 설정 파싱 실패' });
-    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
-    const result = await adminplusGetOrders(token, { limit: '3' });
-    res.json({
-      status: result.status,
-      top_keys: Object.keys(result.data || {}),
-      success: result.data?.success,
-      data_keys: result.data?.data ? Object.keys(result.data.data) : null,
-      orders_at_data_orders: (result.data?.data?.orders || []).length,
-      orders_at_orders: (result.data?.orders || []).length,
-      first_order_keys: (() => {
-        const o = (result.data?.data?.orders || result.data?.orders || [])[0];
-        return o ? Object.keys(o) : null;
-      })(),
-      first_order_sample: (() => {
-        const o = (result.data?.data?.orders || result.data?.orders || [])[0];
-        if (!o) return null;
-        const prods = o.order_producs || o.order_products || o.products || o.items || [];
-        return {
-          order_keys: Object.keys(o),
-          products_field: o.order_producs ? 'order_producs' : (o.order_products ? 'order_products' : (o.products ? 'products' : (o.items ? 'items' : 'NONE'))),
-          products_count: prods.length,
-          first_product_keys: prods[0] ? Object.keys(prods[0]) : null,
-          has_tracking: prods[0] ? (prods[0].tracking_number || prods[0].invoice_number || prods[0].tracking || 'NO_TRACKING_FIELD') : null,
-        };
-      })(),
-      raw_sample: JSON.stringify(result.data).slice(0, 800),
-    });
-  } catch(e) { res.json({ error: e.message, stack: e.stack?.slice(0,300) }); }
-});
-
-// ── [임시 디버그] 쿠팡-도매처 전화 교집합 확인 ───────────────────────────────
-router.get('/debug-phone-match/:supplierId', requireAuth, async (req, res) => {
-  try {
-    const { rows: orders } = await pool.query(
-      `SELECT recipient_phone_masked FROM orders WHERE user_id=$1 AND (tracking_number IS NULL OR tracking_number='') AND recipient_phone_masked IS NOT NULL AND recipient_phone_masked<>'' LIMIT 500`,
-      [req.user.id]
-    );
-    const cpPhones = new Set(orders.map(o => normalizePhone(o.recipient_phone_masked)));
-    const invoices = await fetchSupplierInvoices(req.user.id, req.params.supplierId);
-    const supPhones = invoices.map(i => normalizePhone(i.receiver_phone));
-    const supPhoneSet = new Set(supPhones);
-    let intersect = 0;
-    const samples = [];
-    for (const p of cpPhones) {
-      if (supPhoneSet.has(p)) { intersect++; if (samples.length < 5) samples.push(p); }
-    }
-    res.json({
-      coupang_phone_count: cpPhones.size,
-      supplier_invoice_count: invoices.length,
-      supplier_phone_count: supPhoneSet.size,
-      intersection: intersect,
-      intersect_samples: samples,
-      coupang_sample: [...cpPhones].slice(0, 5),
-      supplier_sample: [...supPhoneSet].slice(0, 5),
-    });
-  } catch(e) { res.json({ error: e.message }); }
-});
-
-// ── [임시 디버그] 도매처 customer_order_code 값 확인 ─────────────────────────
-router.get('/debug-supplier-codes/:id', requireAuth, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2 AND api_linked=true AND api_type='adminplus'`,
-      [req.params.id, req.user.id]
-    );
-    if (!rows.length) return res.json({ error: '도매처 없음' });
-    const cfg = getSupplierApiConfig(rows[0]);
-    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
-    const result = await adminplusGetOrders(token, { limit: '20' });
-    const orders = result.data?.data?.orders || [];
-    const samples = orders.slice(0, 20).map(o => {
-      const prods = o.order_producs || o.order_products || [];
-      return {
-        order_code: o.order_code,
-        receiver_name: o.receiver_name,
-        receiver_hp: o.receiver_hp,
-        products: prods.map(p => ({
-          customer_order_code: p.customer_order_code,
-          product_name: p.product_name,
-          tracking_number: p.tracking_number,
-          is_delivered: p.is_delivered,
-        })),
-      };
-    });
-    res.json({
-      total_orders: orders.length,
-      with_code: samples.filter(s => s.products.some(p => p.customer_order_code && p.customer_order_code.trim())).length,
-      samples,
-    });
-  } catch(e) { res.json({ error: e.message }); }
-});
-
 // ── 발주 양식 정의 반환 ───────────────────────────────────────────────────────
 router.get('/order-forms', requireAuth, (req, res) => {
   res.json({ forms: ORDER_FORMS });
@@ -5611,30 +5509,6 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
       invoice_count_by_supplier: invoiceCountBySupplier,
     });
   } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
-});
-
-// ── [임시 디버그] 송장수집 도매처 쿼리 확인 ──────────────────────────────────
-router.get('/debug-collect-check', requireAuth, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    // collect-invoices와 똑같은 도매처 쿼리
-    const { rows: linked } = await pool.query(
-      `SELECT id, name, api_linked, api_type, api_client_id IS NOT NULL AS has_client_id, api_client_secret_enc IS NOT NULL AS has_secret FROM wholesale_suppliers WHERE user_id=$1 AND api_linked=true AND api_type='adminplus' ORDER BY id`,
-      [userId]
-    );
-    // 조건 없이 전체 (비교용)
-    const { rows: all } = await pool.query(
-      `SELECT id, name, api_linked, api_type, pg_typeof(api_linked) AS linked_type FROM wholesale_suppliers WHERE user_id=$1 ORDER BY id`,
-      [userId]
-    );
-    res.json({
-      user_id: userId,
-      collect_query_count: linked.length,
-      collect_query_result: linked,
-      all_suppliers_count: all.length,
-      all_suppliers: all,
-    });
-  } catch(e) { res.json({ error: e.message }); }
 });
 
 module.exports = router;
