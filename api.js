@@ -4862,7 +4862,7 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
       const wsInfo = wsById[sid];
       if (!wsInfo || !wsInfo.form_key) { unmatched.push({ platform:'coupang', product_name:r.product_name, recipient:r.recipient_name, reason:'발주양식 미지정' }); continue; }
       const g = ensureGroup(sid, wsInfo.name, wsInfo.form_key);
-      g.orders.push({ platform:'coupang', id:r.id, order_number:r.order_number, product_name:spn||r.product_name, option_name:son||r.option_name||'', quantity:r.quantity, recipient:r.recipient_name, recipient_phone:r.recipient_phone, address:r.recipient_address, zipcode:r.recipient_zipcode, delivery_msg:r.delivery_msg||'' });
+      g.orders.push({ platform:'coupang', id:r.id, order_number:r.order_number, option_id:r.option_id, product_name:spn||r.product_name, option_name:son||r.option_name||'', quantity:r.quantity, recipient:r.recipient_name, recipient_phone:r.recipient_phone, address:r.recipient_address, zipcode:r.recipient_zipcode, delivery_msg:r.delivery_msg||'' });
       g.coupang_count++;
     }
     // 올웨 주문 투입 (하이브리드: 수동 우선, 없으면 자동)
@@ -4873,7 +4873,7 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
       const wsInfo = wsById[sid];
       if (!wsInfo || !wsInfo.form_key) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주양식 미지정' }); continue; }
       const g = ensureGroup(sid, wsInfo.name, wsInfo.form_key);
-      g.orders.push({ platform:'alwayz', id:r.id, order_number:r.order_id, product_name:spn||r.product_name, option_name:son||'', quantity:r.quantity, recipient:r.recipient, recipient_phone:r.recipient_phone, address:r.address, zipcode:r.zipcode, delivery_msg:'' });
+      g.orders.push({ platform:'alwayz', id:r.id, order_number:r.order_id, product_id:r.product_id, opt_name:r.option_name||'', product_name:spn||r.product_name, option_name:son||'', quantity:r.quantity, recipient:r.recipient, recipient_phone:r.recipient_phone, address:r.address, zipcode:r.zipcode, delivery_msg:'' });
       g.alwayz_count++;
     }
 

@@ -13267,6 +13267,72 @@ async function loadUnifiedDispatch() {
   } catch(e){summary.textContent='오류: '+e.message;}
 }
 
+async function openChangeSupplier(currentSupplierId, platform, btn) {
+  const productName = btn.getAttribute('data-pname');
+  const group = _udData.groups.find(g=>String(g.supplier_id)===String(currentSupplierId));
+  if(!group) return;
+  const targetOrders = group.orders.filter(o=>o.platform===platform && o.product_name===productName);
+  if(!targetOrders.length) return;
+  const ws = await fetch('/api/wholesale-suppliers').then(r=>r.json()).catch(()=>[]);
+  const opts = (Array.isArray(ws)?ws:[]).filter(w=>w.form_key).map(w=>'<option value="'+w.id+'"'+(String(w.id)===String(currentSupplierId)?' selected':'')+'>'+escHtml(w.name)+'</option>').join('');
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML='<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;width:460px;max-width:94vw">'
+    +'<div style="font-size:16px;font-weight:700;margin-bottom:4px">도매처 변경</div>'
+    +'<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">'+escHtml(productName)+' · '+targetOrders.length+'건 통째로 이동</div>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">변경할 도매처</label>'
+    +'<select id="csSupplier" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:16px;font-family:var(--sans)">'+opts+'</select>'
+    +'<label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:8px">적용 범위</label>'
+    +'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="csScope" value="temp" checked> 이번 발주만 임시로 (다음엔 원래대로)</label>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer"><input type="radio" name="csScope" value="permanent"> 아예 변경 (다음부터도 이 도매처)</label>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+    +'<button class="btn" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)" onclick="this.closest(\'div[style*=fixed]\').remove()">취소</button>'
+    +'<button class="btn btn-primary" style="font-size:13px;padding:8px 16px" onclick="applyChangeSupplier('+currentSupplierId+',\''+platform+'\',this)">적용</button>'
+    +'</div></div>';
+  document.body.appendChild(modal);
+  window._csProductName=productName; window._csTargetOrders=targetOrders;
+}
+
+async function applyChangeSupplier(currentSupplierId, platform, btn) {
+  const newSupplierId=document.getElementById('csSupplier').value;
+  const scope=document.querySelector('input[name=csScope]:checked')?.value;
+  const productName=window._csProductName;
+  const targetOrders=window._csTargetOrders;
+  if(!newSupplierId||newSupplierId===String(currentSupplierId)){ alert('다른 도매처를 선택하세요'); return; }
+  btn.disabled=true;
+  try {
+    const wsList=await fetch('/api/wholesale-suppliers').then(r=>r.json());
+    const newWs=(Array.isArray(wsList)?wsList:[]).find(w=>String(w.id)===String(newSupplierId));
+    if(!newWs){ alert('도매처 정보를 찾을 수 없습니다'); btn.disabled=false; return; }
+    if(scope==='permanent'){
+      for(const o of targetOrders){
+        if(platform==='coupang'){
+          await fetch('/api/order-mappings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({option_id:o.option_id,registered_name:o.product_name,option_name:o.option_name,supplier_id:newSupplierId,supplier_product_name:o.product_name,supplier_option_name:o.option_name||''})});
+        } else {
+          await fetch('/api/alwayz-order-mappings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:o.product_id,option_name:o.opt_name||'',registered_name:o.product_name,supplier_id:newSupplierId,supplier_product_name:o.product_name})});
+        }
+      }
+    }
+    const fromG=_udData.groups.find(g=>String(g.supplier_id)===String(currentSupplierId));
+    let toG=_udData.groups.find(g=>String(g.supplier_id)===String(newSupplierId));
+    if(!toG){ toG={supplier_id:parseInt(newSupplierId),supplier_name:newWs.name,form_key:newWs.form_key,orders:[],coupang_count:0,alwayz_count:0}; _udData.groups.push(toG); }
+    targetOrders.forEach(o=>{
+      const idx=fromG.orders.indexOf(o);
+      if(idx>=0) fromG.orders.splice(idx,1);
+      toG.orders.push(o);
+    });
+    fromG.coupang_count=fromG.orders.filter(o=>o.platform==='coupang').length;
+    fromG.alwayz_count=fromG.orders.filter(o=>o.platform==='alwayz').length;
+    toG.coupang_count=toG.orders.filter(o=>o.platform==='coupang').length;
+    toG.alwayz_count=toG.orders.filter(o=>o.platform==='alwayz').length;
+    _udData.groups=_udData.groups.filter(g=>g.orders.length>0);
+    btn.closest('div[style*=fixed]').remove();
+    renderUnifiedDispatch(_udData);
+  } catch(e){ alert('변경 실패: '+e.message); btn.disabled=false; }
+}
+
 function renderUnifiedDispatch(j) {
   const result=document.getElementById('udResult');
   const allBtn=document.getElementById('udAllBtn');
@@ -13274,7 +13340,7 @@ function renderUnifiedDispatch(j) {
   let html='';
   j.groups.forEach(g => {
     const prodMap={};
-    g.orders.forEach(o=>{const k=o.platform+'|'+o.product_name;if(!prodMap[k])prodMap[k]={platform:o.platform,product_name:o.product_name,qty:0,count:0};prodMap[k].qty+=(o.quantity||1);prodMap[k].count++;});
+    g.orders.forEach(o=>{const k=o.platform+'|'+o.product_name;if(!prodMap[k])prodMap[k]={platform:o.platform,product_name:o.product_name,qty:0,count:0,sample:o};prodMap[k].qty+=(o.quantity||1);prodMap[k].count++;});
     const prods=Object.values(prodMap).sort((a,b)=>(a.product_name||'').localeCompare(b.product_name||'','ko'));
     html+='<div style="border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)">';
     html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">';
@@ -13285,12 +13351,12 @@ function renderUnifiedDispatch(j) {
       if(g.alwayz_count>0) html+='<button class="btn" style="font-size:12px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border)" onclick="downloadUnifiedExcel('+g.supplier_id+',\'alwayz\')">올웨이즈만</button>';
     } else html+='<span style="font-size:12px;color:var(--text-dim)">양식 미지정</span>';
     html+='</div>';
-    html+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:6px">매체</th><th style="padding:6px">상품명</th><th style="padding:6px;text-align:center">수량</th><th style="padding:6px;text-align:center">건수</th></tr></thead><tbody>';
+    html+='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="color:var(--text-dim);text-align:left"><th style="padding:6px">매체</th><th style="padding:6px">상품명</th><th style="padding:6px;text-align:center">수량</th><th style="padding:6px;text-align:center">건수</th><th style="padding:6px;text-align:center">변경</th></tr></thead><tbody>';
     prods.forEach(p=>{
       const badge=p.platform==='coupang'
         ?'<span style="background:#e8f0fe;color:#1a73e8;padding:1px 6px;border-radius:4px;font-size:10px">쿠팡</span>'
         :'<span style="background:#fef3e8;color:#e8871a;padding:1px 6px;border-radius:4px;font-size:10px">올웨이즈</span>';
-      html+='<tr style="border-top:1px solid var(--border)"><td style="padding:6px">'+badge+'</td><td style="padding:6px">'+escHtml(p.product_name||'')+'</td><td style="padding:6px;text-align:center;font-weight:600">'+p.qty+'</td><td style="padding:6px;text-align:center;color:var(--text-dim)">'+p.count+'건</td></tr>';
+      html+='<tr style="border-top:1px solid var(--border)"><td style="padding:6px">'+badge+'</td><td style="padding:6px">'+escHtml(p.product_name||'')+'</td><td style="padding:6px;text-align:center;font-weight:600">'+p.qty+'</td><td style="padding:6px;text-align:center;color:var(--text-dim)">'+p.count+'건</td><td style="padding:6px;text-align:center"><button onclick="openChangeSupplier('+g.supplier_id+',\''+p.platform+'\',this)" data-pname="'+escHtml(p.product_name||'')+'" style="font-size:11px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer">도매처 변경</button></td></tr>';
     });
     html+='</tbody></table></div>';
   });
