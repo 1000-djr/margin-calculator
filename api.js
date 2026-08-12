@@ -4064,6 +4064,46 @@ router.delete('/wholesale-suppliers/:id', requireAuth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── [임시 디버그] 도매처 주문 응답 구조 확인 ─────────────────────────────────
+router.get('/debug-supplier-orders/:id', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2 AND api_linked=true AND api_type='adminplus'`,
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.json({ error: '도매처 API 설정 없음' });
+    const cfg = getSupplierApiConfig(rows[0]);
+    if (!cfg) return res.json({ error: 'API 설정 파싱 실패' });
+    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+    const result = await adminplusGetOrders(token, { limit: '3' });
+    res.json({
+      status: result.status,
+      top_keys: Object.keys(result.data || {}),
+      success: result.data?.success,
+      data_keys: result.data?.data ? Object.keys(result.data.data) : null,
+      orders_at_data_orders: (result.data?.data?.orders || []).length,
+      orders_at_orders: (result.data?.orders || []).length,
+      first_order_keys: (() => {
+        const o = (result.data?.data?.orders || result.data?.orders || [])[0];
+        return o ? Object.keys(o) : null;
+      })(),
+      first_order_sample: (() => {
+        const o = (result.data?.data?.orders || result.data?.orders || [])[0];
+        if (!o) return null;
+        const prods = o.order_producs || o.order_products || o.products || o.items || [];
+        return {
+          order_keys: Object.keys(o),
+          products_field: o.order_producs ? 'order_producs' : (o.order_products ? 'order_products' : (o.products ? 'products' : (o.items ? 'items' : 'NONE'))),
+          products_count: prods.length,
+          first_product_keys: prods[0] ? Object.keys(prods[0]) : null,
+          has_tracking: prods[0] ? (prods[0].tracking_number || prods[0].invoice_number || prods[0].tracking || 'NO_TRACKING_FIELD') : null,
+        };
+      })(),
+      raw_sample: JSON.stringify(result.data).slice(0, 800),
+    });
+  } catch(e) { res.json({ error: e.message, stack: e.stack?.slice(0,300) }); }
+});
+
 // ── 발주 양식 정의 반환 ───────────────────────────────────────────────────────
 router.get('/order-forms', requireAuth, (req, res) => {
   res.json({ forms: ORDER_FORMS });
