@@ -964,7 +964,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       <div class="field-row">
         <div class="field" style="flex:1">
           <label>도매처 상품명 <span style="font-weight:400;color:var(--text-dim)">(발주용, 선택)</span></label>
-          <input id="b2bSupplierProductName" type="text" placeholder="예: 가정용 참외 1kg 특" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--sans);background:var(--surface);color:var(--text);width:100%;box-sizing:border-box">
+          <input id="b2bSupplierProductName" type="text" placeholder="예: 가정용 참외 1kg 특" oninput="searchB2BSupplierProduct()" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--sans);background:var(--surface);color:var(--text);width:100%;box-sizing:border-box">
+          <div id="b2bSupplierProductSearchResult" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:4px;display:none;background:var(--surface)"></div>
         </div>
       </div>
       <div class="btn-row" style="margin-top:12px">
@@ -4075,6 +4076,34 @@ function toggleB2BSuperGroup(superId) {
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : '';
   if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+}
+
+let _b2bSupProdSearchTimer = null;
+async function searchB2BSupplierProduct() {
+  clearTimeout(_b2bSupProdSearchTimer);
+  const box = document.getElementById('b2bSupplierProductSearchResult');
+  const supplierName = (document.getElementById('b2bFormSupplier')?.value || '').trim();
+  const q = (document.getElementById('b2bSupplierProductName')?.value || '').trim();
+  if (!supplierName || q.length < 1) { box.style.display='none'; box.innerHTML=''; return; }
+  _b2bSupProdSearchTimer = setTimeout(async () => {
+    try {
+      const ws = await fetch('/api/wholesale-suppliers').then(r=>r.json()).catch(()=>[]);
+      const match = (Array.isArray(ws)?ws:[]).find(w => w.name === supplierName);
+      if (!match) {
+        box.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-dim)">API 연동 도매처가 아니거나 이름 불일치 (직접 입력 가능)</div>';
+        box.style.display='block'; return;
+      }
+      const items = await fetch('/api/order-mappings/search-supplier-product?supplier_id='+encodeURIComponent(match.id)+'&q='+encodeURIComponent(q)).then(r=>r.json());
+      if (!Array.isArray(items) || !items.length) {
+        box.innerHTML='<div style="padding:6px 10px;font-size:12px;color:var(--text-dim)">검색 결과 없음 (직접 입력 가능)</div>';
+        box.style.display='block'; return;
+      }
+      box.innerHTML = items.slice(0,10).map(it =>
+        '<div onclick="document.getElementById(\'b2bSupplierProductName\').value=this.dataset.name;document.getElementById(\'b2bSupplierProductSearchResult\').style.display=\'none\';" data-name="'+escHtml(it.name||'')+'" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px">'+escHtml(it.name||'')+'</div>'
+      ).join('');
+      box.style.display='block';
+    } catch(e) { box.style.display='none'; }
+  }, 250);
 }
 
 function resetB2BPriceForm() {
