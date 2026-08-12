@@ -116,13 +116,23 @@ async function fetchSupplierInvoices(userId, supplierId) {
   const invoices = [];
   let cursor = null;
   let page = 0;
-  const MAX_PAGES = 50;
+  const MAX_PAGES = 100;
 
   while (page < MAX_PAGES) {
     const params = { limit: '100' };
     if (cursor) params.cursor = cursor;
-    const result = await adminplusGetOrders(token, params);
-    if (result.status !== 200 || !result.data?.success) break;
+    let result = await adminplusGetOrders(token, params);
+    // 429 rate limit → 지수 backoff 재시도 (최대 5회)
+    let retry = 0;
+    while (result.status === 429 && retry < 5) {
+      const waitMs = Math.min(2000 * Math.pow(2, retry), 30000);
+      await new Promise(r => setTimeout(r, waitMs));
+      result = await adminplusGetOrders(token, params);
+      retry++;
+    }
+    if (result.status === 429) throw new Error('adminplus rate limit 초과 (재시도 실패)');
+    if (result.status !== 200) throw new Error('adminplus 응답 오류 status=' + result.status);
+    if (!result.data?.success) throw new Error('adminplus 응답 실패: ' + (result.data?.message || 'unknown'));
 
     const orders = result.data?.data?.orders || result.data?.orders || [];
     for (const order of orders) {
@@ -5017,9 +5027,11 @@ router.post('/alwayz-orders/collect-invoices', requireAuth, async (req, res) => 
     );
     const invoiceMap = {};
     const supplierErrors = {};
-    for (const s of linkedSuppliers) {
+    for (let i = 0; i < linkedSuppliers.length; i++) {
+      const s = linkedSuppliers[i];
       try { invoiceMap[s.id] = await fetchSupplierInvoices(req.user.id, s.id); }
       catch(e) { supplierErrors[s.id] = e.message; invoiceMap[s.id] = []; }
+      if (i < linkedSuppliers.length - 1) await new Promise(r => setTimeout(r, 1000));
     }
     const allInvoices = Object.values(invoiceMap).flat();
 
@@ -5474,13 +5486,15 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
     const supplierIds = linkedSuppliers.map(s => s.id);
     const invoiceMap = {};  // supplierId -> invoices[]
     const supplierErrors = {};
-    for (const sid of supplierIds) {
+    for (let i = 0; i < supplierIds.length; i++) {
+      const sid = supplierIds[i];
       try {
         invoiceMap[sid] = await fetchSupplierInvoices(req.user.id, sid);
       } catch(e) {
         supplierErrors[sid] = e.message;
         invoiceMap[sid] = [];
       }
+      if (i < supplierIds.length - 1) await new Promise(r => setTimeout(r, 1000));
     }
 
     // 3. 매칭
