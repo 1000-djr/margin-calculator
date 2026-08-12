@@ -5511,6 +5511,51 @@ router.post('/orders/collect-invoices', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message, stack: e.stack }); }
 });
 
+// ── [임시 디버그] adminplus 날짜필터 파라미터 테스트 ─────────────────────────
+router.get('/debug-date-filter/:id', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM wholesale_suppliers WHERE id=$1 AND user_id=$2 AND api_linked=true AND api_type='adminplus'`,
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.json({ error: '도매처 없음' });
+    const cfg = getSupplierApiConfig(rows[0]);
+    const token = await adminplusGetToken(cfg.clientId, cfg.clientSecret);
+
+    // 여러 날짜 파라미터 형식 시도
+    const testParams = [
+      { limit: '5', start_date: '2026-08-01', end_date: '2026-08-12' },
+      { limit: '5', date_from: '2026-08-01', date_to: '2026-08-12' },
+      { limit: '5', start: '2026-08-01', end: '2026-08-12' },
+      { limit: '5', from_date: '2026-08-01', to_date: '2026-08-12' },
+      { limit: '5', order_date_start: '2026-08-01', order_date_end: '2026-08-12' },
+    ];
+    const results = [];
+    for (const p of testParams) {
+      const r = await adminplusGetOrders(token, p);
+      const orders = r.data?.data?.orders || [];
+      const firstOrderProds = orders[0]?.order_producs || orders[0]?.order_products || [];
+      results.push({
+        params: JSON.stringify(p),
+        status: r.status,
+        order_count: orders.length,
+        first_order_date: firstOrderProds[0]?.created_date || orders[0]?.order_code || 'none',
+        has_more: r.data?.data?.has_more,
+      });
+      await new Promise(rs => setTimeout(rs, 500));
+    }
+    // 파라미터 없이 (비교용)
+    const noFilter = await adminplusGetOrders(token, { limit: '5' });
+    const nfOrders = noFilter.data?.data?.orders || [];
+    const nfProds = nfOrders[0]?.order_producs || [];
+
+    res.json({
+      no_filter: { order_count: nfOrders.length, first_date: nfProds[0]?.created_date || 'none' },
+      date_filter_tests: results,
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 module.exports = router;
 module.exports.syncSupplierProductsForUser = syncSupplierProductsForUser;
 module.exports.fetchSupplierBalancesForUser = fetchSupplierBalancesForUser;
