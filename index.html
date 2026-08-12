@@ -2052,9 +2052,9 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
   <!-- ══ 올웨이즈 통합 탭 ═══════════════════════════════════════════════════ -->
   <div class="panel" id="tab-alwayz">
     <!-- 서브탭 버튼 -->
-    <div style="display:flex;gap:6px;padding:12px 16px 0;flex-wrap:wrap">
-      <button id="astab-orders" class="tab active" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('orders')">📋 주문서</button>
-      <button id="astab-profit" class="tab" style="padding:6px 16px;font-size:13px" onclick="setAlwayzSubTab('profit')">📊 수익분석</button>
+    <div class="tab-bar" style="display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid var(--border)">
+      <button id="astab-orders" class="subtab active" onclick="setAlwayzSubTab('orders')">📋 주문서</button>
+      <button id="astab-profit" class="subtab" onclick="setAlwayzSubTab('profit')">📊 수익분석</button>
     </div>
 
     <!-- 주문서 서브패널 -->
