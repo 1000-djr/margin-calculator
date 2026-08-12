@@ -4786,6 +4786,11 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
   try {
     const { from, to } = req.query;
 
+    // ── 0. 도매처 맵 (id → {name, form_key}) ──
+    const { rows: wsList } = await pool.query('SELECT id, name, form_key FROM wholesale_suppliers WHERE user_id=$1', [req.user.id]);
+    const wsById = {};
+    wsList.forEach(w => { wsById[w.id] = { name: w.name, form_key: w.form_key }; });
+
     // ── 1. 쿠팡 발주 대상 ──
     const cpParams = [req.user.id];
     let cpQ = `
@@ -4794,6 +4799,18 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
              o.recipient_address_masked AS recipient_address, o.recipient_zipcode, o.delivery_msg,
              om.supplier_id, om.supplier_product_name, om.supplier_option_name,
              ws.name AS supplier_name, ws.form_key AS supplier_form_key
+           , (SELECT ws2.id FROM product_name_mapping pnm
+               JOIN b2b_products bp ON bp.user_id=pnm.user_id AND bp.name=pnm.b2b_name AND bp.unit=pnm.b2b_unit
+               JOIN b2b_prices pr ON pr.user_id=pnm.user_id AND pr.b2b_product_id=bp.id AND pr.start_date<=CURRENT_DATE AND (pr.end_date IS NULL OR pr.end_date>=CURRENT_DATE)
+               JOIN b2b_suppliers bs ON bs.id=pr.supplier_id
+               JOIN wholesale_suppliers ws2 ON ws2.user_id=pnm.user_id AND ws2.name=bs.name
+               WHERE pnm.user_id=o.user_id AND pnm.registered_name=o.product_name AND COALESCE(pnm.option_name,'')=COALESCE(o.option_name,'')
+               ORDER BY pr.start_date DESC LIMIT 1) AS auto_supplier_id
+           , (SELECT COALESCE(NULLIF(pr.supplier_product_name,''), pnm.b2b_name) FROM product_name_mapping pnm
+               JOIN b2b_products bp ON bp.user_id=pnm.user_id AND bp.name=pnm.b2b_name AND bp.unit=pnm.b2b_unit
+               JOIN b2b_prices pr ON pr.user_id=pnm.user_id AND pr.b2b_product_id=bp.id AND pr.start_date<=CURRENT_DATE AND (pr.end_date IS NULL OR pr.end_date>=CURRENT_DATE)
+               WHERE pnm.user_id=o.user_id AND pnm.registered_name=o.product_name AND COALESCE(pnm.option_name,'')=COALESCE(o.option_name,'')
+               ORDER BY pr.start_date DESC LIMIT 1) AS auto_supplier_product_name
       FROM orders o
       LEFT JOIN order_mappings om ON om.user_id=o.user_id AND om.option_id=o.option_id
       LEFT JOIN wholesale_suppliers ws ON ws.id=om.supplier_id
@@ -4802,7 +4819,7 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
     if (to)   { cpParams.push(to);   cpQ += ` AND SUBSTRING(o.order_date,1,${to.length>10?19:10}) <= $${cpParams.length}`; }
     const { rows: cpRows } = await pool.query(cpQ, cpParams);
 
-    // ── 2. 올웨 발주 대상 (수동 발주매칭) ──
+    // ── 2. 올웨 발주 대상 ──
     const awParams = [req.user.id];
     let awDf = '';
     if (from) { awParams.push(from.slice(0,10)); awDf += ` AND SUBSTRING(o.order_date,1,10) >= $${awParams.length}`; }
@@ -4812,6 +4829,18 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
              o.quantity, o.recipient, o.recipient_phone, o.address, o.zipcode,
              m.supplier_id, m.supplier_product_name, m.supplier_option_name,
              ws.name AS supplier_name, ws.form_key AS supplier_form_key
+           , (SELECT ws2.id FROM alwayz_product_mapping pnm
+               JOIN b2b_products bp ON bp.user_id=pnm.user_id AND bp.name=pnm.b2b_name AND bp.unit=pnm.b2b_unit
+               JOIN b2b_prices pr ON pr.user_id=pnm.user_id AND pr.b2b_product_id=bp.id AND pr.start_date<=CURRENT_DATE AND (pr.end_date IS NULL OR pr.end_date>=CURRENT_DATE)
+               JOIN b2b_suppliers bs ON bs.id=pr.supplier_id
+               JOIN wholesale_suppliers ws2 ON ws2.user_id=pnm.user_id AND ws2.name=bs.name
+               WHERE pnm.user_id=o.user_id AND pnm.product_id=o.product_id AND COALESCE(pnm.option_name,'')=COALESCE(o.option_name,'')
+               ORDER BY pr.start_date DESC LIMIT 1) AS auto_supplier_id
+           , (SELECT COALESCE(NULLIF(pr.supplier_product_name,''), pnm.b2b_name) FROM alwayz_product_mapping pnm
+               JOIN b2b_products bp ON bp.user_id=pnm.user_id AND bp.name=pnm.b2b_name AND bp.unit=pnm.b2b_unit
+               JOIN b2b_prices pr ON pr.user_id=pnm.user_id AND pr.b2b_product_id=bp.id AND pr.start_date<=CURRENT_DATE AND (pr.end_date IS NULL OR pr.end_date>=CURRENT_DATE)
+               WHERE pnm.user_id=o.user_id AND pnm.product_id=o.product_id AND COALESCE(pnm.option_name,'')=COALESCE(o.option_name,'')
+               ORDER BY pr.start_date DESC LIMIT 1) AS auto_supplier_product_name
       FROM alwayz_orders o
       LEFT JOIN alwayz_order_mappings m
         ON m.user_id=o.user_id AND m.product_id=o.product_id AND m.option_name=o.option_name
@@ -4825,39 +4854,26 @@ router.get('/unified-dispatch/for-dispatch', requireAuth, async (req, res) => {
       if (!groups[sid]) groups[sid] = { supplier_id: sid, supplier_name: sname, form_key: fkey||null, orders: [], coupang_count: 0, alwayz_count: 0 };
       return groups[sid];
     }
-    // 쿠팡 주문 투입
+    // 쿠팡 주문 투입 (하이브리드: 수동 우선, 없으면 자동)
     for (const r of cpRows) {
-      if (!r.supplier_id || !r.supplier_form_key) { unmatched.push({ platform:'coupang', product_name:r.product_name, recipient:r.recipient_name, reason: r.supplier_id?'발주양식 미지정':'도매처 미지정' }); continue; }
-      const g = ensureGroup(r.supplier_id, r.supplier_name, r.supplier_form_key);
-      g.orders.push({
-        platform: 'coupang',
-        id: r.id,
-        order_number: r.order_number,
-        product_name: r.supplier_product_name || r.product_name,
-        option_name: r.supplier_option_name || r.option_name || '',
-        quantity: r.quantity,
-        recipient: r.recipient_name, recipient_phone: r.recipient_phone,
-        address: r.recipient_address, zipcode: r.recipient_zipcode,
-        delivery_msg: r.delivery_msg || '',
-      });
+      let sid = r.supplier_id, spn = r.supplier_product_name, son = r.supplier_option_name;
+      if (!sid && r.auto_supplier_id) { sid = r.auto_supplier_id; spn = r.auto_supplier_product_name; son = ''; }
+      if (!sid) { unmatched.push({ platform:'coupang', product_name:r.product_name, recipient:r.recipient_name, reason:'발주처 미지정(수동/자동 모두 없음)' }); continue; }
+      const wsInfo = wsById[sid];
+      if (!wsInfo || !wsInfo.form_key) { unmatched.push({ platform:'coupang', product_name:r.product_name, recipient:r.recipient_name, reason:'발주양식 미지정' }); continue; }
+      const g = ensureGroup(sid, wsInfo.name, wsInfo.form_key);
+      g.orders.push({ platform:'coupang', id:r.id, order_number:r.order_number, product_name:spn||r.product_name, option_name:son||r.option_name||'', quantity:r.quantity, recipient:r.recipient_name, recipient_phone:r.recipient_phone, address:r.recipient_address, zipcode:r.recipient_zipcode, delivery_msg:r.delivery_msg||'' });
       g.coupang_count++;
     }
-    // 올웨 주문 투입
+    // 올웨 주문 투입 (하이브리드: 수동 우선, 없으면 자동)
     for (const r of awRows) {
-      if (!r.supplier_id) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주매칭 안 됨' }); continue; }
-      if (!r.supplier_form_key) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주양식 미지정('+(r.supplier_name||'')+')' }); continue; }
-      const g = ensureGroup(r.supplier_id, r.supplier_name, r.supplier_form_key);
-      g.orders.push({
-        platform: 'alwayz',
-        id: r.id,
-        order_number: r.order_id,
-        product_name: r.supplier_product_name || r.product_name,
-        option_name: r.supplier_option_name || '',
-        quantity: r.quantity,
-        recipient: r.recipient, recipient_phone: r.recipient_phone,
-        address: r.address, zipcode: r.zipcode,
-        delivery_msg: '',
-      });
+      let sid = r.supplier_id, spn = r.supplier_product_name, son = r.supplier_option_name;
+      if (!sid && r.auto_supplier_id) { sid = r.auto_supplier_id; spn = r.auto_supplier_product_name; son = ''; }
+      if (!sid) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주처 미지정(수동/자동 모두 없음)' }); continue; }
+      const wsInfo = wsById[sid];
+      if (!wsInfo || !wsInfo.form_key) { unmatched.push({ platform:'alwayz', product_name:r.product_name, recipient:r.recipient, reason:'발주양식 미지정' }); continue; }
+      const g = ensureGroup(sid, wsInfo.name, wsInfo.form_key);
+      g.orders.push({ platform:'alwayz', id:r.id, order_number:r.order_id, product_name:spn||r.product_name, option_name:son||'', quantity:r.quantity, recipient:r.recipient, recipient_phone:r.recipient_phone, address:r.address, zipcode:r.zipcode, delivery_msg:'' });
       g.alwayz_count++;
     }
 
