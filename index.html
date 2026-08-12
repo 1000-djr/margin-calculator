@@ -39,7 +39,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
 .b2b-table td input[type="number"], input[type="number"] { font-feature-settings: "tnum"; }
 input, select, textarea, button { font-family: var(--sans); }
 input[type="date"], input[type="number"], input[type="text"] { font-family: var(--sans) !important; font-feature-settings: "tnum"; }
-.app { max-width: 1280px; margin: 0 auto; padding: 32px 24px 80px; }
+.app { max-width: 1600px; margin: 0 auto; padding: 32px 24px 80px; }
 .header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
 .header-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #34c759, #1d8348); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 2px 8px rgba(29,131,72,0.3); }
 .header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
@@ -453,20 +453,9 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover td { background: #fafafa; }
 /* ── 올웨이즈 주문 전용 테이블 ── */
-.alwayz-orders-table { table-layout: fixed; width: 100%; }
 .alwayz-orders-table td { white-space: normal; word-break: break-word; background: #fff; }
 .alwayz-orders-table th { white-space: normal; }
 .alwayz-orders-table tbody tr:hover td { background: #f7f7f7; }
-.alwayz-orders-table th:nth-child(1), .alwayz-orders-table td:nth-child(1) { width: 8%; font-size: 11px; }
-.alwayz-orders-table th:nth-child(2), .alwayz-orders-table td:nth-child(2) { width: 22%; }
-.alwayz-orders-table th:nth-child(3), .alwayz-orders-table td:nth-child(3) { width: 20%; }
-.alwayz-orders-table th:nth-child(4), .alwayz-orders-table td:nth-child(4) { width: 5%; text-align: center; }
-.alwayz-orders-table th:nth-child(5), .alwayz-orders-table td:nth-child(5) { width: 8%; text-align: right; }
-.alwayz-orders-table th:nth-child(6), .alwayz-orders-table td:nth-child(6) { width: 8%; text-align: right; }
-.alwayz-orders-table th:nth-child(7), .alwayz-orders-table td:nth-child(7) { width: 8%; }
-.alwayz-orders-table th:nth-child(8), .alwayz-orders-table td:nth-child(8) { width: 8%; font-size: 11px; }
-.alwayz-orders-table th:nth-child(9), .alwayz-orders-table td:nth-child(9) { width: 8%; font-size: 11px; }
-.alwayz-orders-table th:nth-child(10), .alwayz-orders-table td:nth-child(10) { width: 5%; text-align: center; }
 /* ── 광고 그룹 행 ── */
 .ad-group-row td { background: var(--surface2); font-weight: 600; cursor: pointer; }
 .ad-group-row td:hover { background: var(--surface3); }
