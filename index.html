@@ -452,6 +452,21 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
 .data-table td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover td { background: #fafafa; }
+/* ── 올웨이즈 주문 전용 테이블 ── */
+.alwayz-orders-table { table-layout: fixed; width: 100%; }
+.alwayz-orders-table td { white-space: normal; word-break: break-word; background: #fff; }
+.alwayz-orders-table th { white-space: normal; }
+.alwayz-orders-table tbody tr:hover td { background: #f7f7f7; }
+.alwayz-orders-table th:nth-child(1), .alwayz-orders-table td:nth-child(1) { width: 8%; font-size: 11px; }
+.alwayz-orders-table th:nth-child(2), .alwayz-orders-table td:nth-child(2) { width: 22%; }
+.alwayz-orders-table th:nth-child(3), .alwayz-orders-table td:nth-child(3) { width: 20%; }
+.alwayz-orders-table th:nth-child(4), .alwayz-orders-table td:nth-child(4) { width: 5%; text-align: center; }
+.alwayz-orders-table th:nth-child(5), .alwayz-orders-table td:nth-child(5) { width: 8%; text-align: right; }
+.alwayz-orders-table th:nth-child(6), .alwayz-orders-table td:nth-child(6) { width: 8%; text-align: right; }
+.alwayz-orders-table th:nth-child(7), .alwayz-orders-table td:nth-child(7) { width: 8%; }
+.alwayz-orders-table th:nth-child(8), .alwayz-orders-table td:nth-child(8) { width: 8%; font-size: 11px; }
+.alwayz-orders-table th:nth-child(9), .alwayz-orders-table td:nth-child(9) { width: 8%; font-size: 11px; }
+.alwayz-orders-table th:nth-child(10), .alwayz-orders-table td:nth-child(10) { width: 5%; text-align: center; }
 /* ── 광고 그룹 행 ── */
 .ad-group-row td { background: var(--surface2); font-weight: 600; cursor: pointer; }
 .ad-group-row td:hover { background: var(--surface3); }
@@ -12459,7 +12474,7 @@ async function loadAlwayzOrders() {
       result.innerHTML = '<div style="padding:20px;color:var(--text-dim)">주문이 없습니다. 주문서를 업로드하세요.</div>';
       return;
     }
-    let html = '<table class="data-table"><thead><tr>';
+    let html = '<table class="data-table alwayz-orders-table"><thead><tr>';
     ['주문시점','상품명','옵션','수량','상품가격','정산금액','수령인','택배사','송장번호','삭제'].forEach(h => html += '<th>'+h+'</th>');
     html += '</tr></thead><tbody>';
     rows.forEach(r => {
