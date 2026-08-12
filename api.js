@@ -4104,6 +4104,34 @@ router.get('/debug-supplier-orders/:id', requireAuth, async (req, res) => {
   } catch(e) { res.json({ error: e.message, stack: e.stack?.slice(0,300) }); }
 });
 
+// ── [임시 디버그] 쿠팡-도매처 전화 교집합 확인 ───────────────────────────────
+router.get('/debug-phone-match/:supplierId', requireAuth, async (req, res) => {
+  try {
+    const { rows: orders } = await pool.query(
+      `SELECT recipient_phone_masked FROM orders WHERE user_id=$1 AND (tracking_number IS NULL OR tracking_number='') AND recipient_phone_masked IS NOT NULL AND recipient_phone_masked<>'' LIMIT 500`,
+      [req.user.id]
+    );
+    const cpPhones = new Set(orders.map(o => normalizePhone(o.recipient_phone_masked)));
+    const invoices = await fetchSupplierInvoices(req.user.id, req.params.supplierId);
+    const supPhones = invoices.map(i => normalizePhone(i.receiver_phone));
+    const supPhoneSet = new Set(supPhones);
+    let intersect = 0;
+    const samples = [];
+    for (const p of cpPhones) {
+      if (supPhoneSet.has(p)) { intersect++; if (samples.length < 5) samples.push(p); }
+    }
+    res.json({
+      coupang_phone_count: cpPhones.size,
+      supplier_invoice_count: invoices.length,
+      supplier_phone_count: supPhoneSet.size,
+      intersection: intersect,
+      intersect_samples: samples,
+      coupang_sample: [...cpPhones].slice(0, 5),
+      supplier_sample: [...supPhoneSet].slice(0, 5),
+    });
+  } catch(e) { res.json({ error: e.message }); }
+});
+
 // ── [임시 디버그] 도매처 customer_order_code 값 확인 ─────────────────────────
 router.get('/debug-supplier-codes/:id', requireAuth, async (req, res) => {
   try {
