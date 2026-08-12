@@ -13378,9 +13378,46 @@ function renderUnifiedDispatch(j) {
   result.innerHTML=html||'<div style="padding:20px;color:var(--text-dim)">발주 대상이 없습니다.</div>';
 }
 
-async function downloadUnifiedExcel(supplierId, mode) {
+function confirmDispatchDownload(title, summaryHtml) {
+  return new Promise(resolve => {
+    const modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;align-items:center;justify-content:center';
+    modal.innerHTML='<div style="background:var(--surface,#fff);border-radius:14px;padding:24px;width:480px;max-width:94vw;max-height:80vh;overflow-y:auto">'
+      +'<div style="font-size:16px;font-weight:700;margin-bottom:12px">'+title+'</div>'
+      +'<div style="font-size:13px;margin-bottom:16px">'+summaryHtml+'</div>'
+      +'<div style="font-size:12px;color:var(--text-dim);margin-bottom:16px">이대로 발주서를 다운로드하고 발주완료 처리할까요?</div>'
+      +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+      +'<button class="btn" id="cddCancel" style="font-size:13px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border)">취소</button>'
+      +'<button class="btn btn-primary" id="cddOk" style="font-size:13px;padding:8px 16px">다운로드</button>'
+      +'</div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector('#cddCancel').onclick=()=>{modal.remove();resolve(false);};
+    modal.querySelector('#cddOk').onclick=()=>{modal.remove();resolve(true);};
+  });
+}
+
+function buildGroupSummary(group, mode) {
+  let orders=group.orders;
+  if(mode==='coupang') orders=orders.filter(o=>o.platform==='coupang');
+  if(mode==='alwayz') orders=orders.filter(o=>o.platform==='alwayz');
+  const cp=orders.filter(o=>o.platform==='coupang').length;
+  const aw=orders.filter(o=>o.platform==='alwayz').length;
+  const pm={};
+  orders.forEach(o=>{const k=o.product_name;pm[k]=(pm[k]||0)+1;});
+  let html='<div style="font-weight:600;margin-bottom:6px">🏪 '+escHtml(group.supplier_name)+' — 쿠팡 '+cp+' + 올웨이즈 '+aw+' = '+orders.length+'건</div>';
+  html+='<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">';
+  Object.entries(pm).forEach(([name,cnt])=>{ html+='<div style="font-size:12px;padding:2px 0">· '+escHtml(name)+' <span style="color:var(--text-dim)">'+cnt+'건</span></div>'; });
+  html+='</div>';
+  return html;
+}
+
+async function downloadUnifiedExcel(supplierId, mode, skipConfirm) {
   const group=_udData.groups.find(g=>String(g.supplier_id)===String(supplierId));
   if(!group||!group.form_key||!_orderForms[group.form_key]) return alert('발주 양식 없음');
+  if(!skipConfirm){
+    const ok=await confirmDispatchDownload('발주서 다운로드 확인', buildGroupSummary(group, mode));
+    if(!ok) return;
+  }
   const sr=await fetch('/api/order-sender'); const sender=await sr.json();
   if(!sender.sender_name||!sender.sender_phone) return alert('보내는사람 정보를 먼저 설정하세요(도매처 탭).');
   let orders=group.orders;
@@ -13425,8 +13462,16 @@ async function downloadUnifiedExcel(supplierId, mode) {
 
 async function downloadAllUnified() {
   if(!_udData||!_udData.groups.length) return alert('발주 대상 없음');
-  const ids=_udData.groups.filter(g=>g.form_key).map(g=>g.supplier_id);
-  for(const sid of ids){await downloadUnifiedExcel(sid,'both');await new Promise(r=>setTimeout(r,500));}
+  const targetGroups=_udData.groups.filter(g=>g.form_key);
+  if(!targetGroups.length) return alert('발주 양식 있는 도매처 없음');
+  let summary='';
+  targetGroups.forEach(g=>{const cp=g.orders.filter(o=>o.platform==='coupang').length;const aw=g.orders.filter(o=>o.platform==='alwayz').length;summary+='<div style="padding:4px 0;border-bottom:1px solid var(--border)">🏪 <b>'+escHtml(g.supplier_name)+'</b> — 쿠팡 '+cp+' + 올웨이즈 '+aw+' = '+g.orders.length+'건</div>';});
+  const total=targetGroups.reduce((s,g)=>s+g.orders.length,0);
+  summary+='<div style="margin-top:8px;font-weight:600">총 '+targetGroups.length+'개 도매처 · '+total+'건</div>';
+  const ok=await confirmDispatchDownload('전체 발주서 다운로드 확인', summary);
+  if(!ok) return;
+  const ids=targetGroups.map(g=>g.supplier_id);
+  for(const sid of ids){await downloadUnifiedExcel(sid,'both',true);await new Promise(r=>setTimeout(r,500));}
   alert('전체 발주서 다운로드 완료 ('+ids.length+'개 도매처)');
 }
 
