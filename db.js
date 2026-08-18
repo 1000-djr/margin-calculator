@@ -302,6 +302,33 @@ async function initDB() {
     );
   `);
 
+  // ── 최상단 안전 블록: orders 필수 컬럼 조기 보장 ─────────────────────────────
+  // 이 블록을 initDB 최상단(CREATE TABLE 직후)에 위치시켜 아래 마이그레이션 실패와
+  // 무관하게 두 컬럼이 반드시 존재하도록 보장합니다.
+  try {
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS recipient_zipcode VARCHAR(20) DEFAULT NULL`);
+  } catch(e) { console.warn('[db] orders recipient_zipcode 조기 마이그레이션 스킵:', e.message); }
+  try {
+    await pool.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_msg TEXT DEFAULT NULL`);
+  } catch(e) { console.warn('[db] orders delivery_msg 조기 마이그레이션 스킵:', e.message); }
+
+  // 부팅 시 orders 컬럼 목록 확인
+  try {
+    const colRes = await pool.query(`
+      SELECT column_name, data_type, character_maximum_length
+      FROM information_schema.columns
+      WHERE table_name = 'orders'
+      ORDER BY ordinal_position
+    `);
+    const colList = colRes.rows.map(r =>
+      `${r.column_name}(${r.data_type}${r.character_maximum_length ? ':' + r.character_maximum_length : ''})`
+    ).join(', ');
+    console.log(`[db] orders 컬럼 목록(${colRes.rowCount}개): ${colList}`);
+    const hasZip = colRes.rows.some(r => r.column_name === 'recipient_zipcode');
+    const hasMsg = colRes.rows.some(r => r.column_name === 'delivery_msg');
+    console.log(`[db] orders 필수 컬럼 확인 — recipient_zipcode:${hasZip} / delivery_msg:${hasMsg}`);
+  } catch(e) { console.warn('[db] orders 컬럼 목록 조회 실패:', e.message); }
+
   // ad_reports 마이그레이션: 원본 전체 데이터 저장 컬럼 추가
   // NOTE: CREATE TABLE ad_reports 이후에 실행해야 신규 DB에서도 정상 동작
   try {

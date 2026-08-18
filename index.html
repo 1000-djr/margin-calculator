@@ -4776,6 +4776,7 @@ async function doOrdersUpload(toAdd) {
 
   if (currentUser) {
     showProgress(0);
+    const allErrors = [];
     try {
       for (let start = 0; start < total; start += CHUNK) {
         showProgress(start);
@@ -4797,6 +4798,8 @@ async function doOrdersUpload(toAdd) {
           } else {
             const result = await res.json().catch(() => ({}));
             inserted += result.inserted || 0;
+            failed   += result.failed   || 0;
+            if (Array.isArray(result.errors)) allErrors.push(...result.errors);
           }
         } catch(e) {
           clearTimeout(timer);
@@ -4813,7 +4816,14 @@ async function doOrdersUpload(toAdd) {
     // DB 업로드 완료 — renderOrders가 페이지네이션 API로 최신 데이터 조회
 
     if (failed > 0) {
-      alert(`⚠️ 일부 저장 실패: ${failed}건\n${inserted}건은 정상 저장됐습니다.`);
+      let msg = `⚠️ 일부 저장 실패: ${failed}건\n${inserted}건은 정상 저장됐습니다.`;
+      if (allErrors.length > 0) {
+        const sample = allErrors.slice(0, 3).map(e => `• ${e.order_number}: ${e.reason}`).join('\n');
+        msg += `\n\n실패 사유 (최대 3건):\n${sample}`;
+        if (allErrors.length > 3) msg += `\n... 외 ${allErrors.length - 3}건 (콘솔 확인)`;
+      }
+      console.error('[orders] 실패 목록:', allErrors);
+      alert(msg);
     } else {
       console.log(`[orders] DB 저장 완료: ${inserted}건 삽입 / 전체 ${total}건`);
     }

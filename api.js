@@ -1375,83 +1375,107 @@ router.put('/orders/bulk-update', requireAuth, async (req, res) => {
 
 router.post('/orders/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
-  if (!items.length) return res.json({ inserted: 0 });
+  if (!items.length) return res.json({ inserted: 0, failed: 0, errors: [] });
   console.log(`[orders/bulk] user=${req.user.id} items=${items.length}`);
 
-  // 100건씩 멀티행 배치 INSERT (건별 쿼리 대비 ~100배 빠름)
   const BATCH = 100;
-  const COLS  = 26; // INSERT 컬럼 수 (우편번호 + 배송메시지 포함)
+  const COLS  = 26;
   let inserted = 0;
+  let failed   = 0;
+  const errors = [];
 
-  try {
-    for (let start = 0; start < items.length; start += BATCH) {
-      const batch = items.slice(start, start + BATCH);
-      const placeholders = [];
-      const params       = [];
-      let p = 1;
+  // VARCHAR 길이 초과 방어: 최대 길이로 잘라 반환
+  const s = (v, max) => String(v == null ? '' : v).substring(0, max);
 
-      for (const o of batch) {
-        placeholders.push(
-          `($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},$${p+15},$${p+16},$${p+17},$${p+18},$${p+19},$${p+20},$${p+21},$${p+22},$${p+23},$${p+24},$${p+25})`
-        );
-        params.push(
-          req.user.id,                                                          // $1  user_id
-          o['주문번호'] || '',                                                   // $2  order_number
-          o['묶음배송번호'] || '',                                               // $3  bundle_number
-          o['주문일'] || '',                                                     // $4  order_date
-          o['등록상품명'] || '',                                                 // $5  product_name
-          o['등록옵션명'] || '',                                                 // $6  option_name
-          o['노출상품명(옵션명)'] || o['노출상품명'] || '',                       // $7  display_name
-          o['노출상품ID'] || '',                                                 // $8  display_product_id
-          o['옵션ID'] || '',                                                     // $9  option_id
-          parseInt(o['결제액']) || 0,                                            // $10 payment_amount
-          parseInt(o['배송비']) || 0,                                            // $11 shipping_fee
-          parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,            // $12 quantity
-          parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0,  // $13 unit_price
-          o['택배사'] || '',                                                     // $14 courier
-          o['운송장번호'] || '',                                                 // $15 tracking_number
-          o['출고일'] || '',                                                     // $16 shipped_date
-          o['배송완료일'] || '',                                                 // $17 delivered_date
-          o['구매확정일자'] || '',                                               // $18 confirmed_date
-          o['결제위치'] || '',                                                   // $19 payment_location
-          o['배송유형'] || '',                                                   // $20 delivery_type
-          o['구매자'] || '',                                                     // $21 buyer_masked
-          o['수취인이름'] || '',                                                 // $22 recipient_name_masked
-          o['수취인전화번호'] || '',                                             // $23 recipient_phone_masked
-          o['수취인 주소'] || o['수취인주소'] || '',                              // $24 recipient_address_masked
-          o['우편번호'] || '',                                                   // $25 recipient_zipcode
-          o['배송메세지'] || o['배송메시지'] || '',                               // $26 delivery_msg
-        );
-        p += COLS;
-      }
+  // 주문 1건의 파라미터 배열을 반환
+  function orderParams(o) {
+    return [
+      req.user.id,                                                          // $1  user_id
+      s(o['주문번호'], 100),                                                // $2  order_number
+      s(o['묶음배송번호'], 100),                                            // $3  bundle_number
+      s(o['주문일'], 50),                                                   // $4  order_date
+      o['등록상품명'] || '',                                                // $5  product_name (TEXT)
+      o['등록옵션명'] || '',                                                // $6  option_name (TEXT)
+      o['노출상품명(옵션명)'] || o['노출상품명'] || '',                      // $7  display_name (TEXT)
+      s(o['노출상품ID'], 100),                                              // $8  display_product_id
+      s(o['옵션ID'], 100),                                                  // $9  option_id
+      parseInt(o['결제액']) || 0,                                           // $10 payment_amount
+      parseInt(o['배송비']) || 0,                                           // $11 shipping_fee
+      parseInt(o['구매수(수량)']) || parseInt(o['구매수량']) || 1,           // $12 quantity
+      parseInt(o['옵션판매가(판매단가)']) || parseInt(o['옵션판매가']) || 0, // $13 unit_price
+      s(o['택배사'], 100),                                                  // $14 courier
+      s(o['운송장번호'], 100),                                              // $15 tracking_number
+      s(o['출고일'], 50),                                                   // $16 shipped_date
+      s(o['배송완료일'], 50),                                               // $17 delivered_date
+      s(o['구매확정일자'], 50),                                             // $18 confirmed_date
+      s(o['결제위치'], 100),                                                // $19 payment_location
+      s(o['배송유형'], 100),                                                // $20 delivery_type
+      s(o['구매자'], 100),                                                  // $21 buyer_masked
+      s(o['수취인이름'], 100),                                              // $22 recipient_name_masked
+      s(o['수취인전화번호'], 50),                                           // $23 recipient_phone_masked
+      o['수취인 주소'] || o['수취인주소'] || '',                             // $24 recipient_address_masked (TEXT)
+      s(o['우편번호'], 20),                                                 // $25 recipient_zipcode
+      o['배송메세지'] || o['배송메시지'] || '',                              // $26 delivery_msg (TEXT)
+    ];
+  }
 
-      const r = await pool.query(
-        `INSERT INTO orders
-         (user_id,order_number,bundle_number,order_date,product_name,option_name,
-          display_name,display_product_id,option_id,payment_amount,shipping_fee,
-          quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
-          confirmed_date,payment_location,delivery_type,buyer_masked,
-          recipient_name_masked,recipient_phone_masked,recipient_address_masked,
-          recipient_zipcode,delivery_msg)
-         VALUES ${placeholders.join(',')}
-         ON CONFLICT (user_id, order_number) DO UPDATE SET
-           buyer_masked             = EXCLUDED.buyer_masked,
-           recipient_name_masked    = EXCLUDED.recipient_name_masked,
-           recipient_phone_masked   = EXCLUDED.recipient_phone_masked,
-           recipient_address_masked = EXCLUDED.recipient_address_masked,
-           recipient_zipcode        = EXCLUDED.recipient_zipcode,
-           delivery_msg             = EXCLUDED.delivery_msg`,
-        params
+  const INSERT_COLS = `INSERT INTO orders
+    (user_id,order_number,bundle_number,order_date,product_name,option_name,
+     display_name,display_product_id,option_id,payment_amount,shipping_fee,
+     quantity,unit_price,courier,tracking_number,shipped_date,delivered_date,
+     confirmed_date,payment_location,delivery_type,buyer_masked,
+     recipient_name_masked,recipient_phone_masked,recipient_address_masked,
+     recipient_zipcode,delivery_msg) VALUES`;
+
+  const ON_CONFLICT = `ON CONFLICT (user_id, order_number) DO UPDATE SET
+     buyer_masked             = EXCLUDED.buyer_masked,
+     recipient_name_masked    = EXCLUDED.recipient_name_masked,
+     recipient_phone_masked   = EXCLUDED.recipient_phone_masked,
+     recipient_address_masked = EXCLUDED.recipient_address_masked,
+     recipient_zipcode        = EXCLUDED.recipient_zipcode,
+     delivery_msg             = EXCLUDED.delivery_msg`;
+
+  // 단일 행 INSERT SQL (행별 재시도용)
+  const SINGLE_PH = `($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)`;
+
+  for (let start = 0; start < items.length; start += BATCH) {
+    const batch = items.slice(start, start + BATCH);
+    const placeholders = [];
+    const params       = [];
+    let p = 1;
+
+    for (const o of batch) {
+      placeholders.push(
+        `($${p},$${p+1},$${p+2},$${p+3},$${p+4},$${p+5},$${p+6},$${p+7},$${p+8},$${p+9},$${p+10},$${p+11},$${p+12},$${p+13},$${p+14},$${p+15},$${p+16},$${p+17},$${p+18},$${p+19},$${p+20},$${p+21},$${p+22},$${p+23},$${p+24},$${p+25})`
       );
+      params.push(...orderParams(o));
+      p += COLS;
+    }
+
+    try {
+      const r = await pool.query(`${INSERT_COLS} ${placeholders.join(',')} ${ON_CONFLICT}`, params);
       inserted += r.rowCount;
       console.log(`[orders/bulk] 배치 ${start + 1}~${start + batch.length}: 삽입 ${r.rowCount}건`);
+    } catch (batchErr) {
+      // 배치 전체 실패 → 행별 재시도
+      console.warn(`[orders/bulk] 배치 ${start + 1}~${start + batch.length} 실패, 행별 재시도: ${batchErr.message}`);
+      for (const o of batch) {
+        const rp = orderParams(o);
+        const orderNum = rp[1]; // order_number
+        try {
+          const r = await pool.query(`${INSERT_COLS} ${SINGLE_PH} ${ON_CONFLICT}`, rp);
+          inserted += r.rowCount;
+        } catch (rowErr) {
+          console.error(`[orders/bulk] 행 실패 order_number=${orderNum}:`, rowErr.message);
+          errors.push({ order_number: orderNum, reason: rowErr.message });
+          failed++;
+        }
+      }
     }
-    console.log(`[orders/bulk] 완료: 삽입=${inserted} / 전체=${items.length}`);
-    res.json({ inserted });
-  } catch(e) {
-    console.error('[orders/bulk] DB 오류:', e.message);
-    res.status(500).json({ error: e.message });
   }
+
+  console.log(`[orders/bulk] 완료: 삽입=${inserted} / 실패=${failed} / 전체=${items.length}`);
+  res.json({ inserted, failed, errors });
 });
 
 router.delete('/orders', requireAuth, async (req, res) => {
