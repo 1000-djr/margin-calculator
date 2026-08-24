@@ -2932,9 +2932,18 @@ async function loadUserData() {
       safeFetch('/api/cost-mappings'),
       safeFetch('/api/fixed-discounts'),
     ]);
-    if (scData) { shortcuts = scData; localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts)); }
-    if (arData) { adReports = arData; localStorage.setItem('adReportsData', JSON.stringify(adReports)); }
-    if (cData)  { coupons = cData;    localStorage.setItem('couponsData',   JSON.stringify(coupons));   }
+    if (scData) {
+      shortcuts = scData;
+      try { localStorage.setItem('b2bShortcuts', JSON.stringify(shortcuts)); } catch(e) { console.warn('[loadUserData] b2bShortcuts 캐시 실패', e); }
+    }
+    if (arData) {
+      adReports = arData;
+      // adReportsData는 매 로그인마다 서버에서 새로 받으므로 localStorage 캐싱 생략
+    }
+    if (cData) {
+      coupons = cData;
+      try { localStorage.setItem('couponsData', JSON.stringify(coupons)); } catch(e) { console.warn('[loadUserData] couponsData 캐시 실패', e); }
+    }
     if (Array.isArray(fdData)) { fixedDiscounts = fdData; }
     // 할인 계산 방식 설정 로드
     try {
@@ -2947,13 +2956,13 @@ async function loadUserData() {
     if (cmData) {
       optionMatchings = {};
       cmData.forEach(m => { optionMatchings[m.option_id] = { supplierName: m.supplier, cost: m.cost, taxType: m.tax_type || 'exempt', productName: m.product_name || '' }; });
-      localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings));
+      try { localStorage.setItem('optionMatchings', JSON.stringify(optionMatchings)); } catch(e) { console.warn('[loadUserData] optionMatchings 캐시 실패', e); }
     }
     const aomData = await fetch('/api/ad-option-mappings').then(r => r.json()).catch(() => []);
     if (Array.isArray(aomData) && aomData.length) {
       adOptionMappings = {};
       aomData.forEach(m => { adOptionMappings[m.ad_option_id] = { productId: m.product_id, productName: m.product_name }; });
-      localStorage.setItem('adOptionMappings', JSON.stringify(adOptionMappings));
+      try { localStorage.setItem('adOptionMappings', JSON.stringify(adOptionMappings)); } catch(e) { console.warn('[loadUserData] adOptionMappings 캐시 실패', e); }
     }
     const pnmData = await fetch('/api/product-name-mappings').then(r => r.json()).catch(() => []);
     if (Array.isArray(pnmData)) productNameMappings = pnmData;
@@ -3026,7 +3035,7 @@ let shortcuts = JSON.parse(localStorage.getItem('b2bShortcuts')  || '[]');
 // ── 새 탭 데이터 ──────────────────────────────────────────────────────────────
 let orders = [];
 let _renderedPageOrders = []; // 현재 렌더된 페이지 주문 (bulk 작업용)
-let adReports = JSON.parse(localStorage.getItem('adReportsData') || '[]');
+let adReports = []; // 서버에서 로그인 시 fresh하게 로드 (localStorage 캐시 사용 안 함)
 let coupons = JSON.parse(localStorage.getItem('couponsData') || '[]');
 let fixedDiscounts = [];
 let fdStatusFilter = 'all'; // 'all' | 'active' | 'ended'
