@@ -995,7 +995,11 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     <div class="card">
       <div class="field-row">
         <div class="field"><label>상품 선택</label><select id="quickProduct" onchange="quickCalc()"><option value="">선택하세요</option></select></div>
-        <div class="field"><label>쿠팡 판매가 (원)</label><input type="number" id="quickSalePrice" placeholder="0" oninput="quickCalc()"></div>
+        <div class="field"><label>판매가(번들 전체) (원)</label><input type="number" id="quickSalePrice" placeholder="0" oninput="quickCalc()"></div>
+      </div>
+      <div class="field-row" style="margin-top:0">
+        <div class="field"><label>판매수량(번들) <span style="font-weight:400;font-size:11px;color:var(--text-dim)">(기본 1)</span></label><input type="number" id="quickBundleQty" placeholder="1" min="1" step="1" value="1" oninput="quickCalc()"></div>
+        <div class="field"><label>택배비 (원)</label><input type="number" id="quickShippingFee" placeholder="0" oninput="quickCalc()"></div>
       </div>
       <div class="result-box" id="quickResult">
         <div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value">상품과 판매가를 입력하세요</span></div>
@@ -4462,8 +4466,10 @@ function updateQuickSelect() {
 }
 
 function quickCalc() {
-  const key  = document.getElementById('quickProduct').value;
-  const sale = parseFloat(document.getElementById('quickSalePrice').value) || 0;
+  const key      = document.getElementById('quickProduct').value;
+  const sale     = parseFloat(document.getElementById('quickSalePrice').value) || 0;
+  const bundleQty = Math.max(1, parseInt(document.getElementById('quickBundleQty').value) || 1);
+  const shipping  = parseFloat(document.getElementById('quickShippingFee').value) || 0;
   const container = document.getElementById('quickResult');
   if (!key || !sale) {
     container.innerHTML = '<div class="result-row"><span class="result-label">공급처별 마진율</span><span class="result-value">상품과 판매가를 입력하세요</span></div>';
@@ -4480,10 +4486,14 @@ function quickCalc() {
     container.innerHTML = '<div class="result-row"><span class="result-label">현재 진행중인 매입가 없음</span><span class="result-value" style="color:var(--text-dim)">-</span></div>';
     return;
   }
+  const bundleLabel = bundleQty > 1 ? `개당×${bundleQty}` : null;
   container.innerHTML = activePrices.map(p => {
-    const margin = afterFee - p.cost, rate = (margin / sale) * 100;
+    const totalCost = p.cost * bundleQty;
+    const margin = afterFee - totalCost - shipping;
+    const rate = (margin / sale) * 100;
     const cls = margin < 0 ? 'red' : rate < 15 ? 'yellow' : 'green';
-    return `<div class="result-row"><span class="result-label">${p.supplier_name} (매입 ${p.cost.toLocaleString()}원)</span><span class="result-value ${cls}">${Math.round(margin).toLocaleString()}원 · ${rate.toFixed(1)}%</span></div>`;
+    const costLabel = bundleLabel ? `매입 ${p.cost.toLocaleString()}원×${bundleQty}=${totalCost.toLocaleString()}원` : `매입 ${p.cost.toLocaleString()}원`;
+    return `<div class="result-row"><span class="result-label">${p.supplier_name} (${costLabel})</span><span class="result-value ${cls}">${Math.round(margin).toLocaleString()}원 · ${rate.toFixed(1)}%</span></div>`;
   }).join('');
 }
 
