@@ -1375,12 +1375,13 @@ router.put('/orders/bulk-update', requireAuth, async (req, res) => {
 
 router.post('/orders/bulk', requireAuth, async (req, res) => {
   const items = Array.isArray(req.body) ? req.body : [];
-  if (!items.length) return res.json({ inserted: 0, failed: 0, errors: [] });
+  if (!items.length) return res.json({ inserted: 0, updated: 0, failed: 0, errors: [] });
   console.log(`[orders/bulk] user=${req.user.id} items=${items.length}`);
 
   const BATCH = 100;
   const COLS  = 26;
   let inserted = 0;
+  let updated  = 0;
   let failed   = 0;
   const errors = [];
 
@@ -1453,9 +1454,12 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
     }
 
     try {
-      const r = await pool.query(`${INSERT_COLS} ${placeholders.join(',')} ${ON_CONFLICT}`, params);
-      inserted += r.rowCount;
-      console.log(`[orders/bulk] 배치 ${start + 1}~${start + batch.length}: 삽입 ${r.rowCount}건`);
+      const r = await pool.query(`${INSERT_COLS} ${placeholders.join(',')} ${ON_CONFLICT} RETURNING (xmax = 0) AS is_new`, params);
+      let batchInserted = 0, batchUpdated = 0;
+      for (const row of r.rows) { if (row.is_new) batchInserted++; else batchUpdated++; }
+      inserted += batchInserted;
+      updated  += batchUpdated;
+      console.log(`[orders/bulk] 배치 ${start + 1}~${start + batch.length}: 신규=${batchInserted} 덮어쓰기=${batchUpdated}`);
     } catch (batchErr) {
       // 배치 전체 실패 → 행별 재시도
       console.warn(`[orders/bulk] 배치 ${start + 1}~${start + batch.length} 실패, 행별 재시도: ${batchErr.message}`);
@@ -1463,8 +1467,8 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
         const rp = orderParams(o);
         const orderNum = rp[1]; // order_number
         try {
-          const r = await pool.query(`${INSERT_COLS} ${SINGLE_PH} ${ON_CONFLICT}`, rp);
-          inserted += r.rowCount;
+          const r = await pool.query(`${INSERT_COLS} ${SINGLE_PH} ${ON_CONFLICT} RETURNING (xmax = 0) AS is_new`, rp);
+          if (r.rows[0]?.is_new) inserted++; else updated++;
         } catch (rowErr) {
           console.error(`[orders/bulk] 행 실패 order_number=${orderNum}:`, rowErr.message);
           errors.push({ order_number: orderNum, reason: rowErr.message });
@@ -1474,8 +1478,8 @@ router.post('/orders/bulk', requireAuth, async (req, res) => {
     }
   }
 
-  console.log(`[orders/bulk] 완료: 삽입=${inserted} / 실패=${failed} / 전체=${items.length}`);
-  res.json({ inserted, failed, errors });
+  console.log(`[orders/bulk] 완료: 신규=${inserted} / 덮어쓰기=${updated} / 실패=${failed} / 전체=${items.length}`);
+  res.json({ inserted, updated, failed, errors });
 });
 
 router.delete('/orders', requireAuth, async (req, res) => {
