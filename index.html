@@ -824,7 +824,11 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
             <div class="cost-from-b2b" id="costFromB2BNote">상품과 공급처를 선택하면 매입가가 자동 입력됩니다</div>
           </div>
         </div>
-        <div class="field"><label>판매가 (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
+        <div class="field"><label>판매가(번들 전체) (원)</label><input type="number" id="salePrice" placeholder="0" oninput="calc1()"></div>
+        <div class="field-row">
+          <div class="field"><label>판매수량(번들) <span style="font-weight:400;font-size:11px;color:var(--text-dim)">(기본 1)</span></label><input type="number" id="bundleQty" placeholder="1" min="1" step="1" value="1" oninput="calc1()"></div>
+          <div class="field"><label>택배비 (원)</label><input type="number" id="shippingFee" placeholder="0" oninput="calc1()"></div>
+        </div>
         <div class="field"><label>상품명 <span style="font-weight:400;font-size:11px;color:var(--text-dim)">(이력 저장용 · 선택)</span></label>
           <input type="text" id="calcProductName" placeholder="예: 세척사과 (B2B 불러오면 자동 입력)"></div>
         <div class="field"><label>단위</label>
@@ -846,7 +850,8 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
           <div class="result-row"><span class="result-label">판매가</span><span class="result-value" id="r1-sale">-</span></div>
           <div class="result-row"><span class="result-label" id="r1-fee-label">플랫폼 수수료</span><span class="result-value red" id="r1-fee">-</span></div>
           <div class="result-row"><span class="result-label">수수료 차감 후</span><span class="result-value" id="r1-after">-</span></div>
-          <div class="result-row"><span class="result-label">매입가</span><span class="result-value red" id="r1-cost">-</span></div>
+          <div class="result-row"><span class="result-label" id="r1-cost-label">매입가</span><span class="result-value red" id="r1-cost">-</span></div>
+          <div class="result-row" id="r1-shipping-row" style="display:none"><span class="result-label">택배비</span><span class="result-value red" id="r1-shipping">-</span></div>
           <div class="result-row" id="r1-vat-row" style="display:none"><span class="result-label">부가세 납부액</span><span class="result-value red" id="r1-vat">-</span></div>
         </div>
         <div class="big-result" id="r1-box">
@@ -3475,27 +3480,33 @@ function fmt(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
 function fmtPct(n) { return n.toFixed(1) + '%'; }
 
 function calc1() {
-  const cost = costInputMode === 'b2b'
+  const unitCost = costInputMode === 'b2b'
     ? b2bCostValue
     : (parseFloat(document.getElementById('costPrice').value) || 0);
   const sale = parseFloat(document.getElementById('salePrice').value) || 0;
+  const bundleQty = Math.max(1, parseInt(document.getElementById('bundleQty').value) || 1);
+  const shipping = parseFloat(document.getElementById('shippingFee').value) || 0;
   const fee  = getFeeRate();
-  if (!sale || !cost) {
-    ['r1-sale','r1-fee','r1-after','r1-cost','r1-vat','r1-margin','r1-rate','r1-eroas'].forEach(id => {
+  const totalCost = unitCost * bundleQty;
+  if (!sale || !unitCost) {
+    ['r1-sale','r1-fee','r1-after','r1-cost','r1-shipping','r1-vat','r1-margin','r1-rate','r1-eroas'].forEach(id => {
       const el = document.getElementById(id); if (el) el.textContent = '-';
     });
+    const shRow = document.getElementById('r1-shipping-row');
+    if (shRow) shRow.style.display = 'none';
     return;
   }
   const feeAmt  = sale * fee;
   const afterFee = sale - feeAmt;
 
-  // 과세: 부가세 납부액 = 판매가/11 - (공급가/11 + 쿠팡수수료/11)
+  // 과세: 부가세 납부액 = 매출세액 − 매입세액(원가+수수료+택배비)
+  // 택배비는 과세용역(일반 택배사 VAT 10% 적용)이므로 매입세액 공제 포함
   let vatPayable = 0;
   if (taxType === 'taxable') {
-    vatPayable = sale / 11 - (cost / 11 + feeAmt / 11);
+    vatPayable = sale / 11 - (totalCost / 11 + feeAmt / 11 + shipping / 11);
   }
 
-  const margin = afterFee - cost - vatPayable;
+  const margin = afterFee - totalCost - shipping - vatPayable;
   const rate   = (margin / sale) * 100;
 
   // 플랫폼 수수료 레이블 업데이트
@@ -3503,10 +3514,22 @@ function calc1() {
     (platforms.find(p => p.id === selectedPlatformId)?.name || '플랫폼');
   const feeLabel = document.getElementById('r1-fee-label');
   if (feeLabel) feeLabel.textContent = platName + ' 수수료' + (taxType === 'exempt' ? ' (면세)' : '');
+
+  // 매입가 라벨: 번들 수량 반영
+  const costLabelEl = document.getElementById('r1-cost-label');
+  if (costLabelEl) costLabelEl.textContent = bundleQty > 1 ? `매입가(개당×${bundleQty})` : '매입가';
+
   document.getElementById('r1-sale').textContent  = fmt(sale);
   document.getElementById('r1-fee').textContent   = '−' + fmt(feeAmt);
   document.getElementById('r1-after').textContent = fmt(afterFee);
-  document.getElementById('r1-cost').textContent  = '−' + fmt(cost);
+  document.getElementById('r1-cost').textContent  = '−' + fmt(totalCost);
+
+  // 택배비 행: 입력값 있을 때만 표시
+  const shRow = document.getElementById('r1-shipping-row');
+  if (shRow) shRow.style.display = shipping > 0 ? 'flex' : 'none';
+  const shEl = document.getElementById('r1-shipping');
+  if (shEl) shEl.textContent = '−' + fmt(shipping);
+
   if (taxType === 'taxable') {
     document.getElementById('r1-vat').textContent = '−' + fmt(vatPayable);
   }
@@ -3521,26 +3544,30 @@ function calc1() {
   box.className = 'big-result'; val.className = 'big-value';
   if (margin < 0) { box.classList.add('danger'); val.classList.add('danger'); }
   else if (rate < 15) { box.classList.add('warning'); val.classList.add('warning'); }
-  document.getElementById('reverseCost').value = cost || '';
+  document.getElementById('reverseCost').value = unitCost || '';
   calcReverse(); calc2();
 }
 
 function calcReverse() {
   const rate = parseFloat(document.getElementById('targetRate').value) || 0;
-  const cost = parseFloat(document.getElementById('reverseCost').value) || 0;
+  const unitCost = parseFloat(document.getElementById('reverseCost').value) || 0;
+  const bundleQty = Math.max(1, parseInt(document.getElementById('bundleQty').value) || 1);
+  const shipping = parseFloat(document.getElementById('shippingFee').value) || 0;
   const fee = getFeeRate();
-  if (!rate || !cost) {
+  if (!rate || !unitCost) {
     ['r-minPrice','r-minFee','r-minMargin'].forEach(id => document.getElementById(id).textContent = '-');
     return;
   }
-  const minSale = cost / (1 - fee - rate / 100);
+  const totalCost = unitCost * bundleQty;
+  // 필요 최소 판매가(번들 전체) = (번들원가 + 택배비) ÷ (1 − 수수료율 − 목표마진율)
+  const minSale = (totalCost + shipping) / (1 - fee - rate / 100);
   const platName2 = selectedPlatformId === 'custom' ? '직접입력' :
     (platforms.find(p => p.id === selectedPlatformId)?.name || '플랫폼');
   const minFeeLabel = document.getElementById('r-minFee-label');
   if (minFeeLabel) minFeeLabel.textContent = platName2 + ' 수수료';
   document.getElementById('r-minPrice').textContent = fmt(Math.ceil(minSale));
   document.getElementById('r-minFee').textContent = fmt(minSale * fee);
-  document.getElementById('r-minMargin').textContent = fmt(minSale - minSale * fee - cost);
+  document.getElementById('r-minMargin').textContent = fmt(minSale - minSale * fee - totalCost - shipping);
 }
 
 function toggleAd() {
@@ -3555,10 +3582,18 @@ function toggleAdType() {
 }
 function calc2() {
   const sale = parseFloat(document.getElementById('salePrice').value) || 0;
-  const cost = costInputMode === 'b2b' ? b2bCostValue : (parseFloat(document.getElementById('costPrice').value) || 0);
+  const unitCost = costInputMode === 'b2b' ? b2bCostValue : (parseFloat(document.getElementById('costPrice').value) || 0);
+  const bundleQty = Math.max(1, parseInt(document.getElementById('bundleQty').value) || 1);
+  const shipping = parseFloat(document.getElementById('shippingFee').value) || 0;
   const fee = getFeeRate();
-  if (!sale || !cost) return;
-  const margin1 = sale - sale * fee - cost;
+  if (!sale || !unitCost) return;
+  const totalCost = unitCost * bundleQty;
+  const feeAmt = sale * fee;
+  let vatPayable = 0;
+  if (taxType === 'taxable') {
+    vatPayable = sale / 11 - (totalCost / 11 + feeAmt / 11 + shipping / 11);
+  }
+  const margin1 = sale - feeAmt - totalCost - shipping - vatPayable;
   document.getElementById('r2-margin1').textContent = fmt(margin1);
   const t = document.getElementById('adType').value;
   let adCost = 0;
