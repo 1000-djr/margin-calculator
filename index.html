@@ -158,6 +158,15 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
 .b2b-pick { display: flex; flex-direction: column; gap: 8px; }
 .b2b-pick select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: var(--sans); padding: 9px 12px; outline: none; transition: all 0.15s; -webkit-appearance: none; }
 .b2b-pick select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); background: #fff; }
+.b2b-search-wrap { position: relative; }
+.b2b-search-wrap input { width: 100%; box-sizing: border-box; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: var(--sans); padding: 9px 12px; outline: none; transition: all 0.15s; }
+.b2b-search-wrap input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,0.12); background: #fff; }
+.b2b-search-wrap input::placeholder { color: var(--text-dim); }
+.b2b-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: 220px; overflow-y: auto; z-index: 200; }
+.b2b-dropdown-item { padding: 9px 12px; cursor: pointer; font-size: 13px; color: var(--text); border-bottom: 1px solid var(--border); transition: background 0.1s; }
+.b2b-dropdown-item:last-child { border-bottom: none; }
+.b2b-dropdown-item:hover { background: var(--surface2); }
+.b2b-dropdown-item mark { background: none; color: var(--accent); font-weight: 600; }
 .b2b-pick-supplier { display: flex; gap: 6px; }
 .b2b-pick-supplier button { flex: 1; padding: 8px 4px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-sub); font-size: 13px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; }
 .b2b-pick-supplier button.active { background: var(--green-light); border-color: rgba(29,131,72,0.35); color: var(--green); font-weight: 600; }
@@ -817,9 +826,14 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
           </div>
           <!-- B2B 불러오기 -->
           <div id="costB2BArea" style="display:none" class="b2b-pick">
-            <select id="b2bProductSelect" onchange="onB2BProductSelect()">
+            <select id="b2bProductSelect" style="display:none" onchange="onB2BProductSelect()">
               <option value="">상품 선택…</option>
             </select>
+            <div class="b2b-search-wrap">
+              <input type="text" id="b2bSearchInput" placeholder="SKU·제품명 검색…" autocomplete="off"
+                oninput="filterB2BDropdown()" onfocus="showB2BDropdown()" onblur="hideB2BDropdown()">
+              <div class="b2b-dropdown" id="b2bDropdownList" style="display:none"></div>
+            </div>
             <div class="b2b-pick-supplier" id="b2bSupplierBtns"></div>
             <div class="cost-from-b2b" id="costFromB2BNote">상품과 공급처를 선택하면 매입가가 자동 입력됩니다</div>
           </div>
@@ -3265,9 +3279,73 @@ function populateB2BProductSelect() {
     o.textContent = item.unit ? `${item.name} (${item.unit})` : item.name;
     sel.appendChild(o);
   });
-  if (prev) sel.value = prev;
+  if (prev) {
+    sel.value = prev;
+    // 검색창 텍스트 복원
+    const prevIdx = parseInt(prev);
+    if (!isNaN(prevIdx) && b2bDropdownItems[prevIdx]) {
+      const item = b2bDropdownItems[prevIdx];
+      const inp = document.getElementById('b2bSearchInput');
+      if (inp) inp.value = item.unit ? `${item.name} (${item.unit})` : item.name;
+    }
+  }
   onB2BProductSelect();
 }
+
+// ── B2B 제품 검색 드롭다운 ────────────────────────────────────────────────────
+function _b2bHighlight(text, q) {
+  if (!q) return escHtml(text);
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx < 0) return escHtml(text);
+  return escHtml(text.slice(0, idx)) + '<mark>' + escHtml(text.slice(idx, idx + q.length)) + '</mark>' + escHtml(text.slice(idx + q.length));
+}
+
+function filterB2BDropdown() {
+  const q = (document.getElementById('b2bSearchInput').value || '').trim();
+  const list = document.getElementById('b2bDropdownList');
+  if (!list) return;
+  if (!b2bDropdownItems.length) { list.style.display = 'none'; return; }
+  const ql = q.toLowerCase();
+  const filtered = b2bDropdownItems
+    .map((item, i) => ({ item, i }))
+    .filter(({ item }) => {
+      if (!ql) return true;
+      const label = (item.unit ? `${item.name} (${item.unit})` : item.name).toLowerCase();
+      return label.includes(ql);
+    });
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:9px 12px;color:var(--text-dim);font-size:13px">검색 결과 없음</div>';
+  } else {
+    list.innerHTML = filtered.map(({ item, i }) => {
+      const label = item.unit ? `${item.name} (${item.unit})` : item.name;
+      return `<div class="b2b-dropdown-item" onmousedown="selectB2BItem(${i})">${_b2bHighlight(label, q)}</div>`;
+    }).join('');
+  }
+  list.style.display = 'block';
+}
+
+function showB2BDropdown() { filterB2BDropdown(); }
+
+function hideB2BDropdown() {
+  setTimeout(() => {
+    const list = document.getElementById('b2bDropdownList');
+    if (list) list.style.display = 'none';
+  }, 160);
+}
+
+function selectB2BItem(idx) {
+  const item = b2bDropdownItems[idx];
+  if (!item) return;
+  const label = item.unit ? `${item.name} (${item.unit})` : item.name;
+  const inp = document.getElementById('b2bSearchInput');
+  if (inp) inp.value = label;
+  const sel = document.getElementById('b2bProductSelect');
+  if (sel) sel.value = idx;
+  const list = document.getElementById('b2bDropdownList');
+  if (list) list.style.display = 'none';
+  onB2BProductSelect();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function onB2BProductSelect() {
   const idx = document.getElementById('b2bProductSelect').value;
@@ -3800,6 +3878,8 @@ function resetCalc() {
   b2bCostValue = 0;
   b2bSelectedSupplierIdx = -1;
   document.getElementById('b2bProductSelect').value = '';
+  const b2bSrch = document.getElementById('b2bSearchInput');
+  if (b2bSrch) b2bSrch.value = '';
   const btnWrap = document.getElementById('b2bSupplierBtns');
   if (btnWrap) btnWrap.innerHTML = '';
   document.getElementById('costFromB2BNote').textContent = '상품과 공급처를 선택하면 매입가가 자동 입력됩니다';
