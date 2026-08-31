@@ -1721,7 +1721,8 @@ function formatAdDate(val) {
   const s = String(val ?? '').trim();
   // 정수형 YYYYMMDD (숫자 8자리)
   if (/^\d{8}$/.test(s)) return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
-  return s;
+  // 점/슬래시 구분자 → 하이픈으로 정규화, 시간 포함 형식도 날짜 10자리만 추출
+  return s.replace(/\./g, '-').replace(/\//g, '-').slice(0, 10);
 }
 
 function safeInt(v)   { const n = parseInt(v);   return isNaN(n) ? null : n; }
@@ -1876,7 +1877,9 @@ router.delete('/ad-reports/by-period', requireAuth, async (req, res) => {
   if (!start_date || !end_date) return res.status(400).json({ error: 'start_date, end_date 필수' });
   try {
     const { rowCount } = await pool.query(
-      `DELETE FROM ad_reports WHERE user_id=$1 AND report_date BETWEEN $2 AND $3`,
+      `DELETE FROM ad_reports
+       WHERE user_id=$1
+         AND LEFT(REPLACE(REPLACE(report_date,'.','-'),'/','-'),10) BETWEEN $2 AND $3`,
       [req.user.id, start_date, end_date]
     );
     res.json({ ok: true, deleted: rowCount });

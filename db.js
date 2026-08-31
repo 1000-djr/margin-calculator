@@ -831,6 +831,16 @@ async function initDB() {
     `);
   } catch(e) { console.warn('[db] users sender 컬럼 마이그레이션 스킵:', e.message); }
 
+  // ad_reports report_date 일회성 정규화: 점/슬래시/시간포함 형식 → YYYY-MM-DD
+  try {
+    const { rowCount: normalized } = await pool.query(`
+      UPDATE ad_reports
+      SET report_date = LEFT(REPLACE(REPLACE(report_date,'.','-'),'/','-'),10)
+      WHERE report_date ~ '[./]' OR LENGTH(report_date) > 10
+    `);
+    if (normalized > 0) console.log(`[db] ad_reports report_date 정규화: ${normalized}행 업데이트`);
+  } catch(e) { console.warn('[db] ad_reports report_date 정규화 스킵:', e.message); }
+
   console.log('[db] Tables ready');
 }
 

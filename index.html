@@ -5802,19 +5802,45 @@ async function confirmPeriodDelete() {
     });
     if (!ok) return;
     closePeriodDeleteModal();
-    adReports = adReports.filter(r => {
-      const d = formatAdDate(r['날짜'] ?? r['report_date'] ?? '');
-      return d < from || d > to;
-    });
-    localStorage.setItem('adReportsData', JSON.stringify(adReports));
     if (currentUser) {
       try {
-        await fetch('/api/ad-reports/by-period', {
+        const res = await fetch('/api/ad-reports/by-period', {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ start_date: from, end_date: to }),
         });
-      } catch(e) {}
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `서버 오류 ${res.status}`);
+        }
+        const result = await res.json();
+        // 서버에서 재조회하여 화면 갱신
+        try {
+          const fresh = await fetch('/api/ad-reports').then(r => r.json());
+          if (Array.isArray(fresh)) {
+            adReports = fresh;
+            try { localStorage.setItem('adReportsData', JSON.stringify(adReports)); } catch(e) { /* quota 무시 */ }
+          }
+        } catch(e) {
+          // 재조회 실패 시 로컬 필터링으로 보완
+          adReports = adReports.filter(r => {
+            const d = formatAdDate(r['날짜'] ?? r['report_date'] ?? '');
+            return d < from || d > to;
+          });
+          try { localStorage.setItem('adReportsData', JSON.stringify(adReports)); } catch(e2) { /* quota 무시 */ }
+        }
+        alert(`광고 ${(result.deleted ?? 0).toLocaleString()}건 삭제됨`);
+      } catch(e) {
+        alert('삭제 중 오류: ' + e.message);
+        return;
+      }
+    } else {
+      // 비로그인: 로컬 필터링
+      adReports = adReports.filter(r => {
+        const d = formatAdDate(r['날짜'] ?? r['report_date'] ?? '');
+        return d < from || d > to;
+      });
+      try { localStorage.setItem('adReportsData', JSON.stringify(adReports)); } catch(e) { /* quota 무시 */ }
     }
     renderAds();
     loadAdsSummary();
@@ -5842,7 +5868,8 @@ function formatAdDate(val) {
   if (/^\d{8}$/.test(s)) {
     return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
   }
-  return s;
+  // 점/슬래시 구분자 → 하이픈으로 정규화, 시간 포함 형식도 날짜 10자리만 추출
+  return s.replace(/\./g, '-').replace(/\//g, '-').slice(0, 10);
 }
 
 // 공통 광고 업로드 실행 함수 (500건씩 청크 분할 API 호출)
