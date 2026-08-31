@@ -4950,19 +4950,17 @@ async function doOrdersUpload(toAdd) {
     }
 
     // DB 업로드 완료 — renderOrders가 페이지네이션 API로 최신 데이터 조회
+    console.log(`[orders] DB 저장 완료: 신규=${inserted} 덮어쓰기=${updated} / 전체 ${total}건`);
+    if (allErrors.length > 0) console.error('[orders] 실패 목록:', allErrors);
 
-    if (failed > 0) {
-      let msg = `⚠️ 일부 저장 실패: ${failed}건\n신규 ${inserted}건 저장 / 기존 ${updated}건 덮어쓰기`;
-      if (allErrors.length > 0) {
-        const sample = allErrors.slice(0, 3).map(e => `• ${e.order_number}: ${e.reason}`).join('\n');
-        msg += `\n\n실패 사유 (최대 3건):\n${sample}`;
-        if (allErrors.length > 3) msg += `\n... 외 ${allErrors.length - 3}건 (콘솔 확인)`;
-      }
-      console.error('[orders] 실패 목록:', allErrors);
-      alert(msg);
-    } else {
-      console.log(`[orders] DB 저장 완료: 신규=${inserted} 덮어쓰기=${updated} / 전체 ${total}건`);
+    const failedPart = failed > 0 ? ` (실패 ${failed}건)` : '';
+    let alertMsg = `신규 ${inserted}건 저장 / 기존 ${updated}건 덮어쓰기${failedPart}`;
+    if (failed > 0 && allErrors.length > 0) {
+      const sample = allErrors.slice(0, 3).map(e => `• ${e.order_number}: ${e.reason}`).join('\n');
+      alertMsg += `\n\n실패 사유 (최대 3건):\n${sample}`;
+      if (allErrors.length > 3) alertMsg += `\n... 외 ${allErrors.length - 3}건 (콘솔 확인)`;
     }
+    alert(alertMsg);
   } else {
     // 비로그인 — 로컬 전용 (orders 배열 미사용, 렌더만)
   }
@@ -4973,8 +4971,6 @@ async function doOrdersUpload(toAdd) {
   ordersPage = 1;
   renderOrders();
   loadOrdersSummary();
-  const failedPart = failed > 0 ? ` (실패 ${failed}건)` : '';
-  alert(`신규 ${inserted}건 저장 / 기존 ${updated}건 덮어쓰기${failedPart}`);
 }
 
 // ── 필터링 업로드 ──────────────────────────────────────────────────────────────
