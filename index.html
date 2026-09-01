@@ -1723,7 +1723,7 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
     <div id="profitChartWrap" class="card" style="padding:16px">
       <div id="profitChartNoData" style="display:none;color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">데이터가 없습니다</div>
-      <canvas id="profitTrendChart" style="max-height:320px"></canvas>
+      <div style="position:relative;height:340px"><canvas id="profitTrendChart"></canvas></div>
     </div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>기간별 집계</span>
@@ -8295,7 +8295,7 @@ async function renderProfit() {
         },
         options: {
           responsive: true,
-          maintainAspectRatio: true,
+          maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: {
