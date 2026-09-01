@@ -8,6 +8,7 @@
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #f5f5f7;
@@ -1717,6 +1718,14 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       </div>
     </div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>기간별 추세</span>
+      <button onclick="toggleProfitChart()" id="profitChartToggleBtn" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-sub);padding:2px 4px" title="접기/펼치기">▲</button>
+    </div>
+    <div id="profitChartWrap" class="card" style="padding:16px">
+      <div id="profitChartNoData" style="display:none;color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">데이터가 없습니다</div>
+      <canvas id="profitTrendChart" style="max-height:320px"></canvas>
+    </div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>기간별 집계</span>
       <div style="display:flex;align-items:center;gap:10px">
         <button onclick="downloadProfitByPeriod()" class="btn btn-ghost" style="font-size:12px;padding:4px 10px">📥 기간별 집계 다운로드</button>
@@ -3082,6 +3091,7 @@ let profitProductSort  = null;  // null | 'asc' | 'desc'
 let profitPeriodSort   = 'asc'; // 'asc' | 'desc'
 let profitPeriodPage   = 1;
 let profitPeriodOpen   = true; // 접기/펼치기 상태
+let profitChartOpen    = true; // 차트 접기/펼치기 상태
 let profitProductData  = []; // 엑셀 다운로드용 상품별 캐시
 let profitPeriodData   = []; // 엑셀 다운로드용 기간별 캐시
 // { [optionId]: { supplierName, cost, taxType: 'exempt'|'taxable', productName } }
@@ -7486,6 +7496,14 @@ function toggleProfitPeriodTable() {
   if (btn)  btn.textContent    = profitPeriodOpen ? '▲' : '▼';
 }
 
+function toggleProfitChart() {
+  profitChartOpen = !profitChartOpen;
+  const wrap = document.getElementById('profitChartWrap');
+  const btn  = document.getElementById('profitChartToggleBtn');
+  if (wrap) wrap.style.display = profitChartOpen ? '' : 'none';
+  if (btn)  btn.textContent    = profitChartOpen ? '▲' : '▼';
+}
+
 function toggleProfitProductSort() {
   if (profitProductSort === null)       profitProductSort = 'asc';
   else if (profitProductSort === 'asc') profitProductSort = 'desc';
@@ -8183,6 +8201,148 @@ async function renderProfit() {
         ? String(a.period).localeCompare(String(b.period))
         : String(b.period).localeCompare(String(a.period))
     );
+
+    // ── 기간별 추세 차트 ────────────────────────────────────────────────────────
+    (function renderProfitTrendChart() {
+      const chartCanvas  = document.getElementById('profitTrendChart');
+      const noDataEl     = document.getElementById('profitChartNoData');
+      if (!chartCanvas) return;
+
+      // 차트용 데이터: 항상 시간순 오름차순
+      const chartPeriods = [...(analytics?.by_period || [])].sort((a, b) =>
+        String(a.period).localeCompare(String(b.period))
+      );
+
+      if (!chartPeriods.length) {
+        chartCanvas.style.display = 'none';
+        if (noDataEl) noDataEl.style.display = '';
+        if (window._profitChart) { window._profitChart.destroy(); window._profitChart = null; }
+        return;
+      }
+      chartCanvas.style.display = '';
+      if (noDataEl) noDataEl.style.display = 'none';
+
+      // CSS 변수에서 색상 읽기
+      const style = getComputedStyle(document.documentElement);
+      const clGreen  = style.getPropertyValue('--green').trim()  || '#1d8348';
+      const clRed    = style.getPropertyValue('--red').trim()    || '#c0392b';
+      const clBorder = style.getPropertyValue('--border').trim() || '#d2d2d7';
+      const clText   = style.getPropertyValue('--text').trim()   || '#1d1d1f';
+      const clSub    = style.getPropertyValue('--text-sub').trim() || '#6e6e73';
+
+      const labels     = chartPeriods.map(p => p.period);
+      const revenues   = chartPeriods.map(p => p.revenue_after   ?? 0);
+      const netProfits = chartPeriods.map(p => p.net_profit       ?? 0);
+      const adCosts    = chartPeriods.map(p => p.actual_ad_cost   ?? 0);
+      const margins    = chartPeriods.map(p =>
+        p.revenue_after > 0 ? parseFloat((p.net_profit / p.revenue_after * 100).toFixed(2)) : 0
+      );
+
+      const fmt = v => (v ?? 0).toLocaleString('ko-KR');
+
+      if (window._profitChart) { window._profitChart.destroy(); window._profitChart = null; }
+
+      window._profitChart = new Chart(chartCanvas, {
+        data: {
+          labels,
+          datasets: [
+            {
+              type: 'bar',
+              label: '매출(쿠폰후)',
+              data: revenues,
+              backgroundColor: 'rgba(41,128,185,0.25)',
+              borderColor: 'rgba(41,128,185,0.8)',
+              borderWidth: 1,
+              yAxisID: 'yLeft',
+              order: 3,
+            },
+            {
+              type: 'bar',
+              label: '순이익',
+              data: netProfits,
+              backgroundColor: netProfits.map(v => v >= 0 ? 'rgba(29,131,72,0.3)' : 'rgba(192,57,43,0.3)'),
+              borderColor:     netProfits.map(v => v >= 0 ? clGreen : clRed),
+              borderWidth: 1,
+              yAxisID: 'yLeft',
+              order: 2,
+            },
+            {
+              type: 'line',
+              label: '광고비(실)',
+              data: adCosts,
+              borderColor: 'rgba(230,126,34,0.9)',
+              backgroundColor: 'rgba(230,126,34,0.1)',
+              borderWidth: 2,
+              pointRadius: 3,
+              tension: 0.3,
+              yAxisID: 'yLeft',
+              order: 1,
+            },
+            {
+              type: 'line',
+              label: '마진율(%)',
+              data: margins,
+              borderColor: clGreen,
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              borderDash: [5, 3],
+              pointRadius: 3,
+              tension: 0.3,
+              yAxisID: 'yRight',
+              order: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              display: true,
+              labels: { color: clText, font: { size: 12 }, boxWidth: 14 },
+            },
+            tooltip: {
+              callbacks: {
+                label(ctx) {
+                  const ds = ctx.dataset;
+                  if (ds.yAxisID === 'yRight') return ` ${ds.label}: ${ctx.parsed.y.toFixed(2)}%`;
+                  return ` ${ds.label}: ${fmt(ctx.parsed.y)}원`;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              ticks: { color: clSub, font: { size: 11 }, maxRotation: 45 },
+              grid:  { color: clBorder + '55' },
+            },
+            yLeft: {
+              type: 'linear',
+              position: 'left',
+              ticks: {
+                color: clSub,
+                font: { size: 11 },
+                callback: v => fmt(v) + '원',
+              },
+              grid: { color: clBorder + '55' },
+            },
+            yRight: {
+              type: 'linear',
+              position: 'right',
+              ticks: {
+                color: clGreen,
+                font: { size: 11 },
+                callback: v => v.toFixed(1) + '%',
+              },
+              grid: { drawOnChartArea: false },
+            },
+          },
+        },
+      });
+    })();
+    // ─────────────────────────────────────────────────────────────────────────────
+
     // 다운로드용: 전체 periods 저장 (페이지 제한 없이)
     profitPeriodData = periods.map(p => {
       const tax  = -(p.commission / 11) - (p.ad_cost_raw / 11);
