@@ -1704,6 +1704,14 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
     </div>
     <div id="profitSummaryCards" style="display:flex;flex-direction:column;gap:0"></div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>기간별 추세</span>
+      <button onclick="toggleProfitChart()" id="profitChartToggleBtn" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-sub);padding:2px 4px" title="접기/펼치기">▲</button>
+    </div>
+    <div id="profitChartWrap" class="card" style="padding:16px">
+      <div id="profitChartNoData" style="display:none;color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">데이터가 없습니다</div>
+      <div style="position:relative;height:340px"><canvas id="profitTrendChart"></canvas></div>
+    </div>
+    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>상품별 수익</span>
       <button onclick="downloadProfitByProduct()" class="btn btn-ghost" style="font-size:12px;padding:4px 10px">📥 상품별 수익 다운로드</button>
     </div>
@@ -1716,14 +1724,6 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
           <tbody id="profitProductTbody"></tbody>
         </table>
       </div>
-    </div>
-    <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
-      <span>기간별 추세</span>
-      <button onclick="toggleProfitChart()" id="profitChartToggleBtn" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--text-sub);padding:2px 4px" title="접기/펼치기">▲</button>
-    </div>
-    <div id="profitChartWrap" class="card" style="padding:16px">
-      <div id="profitChartNoData" style="display:none;color:var(--text-dim);font-size:13px;text-align:center;padding:20px 0">데이터가 없습니다</div>
-      <div style="position:relative;height:340px"><canvas id="profitTrendChart"></canvas></div>
     </div>
     <div class="section-label" style="display:flex;align-items:center;justify-content:space-between">
       <span>기간별 집계</span>
