@@ -603,19 +603,31 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         AND display_product_id IS NOT NULL AND display_product_id <> ''
         AND product_name IS NOT NULL AND TRIM(product_name) <> ''
       GROUP BY product_name
+    ),
+    -- 기간 무관 옵션ID → orders 판매 옵션명/상품명 매핑 (광고-only 행 표시명 보정용)
+    option_name_map AS (
+      SELECT option_id,
+             MAX(option_name)  AS option_name,
+             MAX(product_name) AS product_name
+      FROM orders
+      WHERE user_id = $1
+        AND option_id IS NOT NULL
+        AND option_name IS NOT NULL AND TRIM(option_name) <> ''
+      GROUP BY option_id
     )
     SELECT
       COALESCE(po.option_id,      pa.option_id) AS option_id,
-      -- 주문 없는 광고-only 행: 광고보고서 상품명 → "광고비만 발생 (옵션ID: …)" 순으로 fallback
+      -- 광고-only 행: orders 판매상품명 → 광고보고서명 → "광고비만 발생 (옵션ID: …)" 순으로 fallback
       COALESCE(
         NULLIF(TRIM(po.product_name), ''),
+        NULLIF(TRIM(onm.product_name), ''),
         NULLIF(TRIM(pa.ad_product_name), ''),
         CASE WHEN pa.option_id IS NOT NULL
              THEN '광고비만 발생 (옵션ID: ' || pa.option_id || ')'
              ELSE '' END
       )                                         AS product_name,
       COALESCE(po.display_product_id, opm.display_product_id, npm.display_product_id) AS display_product_id,
-      COALESCE(po.option_name,    '')           AS option_name,
+      COALESCE(po.option_name, onm.option_name, '') AS option_name,
       COALESCE(po.qty,            0)            AS qty,
       COALESCE(po.revenue_before, 0)            AS revenue_before,
       COALESCE(po.revenue_after,  0)            AS revenue_after,
@@ -629,6 +641,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     FROM product_orders po
     FULL OUTER JOIN product_ads pa ON pa.option_id = po.option_id
     LEFT JOIN option_product_map opm ON opm.option_id = COALESCE(po.option_id, pa.option_id)
+    LEFT JOIN option_name_map onm ON onm.option_id = COALESCE(po.option_id, pa.option_id)
     LEFT JOIN name_product_map npm ON npm.product_name = COALESCE(
       NULLIF(TRIM(po.product_name),''),
       NULLIF(TRIM(SPLIT_PART(pa.ad_product_name, ',', 1)),'')
@@ -662,7 +675,8 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     const tv2    = tv2sum - (adRaw / 11);
     const net_v2 = Math.round(rev - comm - cost - actAd - tv2);
     const adOnly = r.ad_only === true || r.ad_only === 't';
-    const ad     = adOnly ? splitAdProductName(r.product_name) : null;
+    // 광고-only 행이면서 SQL에서 orders 판매옵션명을 못 찾은 경우에만 splitAdProductName 폴백
+    const ad = (adOnly && !r.option_name) ? splitAdProductName(r.product_name) : null;
     return {
       option_id:           r.option_id,
       display_product_id:  r.display_product_id || null,
