@@ -1731,7 +1731,7 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
-            <th id="profitProductNameTh" onclick="toggleProfitProductSort()" style="cursor:pointer;user-select:none;white-space:nowrap">등록상품명 <span id="profitProductSortIcon"></span></th><th>옵션명</th><th style="text-align:right">수량</th><th style="text-align:right">실매출</th><th style="text-align:right">수수료</th><th style="text-align:right">원가</th><th style="text-align:right">광고비(실)</th><th style="text-align:right">부가세</th><th style="text-align:right">순이익</th><th style="text-align:right">마진율</th>
+            <th id="profitProductNameTh" onclick="toggleProfitProductSort()" style="cursor:pointer;user-select:none;white-space:nowrap">등록상품명 <span id="profitProductSortIcon"></span></th><th>옵션명</th><th style="text-align:right">수량</th><th style="text-align:right">실매출</th><th style="text-align:right">수수료</th><th style="text-align:right">원가</th><th style="text-align:right">광고비(실)</th><th style="text-align:right">부가세</th><th style="text-align:right">순이익</th><th style="text-align:right">순이익(과세반영)</th><th style="text-align:right">마진율</th>
           </tr></thead>
           <tbody id="profitProductTbody"></tbody>
         </table>
@@ -1755,7 +1755,7 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
       <div class="data-table-wrap">
         <table class="profit-table">
           <thead><tr>
-            <th id="profitPeriodTh" onclick="toggleProfitPeriodSort()" style="cursor:pointer;user-select:none;white-space:nowrap">기간 <span id="profitPeriodSortIcon">▲</span></th><th>판매건수</th><th>매출(쿠폰전)</th><th>매출(쿠폰후)</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>마진율</th>
+            <th id="profitPeriodTh" onclick="toggleProfitPeriodSort()" style="cursor:pointer;user-select:none;white-space:nowrap">기간 <span id="profitPeriodSortIcon">▲</span></th><th>판매건수</th><th>매출(쿠폰전)</th><th>매출(쿠폰후)</th><th>수수료</th><th>원가</th><th>광고비(실)</th><th>순이익</th><th>순이익(과세반영)</th><th>마진율</th>
           </tr></thead>
           <tbody id="profitPeriodTbody"></tbody>
         </table>
@@ -8381,7 +8381,7 @@ async function renderProfit() {
   if (productTbody) {
     const byProduct = analytics?.by_product || [];
     if (!byProduct.length) {
-      productTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+      productTbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
       // display_product_id 기준 그룹핑 (없으면 product_name 폴백)
       const groupMap = new Map();
@@ -8414,19 +8414,19 @@ async function renderProfit() {
         rawRows.forEach(p => {
           const oKey = (p.option_name || '').trim();
           if (!optMap.has(oKey)) {
-            optMap.set(oKey, { option_name: p.option_name, qty:0, revenue_after:0, commission:0, total_cost:0, actual_ad_cost:0, ad_cost_raw:0, net_profit:0, _allAdOnly:true, _anyCost:false, _hasSales:false });
+            optMap.set(oKey, { option_name: p.option_name, qty:0, revenue_after:0, commission:0, total_cost:0, actual_ad_cost:0, ad_cost_raw:0, net_profit:0, net_profit_v2:0, _allAdOnly:true, _anyCost:false, _hasSales:false });
           }
           const o = optMap.get(oKey);
           o.qty += p.qty||0; o.revenue_after += p.revenue_after||0; o.commission += p.commission||0;
-          o.total_cost += p.total_cost||0; o.actual_ad_cost += p.actual_ad_cost||0; o.ad_cost_raw += p.ad_cost_raw||0; o.net_profit += p.net_profit||0;
+          o.total_cost += p.total_cost||0; o.actual_ad_cost += p.actual_ad_cost||0; o.ad_cost_raw += p.ad_cost_raw||0; o.net_profit += p.net_profit||0; o.net_profit_v2 += p.net_profit_v2||0;
           if (!p.ad_only) o._allAdOnly = false;
           if (p.total_cost > 0) o._anyCost = true;
           if ((p.revenue_after||0) > 0) o._hasSales = true;
         });
-        const rows = [...optMap.values()].map(o => ({ ...o, ad_only: o._allAdOnly && !o._hasSales, margin_rate: o.revenue_after>0 ? (o.net_profit/o.revenue_after*100) : 0 }));
+        const rows = [...optMap.values()].map(o => ({ ...o, ad_only: o._allAdOnly && !o._hasSales, margin_rate: o.revenue_after>0 ? (o.net_profit/o.revenue_after*100) : 0, margin_rate_v2: o.revenue_after>0 ? (o.net_profit_v2/o.revenue_after*100) : 0 }));
 
         // 그룹 합계 계산
-        let gQty = 0, gRev = 0, gComm = 0, gCost = 0, gAd = 0, gTax = 0, gNet = 0;
+        let gQty = 0, gRev = 0, gComm = 0, gCost = 0, gAd = 0, gTax = 0, gNet = 0, gNet2 = 0;
         rows.forEach(p => {
           const tax = -(p.commission / 11) - (p.ad_cost_raw / 11);
           gQty  += p.qty || 0;
@@ -8436,6 +8436,7 @@ async function renderProfit() {
           gAd   += p.actual_ad_cost || 0;
           gTax  += tax;
           gNet  += p.net_profit || 0;
+          gNet2 += p.net_profit_v2 || 0;
 
           // 다운로드용 캐시 누적 (합산된 옵션 단위)
           profitProductData.push({
@@ -8467,6 +8468,7 @@ async function renderProfit() {
           <td style="font-family:var(--mono);text-align:right;color:var(--red)">${gAd.toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);text-align:right">${Math.round(gTax).toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);text-align:right;color:${gNet >= 0 ? 'var(--green)' : 'var(--red)'}">${gNet.toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);text-align:right;color:${gNet2 >= 0 ? 'var(--green)' : 'var(--red)'}">${gNet2.toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);text-align:right">${gRev > 0 ? gMargin.toFixed(1) + '%' : '-'}</td>
         </tr>`);
 
@@ -8486,6 +8488,7 @@ async function renderProfit() {
             <td style="font-family:var(--mono);text-align:right;color:var(--red)">${p.actual_ad_cost.toLocaleString('ko-KR')}원</td>
             <td style="font-family:var(--mono);text-align:right">${Math.round(tax).toLocaleString('ko-KR')}원</td>
             <td style="font-family:var(--mono);text-align:right;font-weight:600;color:${p.net_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${p.net_profit.toLocaleString('ko-KR')}원</td>
+            <td style="font-family:var(--mono);text-align:right;font-weight:600;color:${p.net_profit_v2 >= 0 ? 'var(--green)' : 'var(--red)'}">${p.net_profit_v2 != null ? p.net_profit_v2.toLocaleString('ko-KR') + '원' : '-'}</td>
             <td style="font-family:var(--mono);text-align:right">${p.revenue_after > 0 ? p.margin_rate.toFixed(1) + '%' : '-'}</td>
           </tr>`);
         });
@@ -8509,6 +8512,7 @@ async function renderProfit() {
           <div class="summary-card"><div class="summary-card-label">총매출(쿠폰 전)</div><div class="summary-card-value">${s.revenue_before.toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">쿠폰적용매출</div><div class="summary-card-value green">${s.revenue_after.toLocaleString('ko-KR')}원</div></div>
           <div class="summary-card"><div class="summary-card-label">순이익</div><div class="summary-card-value ${s.net_profit >= 0 ? 'green' : 'red'}">${s.net_profit.toLocaleString('ko-KR')}원</div></div>
+          ${s.net_profit_v2 != null ? `<div class="summary-card"><div class="summary-card-label">순이익(과세반영)</div><div class="summary-card-value ${s.net_profit_v2 >= 0 ? 'green' : 'red'}">${s.net_profit_v2.toLocaleString('ko-KR')}원</div></div>` : ''}
           <div class="summary-card"><div class="summary-card-label">순수익률</div><div class="summary-card-value ${s.net_profit >= 0 ? 'green' : 'red'}">${s.revenue_after > 0 ? (s.net_profit / s.revenue_after * 100).toFixed(1) + '%' : '-'}</div></div>
           <div class="summary-card"><div class="summary-card-label">광고비 비중</div><div class="summary-card-value">${s.revenue_after > 0 ? (s.ad_cost_raw / s.revenue_after * 100).toFixed(1) + '%' : '-'}</div></div>
         </div>
@@ -8715,7 +8719,7 @@ async function renderProfit() {
     const pageData   = periods.slice((profitPeriodPage - 1) * pageSize, profitPeriodPage * pageSize);
 
     if (!periods.length) {
-      periodTbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
+      periodTbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:24px">데이터가 없습니다</td></tr>`;
     } else {
       periodTbody.innerHTML = pageData.map(p => {
         const rate = p.revenue_after > 0 ? (p.net_profit / p.revenue_after * 100) : 0;
@@ -8728,6 +8732,7 @@ async function renderProfit() {
           <td style="font-family:var(--mono)">${p.total_cost.toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);color:var(--red)">${p.actual_ad_cost.toLocaleString('ko-KR')}원</td>
           <td style="font-family:var(--mono);font-weight:600;color:${p.net_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${p.net_profit.toLocaleString('ko-KR')}원</td>
+          <td style="font-family:var(--mono);font-weight:600;color:${(p.net_profit_v2 ?? p.net_profit) >= 0 ? 'var(--green)' : 'var(--red)'}">${p.net_profit_v2 != null ? p.net_profit_v2.toLocaleString('ko-KR') + '원' : '-'}</td>
           <td style="font-family:var(--mono)">${rate.toFixed(1)}%</td>
         </tr>`;
       }).join('');

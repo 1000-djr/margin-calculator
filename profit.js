@@ -4,6 +4,10 @@
  *
  * 수식: 순이익 = 실매출(쿠폰후) - 수수료(11.66%) - 원가(B2B이력) - 실광고비 - 부가세(면세)
  *       부가세(면세) = -(수수료/11) - (광고비원가/11)
+ *
+ * ★ net_profit_v2 (병렬 추가, 기존 net_profit 불변):
+ *       부가세_v2 = SUM(과세주문: (매출-원가-수수료)/11, 면세주문: -수수료/11) - 광고비/11
+ *       net_profit_v2 = revAfter - commission - cost - actualAd - tax_v2 - 기타
  */
 
 const { pool } = require('./db');
@@ -102,6 +106,51 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
           ORDER BY c.discount_amount DESC, c.coupon_id DESC NULLS LAST LIMIT 1
         ), 0)`;
 
+  // ── v2: 과세구분 조회 서브쿼리 (기존 bp.cost 서브쿼리와 동일한 조건, tax_type만 조회) ────
+  // 원가 매칭이 없으면(미매핑) 'exempt' 기본값 사용.
+  const B2B_TAX_TYPE_SUBQUERY = `
+        ,COALESCE(
+          (
+            SELECT bp.tax_type
+            FROM product_name_mapping pnm
+            JOIN b2b_products b2bp
+              ON b2bp.user_id = pnm.user_id
+             AND b2bp.name    = pnm.b2b_name
+             AND b2bp.unit    = pnm.b2b_unit
+            JOIN b2b_prices bp
+              ON bp.user_id        = pnm.user_id
+             AND bp.b2b_product_id = b2bp.id
+             AND (bp.start_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.start_date
+                       <= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+             AND (bp.end_date IS NULL
+               OR (o.order_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+                   AND bp.end_date
+                       >= TO_DATE(SUBSTRING(o.order_date,1,10),'YYYY-MM-DD')))
+            WHERE pnm.user_id = o.user_id
+              AND (
+                (pnm.option_id IS NOT NULL AND pnm.option_id = o.option_id)
+                OR
+                (pnm.option_id IS NULL AND pnm.registered_name = o.product_name
+                 AND pnm.option_name = COALESCE(o.option_name, ''))
+              )
+            ORDER BY (pnm.option_id IS NOT NULL) DESC, bp.start_date DESC NULLS LAST
+            LIMIT 1
+          ),
+          'exempt'
+        )                                                 AS line_tax_type`;
+
+  // ── v2: per-order 부가세 집계 표현식 ─────────────────────────────────────────
+  // 과세: (매출 - 원가 - 수수료) / 11 → 납부 부가세
+  // 면세: -(수수료) / 11            → 수수료에 포함된 VAT 환급 효과만
+  const TAX_V2_AGG = `
+        ,SUM(CASE WHEN line_tax_type = 'taxable'
+                  THEN (net_sale - unit_cost * quantity - line_commission) / 11
+                  ELSE -(line_commission) / 11 END)::NUMERIC(14,2) AS tax_v2_sum
+        ,COUNT(*) FILTER (WHERE line_tax_type = 'taxable')::INTEGER AS taxable_orders
+        ,COUNT(*) FILTER (WHERE line_tax_type = 'exempt')::INTEGER  AS exempt_orders`;
+
   // ── 공통 order_detail CTE 조각 (SQL 재사용) ─────────────────────────────────
   // TODO(tax_type 매입세액공제): 과세 매입가(b2b_prices.tax_type='taxable')는 VAT 10%가 공제 가능하므로
   // 실질 비용은 bp.cost/1.1 이 됩니다. 현재는 bp.cost를 그대로 사용합니다.
@@ -159,6 +208,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
               WHEN o.product_name LIKE '%감자%' OR o.product_name LIKE '%고구마%' THEN 0.0836
               ELSE 0.1166
             END                                           AS line_commission
+        ${B2B_TAX_TYPE_SUBQUERY}
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -189,6 +239,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         SUM(net_sale)::BIGINT                    AS revenue_after,
         SUM(line_commission)::NUMERIC(14,2)       AS commission,
         SUM(unit_cost * quantity)::NUMERIC(14,2)  AS total_cost
+        ${TAX_V2_AGG}
       FROM order_detail
     ),
     ad_agg AS (
@@ -223,7 +274,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       aa.actual_ad_cost,
       aa.ad_cost_raw,
       rc.total_return_shipping,
-      rc.total_return_cost
+      rc.total_return_cost,
+      oa.tax_v2_sum,
+      oa.taxable_orders,
+      oa.exempt_orders
     FROM order_agg oa
     CROSS JOIN ad_agg       aa
     CROSS JOIN excluded_cnt ec
@@ -239,6 +293,12 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
   const tax            = -(commission / 11) - (adRaw / 11);
   const returnShipping = parseInt(s.total_return_shipping) || 0;
   const returnCost     = parseFloat(s.total_return_cost)   || 0;
+
+  // ── v2: 과세/면세 반영 부가세 (기존 tax 불변) ────────────────────────────────
+  const tax_v2_sum_raw  = parseFloat(s.tax_v2_sum)    || 0;
+  const tax_v2          = tax_v2_sum_raw - (adRaw / 11);
+  const taxableOrders   = s.taxable_orders || 0;
+  const exemptOrders    = s.exempt_orders  || 0;
 
   // ── 트래픽 비용 ─────────────────────────────────────────────────────────────
   let trafficCost = 0;
@@ -263,6 +323,12 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     console.warn('[profit] traffic_slots 쿼리 스킵:', e.message);
   }
 
+  const netProfit   = Math.round(revAfter - commission - cost - actualAd - tax   - trafficCost - returnShipping - returnCost);
+  const netProfitV2 = Math.round(revAfter - commission - cost - actualAd - tax_v2 - trafficCost - returnShipping - returnCost);
+
+  // ── 확인 로그 ────────────────────────────────────────────────────────────────
+  console.log(`[profit v2] 과세주문:${taxableOrders} 면세주문:${exemptOrders} | net_profit:${netProfit} net_profit_v2:${netProfitV2} (차이:${netProfitV2 - netProfit})`);
+
   const summary = {
     total_orders:     s.total_orders     || 0,
     excluded_count:   s.excluded_count   || 0,
@@ -278,7 +344,12 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     traffic_cost:          trafficCost,
     total_return_shipping: returnShipping,
     total_return_cost:     Math.round(returnCost),
-    net_profit:            Math.round(revAfter - commission - cost - actualAd - tax - trafficCost - returnShipping - returnCost),
+    net_profit:            netProfit,
+    // ── v2 (기존 net_profit 불변, 병렬 추가) ─────────────────────────────────
+    tax_v2:           Math.round(tax_v2),
+    net_profit_v2:    netProfitV2,
+    taxable_orders:   taxableOrders,
+    exempt_orders:    exemptOrders,
   };
 
   // ── 기간별 집계 ──────────────────────────────────────────────────────────────
@@ -349,6 +420,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
               WHEN o.product_name LIKE '%감자%' OR o.product_name LIKE '%고구마%' THEN 0.0836
               ELSE 0.1166
             END                                           AS line_commission
+        ${B2B_TAX_TYPE_SUBQUERY}
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -364,6 +436,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         SUM(net_sale)::BIGINT                    AS revenue_after,
         SUM(line_commission)::NUMERIC(14,2)       AS commission,
         SUM(unit_cost * quantity)::NUMERIC(14,2)  AS total_cost
+        ${TAX_V2_AGG}
       FROM order_detail
       GROUP BY period_key
     ),
@@ -386,7 +459,8 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       COALESCE(po.commission,     0)          AS commission,
       COALESCE(po.total_cost,     0)          AS total_cost,
       COALESCE(pa.ad_cost_raw,    0)          AS ad_cost_raw,
-      COALESCE(pa.actual_ad_cost, 0)          AS actual_ad_cost
+      COALESCE(pa.actual_ad_cost, 0)          AS actual_ad_cost,
+      COALESCE(po.tax_v2_sum,     0)          AS tax_v2_sum
     FROM period_orders po
     FULL OUTER JOIN period_ads pa ON pa.period_key = po.period_key
     ORDER BY 1
@@ -399,6 +473,9 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     const rev   = parseInt(r.revenue_after)    || 0;
     const cst   = parseFloat(r.total_cost)     || 0;
     const t     = -(comm / 11) - (adR / 11);
+    // v2
+    const tv2sum = parseFloat(r.tax_v2_sum) || 0;
+    const tv2    = tv2sum - (adR / 11);
     return {
       period:         r.period,
       orders:         r.orders || 0,
@@ -409,6 +486,9 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       actual_ad_cost: Math.round(actAd),
       ad_cost_raw:    Math.round(adR),
       net_profit:     Math.round(rev - comm - cst - actAd - t),
+      // ── v2 ─────────────────────────────────────────────────────────────────
+      tax_v2:         Math.round(tv2),
+      net_profit_v2:  Math.round(rev - comm - cst - actAd - tv2),
     };
   });
 
@@ -470,6 +550,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
               WHEN o.product_name LIKE '%감자%' OR o.product_name LIKE '%고구마%' THEN 0.0836
               ELSE 0.1166
             END                                           AS line_commission
+        ${B2B_TAX_TYPE_SUBQUERY}
       FROM orders o
       WHERE o.user_id = $1
         AND o.is_excluded = FALSE
@@ -488,6 +569,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         SUM(net_sale)::BIGINT                        AS revenue_after,
         SUM(line_commission)::NUMERIC(14,2)           AS commission,
         SUM(unit_cost * quantity)::NUMERIC(14,2)     AS total_cost
+        ${TAX_V2_AGG}
       FROM order_detail
       GROUP BY option_id, product_name, option_name
     ),
@@ -541,6 +623,7 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       COALESCE(po.total_cost,     0)            AS total_cost,
       COALESCE(pa.ad_cost_raw,    0)            AS ad_cost_raw,
       COALESCE(pa.actual_ad_cost, 0)            AS actual_ad_cost,
+      COALESCE(po.tax_v2_sum,     0)            AS tax_v2_sum,
       -- 광고-only 행 여부 플래그
       (po.option_id IS NULL)                    AS ad_only
     FROM product_orders po
@@ -574,6 +657,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
     const qty    = parseInt(r.qty)              || 0;
     const tax    = -(comm / 11) - (adRaw / 11);
     const net    = Math.round(rev - comm - cost - actAd - tax);
+    // v2
+    const tv2sum = parseFloat(r.tax_v2_sum) || 0;
+    const tv2    = tv2sum - (adRaw / 11);
+    const net_v2 = Math.round(rev - comm - cost - actAd - tv2);
     const adOnly = r.ad_only === true || r.ad_only === 't';
     const ad     = adOnly ? splitAdProductName(r.product_name) : null;
     return {
@@ -591,6 +678,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
       net_profit:     net,
       margin_rate:    rev > 0 ? parseFloat((net / rev * 100).toFixed(2)) : 0,
       ad_only:        adOnly, // 광고비만 발생 (주문 없음)
+      // ── v2 ─────────────────────────────────────────────────────────────────
+      tax_v2:          Math.round(tv2),
+      net_profit_v2:   net_v2,
+      margin_rate_v2:  rev > 0 ? parseFloat((net_v2 / rev * 100).toFixed(2)) : 0,
     };
   });
 
