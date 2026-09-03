@@ -2704,6 +2704,131 @@ router.delete('/b2b-prices/:id', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── B2B 상품 목록 (통합 UI용) ────────────────────────────────────────────────
+router.get('/b2b-products/list', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT p.id, p.name, p.unit,
+             COUNT(DISTINCT CASE WHEN bp.end_date IS NULL THEN bp.id END)::INTEGER AS active_prices,
+             COUNT(DISTINCT pnm.id)::INTEGER AS mapping_count
+      FROM b2b_products p
+      LEFT JOIN b2b_prices bp
+             ON bp.b2b_product_id = p.id AND bp.user_id = p.user_id
+      LEFT JOIN product_name_mapping pnm
+             ON pnm.user_id = p.user_id
+            AND pnm.b2b_name = p.name
+            AND pnm.b2b_unit = COALESCE(p.unit,'')
+      WHERE p.user_id = $1
+      GROUP BY p.id, p.name, p.unit
+      ORDER BY p.name, p.unit
+    `, [req.user.id]);
+    res.json(rows.map(r => ({
+      id:            r.id,
+      name:          r.name,
+      unit:          r.unit || '',
+      active_prices: r.active_prices || 0,
+      mapping_count: r.mapping_count || 0,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B2B 상품 통합(병합) ───────────────────────────────────────────────────────
+router.post('/b2b-products/merge', requireAuth, async (req, res) => {
+  const { source_product_id, target_name, target_unit } = req.body;
+  if (!source_product_id || !target_name)
+    return res.status(400).json({ error: '필수값 누락 (source_product_id, target_name)' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 원본 상품 조회
+    const { rows: srcRows } = await client.query(
+      `SELECT id, name, unit FROM b2b_products WHERE id=$1 AND user_id=$2`,
+      [source_product_id, req.user.id]
+    );
+    if (!srcRows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: '원본 상품을 찾을 수 없습니다' });
+    }
+    const src    = srcRows[0];
+    const tgtUnit = target_unit !== undefined ? (target_unit || '') : (src.unit || '');
+
+    // (a) 목적지 상품 생성 or 확보
+    const { rows: tgtRows } = await client.query(
+      `INSERT INTO b2b_products (user_id, name, unit) VALUES ($1,$2,$3)
+       ON CONFLICT (user_id,name,unit) DO UPDATE SET name=EXCLUDED.name
+       RETURNING id`,
+      [req.user.id, target_name, tgtUnit]
+    );
+    const targetId = tgtRows[0].id;
+
+    if (targetId === parseInt(source_product_id)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: '원본과 목적지가 같습니다' });
+    }
+
+    // (b) b2b_prices 재연결
+    // UNIQUE(user_id,b2b_product_id,supplier_id,start_date) 충돌 행 먼저 삭제(target 우선)
+    await client.query(`
+      DELETE FROM b2b_prices src
+      WHERE src.b2b_product_id = $1 AND src.user_id = $2
+        AND EXISTS (
+          SELECT 1 FROM b2b_prices tgt
+          WHERE tgt.b2b_product_id = $3 AND tgt.user_id = $2
+            AND tgt.supplier_id = src.supplier_id
+            AND tgt.start_date  = src.start_date
+        )
+    `, [source_product_id, req.user.id, targetId]);
+
+    // 나머지 source 행 target으로 재연결
+    const { rowCount: movedPrices } = await client.query(
+      `UPDATE b2b_prices SET b2b_product_id=$1
+       WHERE b2b_product_id=$2 AND user_id=$3`,
+      [targetId, source_product_id, req.user.id]
+    );
+
+    // (c) product_name_mapping 갱신
+    // 충돌(같은 registered_name+option_name+option_id가 이미 존재)하는 source 매핑 삭제
+    await client.query(`
+      DELETE FROM product_name_mapping s
+      WHERE s.user_id=$1 AND s.b2b_name=$2 AND s.b2b_unit=$3
+        AND EXISTS (
+          SELECT 1 FROM product_name_mapping t
+          WHERE t.user_id=$1
+            AND t.registered_name = s.registered_name
+            AND t.option_name     = s.option_name
+            AND COALESCE(t.option_id,'') = COALESCE(s.option_id,'')
+            AND t.id != s.id
+        )
+    `, [req.user.id, src.name, src.unit || '']);
+
+    // 나머지 source 매핑을 target 이름/단위로 갱신
+    const { rowCount: updatedMappings } = await client.query(
+      `UPDATE product_name_mapping
+         SET b2b_name=$4, b2b_unit=$5
+       WHERE user_id=$1 AND b2b_name=$2 AND b2b_unit=$3`,
+      [req.user.id, src.name, src.unit || '', target_name, tgtUnit]
+    );
+
+    // (d) 이제 비어있는 source 상품 삭제
+    await client.query(
+      `DELETE FROM b2b_products WHERE id=$1 AND user_id=$2`,
+      [source_product_id, req.user.id]
+    );
+
+    await client.query('COMMIT');
+    console.log(`[b2b-products/merge] user=${req.user.id} src=${source_product_id} → target=${targetId} moved=${movedPrices} mappings=${updatedMappings}`);
+    res.json({ ok: true, target_id: targetId, moved_prices: movedPrices, updated_mappings: updatedMappings });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    console.error('[b2b-products/merge] ROLLBACK:', e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // B2B 이력 기간 내 매핑된 주문 조회 (발주 조정용)
 router.get('/b2b-prices/:id/orders', requireAuth, async (req, res) => {
   try {

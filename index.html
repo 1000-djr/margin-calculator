@@ -3084,6 +3084,7 @@ let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]'
 let b2bDropdownItems = [];  // 드롭다운용: b2bPriceHistory를 상품별로 묶은 목록
 let editingB2BPriceId = null;
 let b2bMismatches = [];     // 불일치 감지 결과
+let b2bProductsList = [];   // 통합 UI용 b2b_products 목록
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersSortCol = '주문일'; // 기본 정렬 컬럼
 let ordersSortDir = 'desc';  // 기본 내림차순
@@ -4079,13 +4080,34 @@ function renderB2B() {
         return displayRow + editRow + nvfRow;
       }).join('');
 
+      const srcProductId = items[0]?.b2b_product_id || 0;
+      const mergePanel = srcProductId ? `
+      <div id="merge-panel-${groupId}" style="display:none;background:#fef9ec;border-bottom:1px solid #fcd34d;padding:10px 16px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:5px;color:#78350f">📦 다른 상품에 합치기 <span style="font-weight:400;font-size:11px">(되돌릴 수 없습니다)</span></div>
+        <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:2px">합칠 대상 상품명</div>
+            <input id="mp-tgt-name-${groupId}" list="b2bProductList" placeholder="대상 상품명 입력" style="width:180px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" oninput="updateMergePreview('${groupId}',${items.length})">
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:2px">옵션(단위)</div>
+            <input id="mp-tgt-unit-${groupId}" placeholder="옵션/단위" value="${escHtml(unit||'')}" style="width:100px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:13px" oninput="updateMergePreview('${groupId}',${items.length})">
+          </div>
+          <button onclick="closeMergePanel('${groupId}')" style="padding:4px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;background:var(--surface);cursor:pointer">취소</button>
+        </div>
+        <div id="mp-preview-${groupId}" style="font-size:12px;color:#1e40af;margin-bottom:6px;display:none;line-height:1.5"></div>
+        <button id="mp-confirm-${groupId}" onclick="doMerge('${groupId}',${srcProductId},${items.length})" style="display:none;padding:5px 14px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">합치기</button>
+      </div>` : '';
+
       return `<div class="history-group" style="margin-bottom:8px;margin-left:16px">
       <div class="history-group-header" onclick="toggleB2BGroup('${groupId}')">
         <span class="history-group-name">${name}</span>
         ${unit ? `<span class="history-group-unit">${unit}</span>` : ''}
         <span class="history-group-count">${items.length}건${activeCount ? ` · 진행중 ${activeCount}` : ''}</span>
+        ${srcProductId ? `<button onclick="event.stopPropagation();openMergePanel('${groupId}')" style="margin-left:auto;margin-right:4px;background:none;border:1px solid #d1d5db;border-radius:5px;padding:1px 7px;font-size:11px;cursor:pointer;color:var(--text-dim);white-space:nowrap">합치기</button>` : ''}
         <span class="history-group-toggle" id="${groupId}-arrow">▲</span>
       </div>
+      ${mergePanel}
       <div class="history-group-body" id="${groupId}">
         <table class="history-table">
           <thead><tr><th>공급처</th><th>공급가</th><th>시작일</th><th>종료일</th><th>상태</th><th style="min-width:140px"></th></tr></thead>
@@ -4114,11 +4136,15 @@ function renderB2B() {
 async function loadB2BMismatches() {
   if (!currentUser) return;
   try {
-    const res = await fetch('/api/b2b/price-mismatches');
-    if (!res.ok) return;
-    b2bMismatches = await res.json();
+    const [mmRes, plRes] = await Promise.all([
+      fetch('/api/b2b/price-mismatches'),
+      fetch('/api/b2b-products/list'),
+    ]);
+    b2bMismatches    = mmRes.ok ? await mmRes.json() : [];
+    b2bProductsList  = plRes.ok ? await plRes.json() : [];
   } catch(e) {
-    b2bMismatches = [];
+    b2bMismatches   = [];
+    b2bProductsList = [];
   }
   // 배너 업데이트
   const banner = document.getElementById('b2bMismatchBanner');
@@ -4181,6 +4207,54 @@ async function syncAllB2BPrices() {
   if (Array.isArray(fresh)) b2bPriceHistory = fresh;
   await loadB2BMismatches();
   alert(`갱신 완료: 성공 ${succeeded}건${failed ? `, 실패 ${failed}건` : ''}`);
+}
+
+// ── B2B 상품 통합(병합) ──────────────────────────────────────────────────────
+function openMergePanel(groupId) {
+  const panel = document.getElementById('merge-panel-' + groupId);
+  if (panel) panel.style.display = '';
+}
+function closeMergePanel(groupId) {
+  const panel = document.getElementById('merge-panel-' + groupId);
+  if (panel) panel.style.display = 'none';
+  const preview = document.getElementById('mp-preview-' + groupId);
+  if (preview) { preview.style.display = 'none'; preview.textContent = ''; }
+  const confirmBtn = document.getElementById('mp-confirm-' + groupId);
+  if (confirmBtn) confirmBtn.style.display = 'none';
+}
+function updateMergePreview(groupId, priceCount) {
+  const tgtName = (document.getElementById('mp-tgt-name-' + groupId)?.value || '').trim();
+  const tgtUnit = (document.getElementById('mp-tgt-unit-' + groupId)?.value || '').trim();
+  const preview    = document.getElementById('mp-preview-'  + groupId);
+  const confirmBtn = document.getElementById('mp-confirm-'  + groupId);
+  if (!preview || !confirmBtn) return;
+  if (!tgtName) { preview.style.display = 'none'; confirmBtn.style.display = 'none'; return; }
+  const label = tgtUnit ? `${tgtName} / ${tgtUnit}` : tgtName;
+  preview.textContent = `이 상품의 매입가 ${priceCount}건이 '${label}'로 이동하고, 이 상품은 삭제됩니다. 주문 원가 매칭도 함께 갱신됩니다.`;
+  preview.style.display = '';
+  confirmBtn.style.display = '';
+}
+async function doMerge(groupId, srcProductId, priceCount) {
+  const tgtName = (document.getElementById('mp-tgt-name-' + groupId)?.value || '').trim();
+  const tgtUnit = (document.getElementById('mp-tgt-unit-' + groupId)?.value || '').trim();
+  if (!tgtName) { alert('합칠 대상 상품명을 입력하세요'); return; }
+  const label = tgtUnit ? `${tgtName} / ${tgtUnit}` : tgtName;
+  const msg = `매입가 ${priceCount}건을 '${label}'에 합칩니다.\n이 작업은 되돌릴 수 없습니다. 계속하시겠습니까?`;
+  if (!confirm(msg)) return;
+  try {
+    const res = await fetch('/api/b2b-products/merge', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_product_id: srcProductId, target_name: tgtName, target_unit: tgtUnit }),
+    });
+    const data = await res.json();
+    if (data.error) { alert('합치기 실패: ' + data.error); return; }
+    const fresh = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => null);
+    if (Array.isArray(fresh)) b2bPriceHistory = fresh;
+    await loadB2BMismatches();
+    alert(`완료: 매입가 ${data.moved_prices}건 이동, 원가 매칭 ${data.updated_mappings}건 갱신`);
+  } catch(e) {
+    alert('오류: ' + e.message);
+  }
 }
 
 // ── 발주 조정 모달 ───────────────────────────────────────────────────────────
