@@ -2559,6 +2559,44 @@ router.post('/b2b/price-sync', requireAuth, async (req, res) => {
   }
 });
 
+router.post('/b2b-prices/new-version', requireAuth, async (req, res) => {
+  const { b2b_product_id, supplier_id, cost, start_date, supplier_product_name } = req.body;
+  if (!b2b_product_id || !supplier_id || !cost || !start_date)
+    return res.status(400).json({ error: '필수값 누락 (b2b_product_id, supplier_id, cost, start_date)' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Close active records: end_date = start_date - 1 day
+    const endDateObj = new Date(start_date);
+    endDateObj.setDate(endDateObj.getDate() - 1);
+    const endDateStr = endDateObj.toISOString().slice(0, 10);
+    const { rows: closedRows } = await client.query(
+      `UPDATE b2b_prices SET end_date = $4
+       WHERE user_id = $1 AND b2b_product_id = $2 AND supplier_id = $3 AND end_date IS NULL
+       RETURNING id`,
+      [req.user.id, b2b_product_id, supplier_id, endDateStr]
+    );
+    const closedId = closedRows[0]?.id || null;
+    // Insert new row (ON CONFLICT: update cost and clear end_date)
+    const { rows: newRows } = await client.query(
+      `INSERT INTO b2b_prices (user_id, b2b_product_id, supplier_id, cost, start_date, end_date, supplier_product_name)
+       VALUES ($1, $2, $3, $4, $5, NULL, $6)
+       ON CONFLICT (user_id, b2b_product_id, supplier_id, start_date)
+       DO UPDATE SET cost = EXCLUDED.cost, end_date = NULL, supplier_product_name = EXCLUDED.supplier_product_name
+       RETURNING id`,
+      [req.user.id, b2b_product_id, supplier_id, cost, start_date, supplier_product_name || '']
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, closed_id: closedId, new_id: newRows[0].id });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    console.error('[b2b-prices/new-version] ROLLBACK:', e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 router.get('/b2b-prices/match', requireAuth, async (req, res) => {
   const { b2b_name, unit = '', order_date } = req.query;
   if (!b2b_name || !order_date) return res.status(400).json({ error: 'b2b_name, order_date 필수' });
