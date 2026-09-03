@@ -295,6 +295,7 @@ async function initDB() {
       b2b_product_id   INTEGER REFERENCES b2b_products(id) ON DELETE CASCADE,
       supplier_id      INTEGER REFERENCES b2b_suppliers(id) ON DELETE CASCADE,
       cost             NUMERIC(12,2) NOT NULL,
+      tax_type         VARCHAR(20) NOT NULL DEFAULT 'exempt',
       start_date       DATE NOT NULL,
       end_date         DATE,
       created_at       TIMESTAMPTZ DEFAULT NOW(),
@@ -380,6 +381,7 @@ async function initDB() {
     ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS start_date             DATE;
     ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS end_date               DATE;
     ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS supplier_product_name  TEXT DEFAULT '';
+    ALTER TABLE b2b_prices ADD COLUMN IF NOT EXISTS tax_type               VARCHAR(20) DEFAULT 'exempt';
     ALTER TABLE orders     ADD COLUMN IF NOT EXISTS is_excluded      BOOLEAN DEFAULT FALSE;
     ALTER TABLE orders     ADD COLUMN IF NOT EXISTS exclusion_type   VARCHAR(20) DEFAULT 'normal';
   `);

@@ -988,6 +988,13 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
           <input id="b2bSupplierProductName" type="text" placeholder="예: 가정용 참외 1kg 특" oninput="searchB2BSupplierProduct()" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--sans);background:var(--surface);color:var(--text);width:100%;box-sizing:border-box">
           <div id="b2bSupplierProductSearchResult" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:4px;display:none;background:var(--surface)"></div>
         </div>
+        <div class="field" style="flex:0 0 auto;min-width:100px">
+          <label>과세 구분</label>
+          <div class="tax-toggle">
+            <button class="tax-btn active" id="b2bTaxBtnExempt" onclick="setB2BFormTax('exempt')">면세</button>
+            <button class="tax-btn taxable" id="b2bTaxBtnTaxable" onclick="setB2BFormTax('taxable')">과세</button>
+          </div>
+        </div>
       </div>
       <div class="btn-row" style="margin-top:12px">
         <button class="btn btn-primary" id="b2bSaveBtn" onclick="saveB2BPrice()">+ 이력 추가</button>
@@ -2387,6 +2394,13 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
         <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">도매처 상품명 <span style="font-weight:400">(발주용, 선택)</span></label>
         <input id="sb2bSupplierProductName" type="text" placeholder="예: 가정용 참외 1kg 특" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);font-family:var(--sans);outline:none;box-sizing:border-box">
       </div>
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:4px">과세 구분</label>
+        <div class="tax-toggle">
+          <button class="tax-btn active" id="sb2bTaxBtnExempt" onclick="setSb2BTax('exempt')">면세</button>
+          <button class="tax-btn taxable" id="sb2bTaxBtnTaxable" onclick="setSb2BTax('taxable')">과세</button>
+        </div>
+      </div>
       <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--text-dim);line-height:1.5">
         💡 이 매입가가 적용되기 시작한 날짜를 선택하세요. 수익분석에서 이 날짜 이후 주문에 이 원가가 적용됩니다.
       </div>
@@ -3083,6 +3097,8 @@ let couponSortDir = null; // null | 'asc' | 'desc'
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
 let b2bDropdownItems = [];  // 드롭다운용: b2bPriceHistory를 상품별로 묶은 목록
 let editingB2BPriceId = null;
+let b2bFormTaxType = 'exempt';  // "이력 추가" 폼 과세구분
+let _sb2bTaxType = 'exempt';    // 도매처→B2B 등록 모달 과세구분
 let b2bMismatches = [];     // 불일치 감지 결과
 let b2bProductsList = [];   // 통합 UI용 b2b_products 목록
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
@@ -4021,6 +4037,9 @@ function renderB2B() {
         const mismatchHint = mismatch
           ? `<div style="font-size:11px;color:#dc2626;margin-top:2px">도매처 실제가 ${mismatch.actual_price.toLocaleString('ko-KR')}원 (현재 ${mismatch.current_cost.toLocaleString('ko-KR')}원, ${mismatch.diff > 0 ? '+' : ''}${mismatch.diff.toLocaleString('ko-KR')}원 차이)</div>` : '';
         const rowBg = mismatch ? 'background:rgba(220,38,38,0.04)' : (isActive ? 'background:rgba(34,197,94,0.05)' : '');
+        const taxBadge = (p.tax_type === 'taxable')
+          ? `<span style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:4px;padding:1px 5px;font-size:10px;margin-left:4px;vertical-align:middle">과세</span>`
+          : `<span style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;border-radius:4px;padding:1px 5px;font-size:10px;margin-left:4px;vertical-align:middle">면세</span>`;
         const newPriceBtn = isActive
           ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px;${mismatch ? 'color:#dc2626;border-color:#dc2626;font-weight:600' : 'color:#0071e3;border-color:#0071e3'}" onclick="openNewVersion(${p.id})">새 가격${mismatch ? ' ⚠' : ''}</button>` : '';
 
@@ -4032,7 +4051,7 @@ function renderB2B() {
           </td>
           <td style="font-family:var(--mono);font-size:12px">${p.start_date || '-'}</td>
           <td style="font-family:var(--mono);font-size:12px">${p.end_date || '진행중'}</td>
-          <td>${statusBadge}</td>
+          <td>${statusBadge}${taxBadge}</td>
           <td style="white-space:nowrap">
             <button class="history-edit-btn" onclick="openInlineEdit(${p.id})">수정</button>
             <button class="history-del-btn"  onclick="deleteB2BPrice(${p.id})">삭제</button>
@@ -4043,12 +4062,19 @@ function renderB2B() {
         </tr>`;
 
         // 2) Inline edit row (overwrite / 오타정정)
+        const beiTax = p.tax_type || 'exempt';
         const editRow = `<tr id="b2b-edit-${p.id}" style="display:none;background:#fffbeb">
           <td style="color:var(--text-sub);font-size:12px;padding:6px 8px">${escHtml(p.supplier_name)}</td>
           <td style="padding:4px 6px"><input id="bei-cost-${p.id}" type="number" value="${p.cost}" style="width:90px;padding:3px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;font-family:var(--mono)"></td>
           <td style="padding:4px 6px"><input id="bei-start-${p.id}" type="date" value="${p.start_date || ''}" style="padding:3px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"></td>
           <td style="padding:4px 6px"><input id="bei-end-${p.id}" type="date" value="${p.end_date || ''}" style="padding:3px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px"></td>
-          <td></td>
+          <td style="padding:4px 6px">
+            <div style="display:flex;gap:2px;background:var(--surface3);border-radius:6px;padding:2px;width:fit-content">
+              <button class="tax-btn${beiTax==='exempt'?' active':''}" id="bei-tax-exempt-${p.id}" onclick="setB2BTaxInline(${p.id},'bei-','exempt')" style="font-size:10px;padding:2px 7px">면세</button>
+              <button class="tax-btn taxable${beiTax==='taxable'?' active':''}" id="bei-tax-taxable-${p.id}" onclick="setB2BTaxInline(${p.id},'bei-','taxable')" style="font-size:10px;padding:2px 7px">과세</button>
+            </div>
+            <input type="hidden" id="bei-tax-val-${p.id}" value="${beiTax}">
+          </td>
           <td style="white-space:nowrap;padding:4px 6px">
             <button class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px" onclick="saveInlineEdit(${p.id})">저장</button>
             <button class="btn btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px" onclick="closeInlineEdit(${p.id})">취소</button>
@@ -4058,6 +4084,7 @@ function renderB2B() {
         // 3) New-version form row (only active rows)
         const nvfCost  = mismatch ? mismatch.actual_price : '';
         const nvfDate  = mismatch && mismatch.last_changed_at ? mismatch.last_changed_at.slice(0, 10) : '';
+        const nvfTax   = p.tax_type || 'exempt';
         const nvfRow = isActive ? `<tr id="b2b-nvf-${p.id}" style="display:none;background:#f0f9ff">
           <td colspan="2" style="padding:6px 10px">
             <span style="font-size:11px;color:var(--text-dim)">새 공급가</span>
@@ -4070,7 +4097,14 @@ function renderB2B() {
             <span style="font-size:11px;color:var(--text-dim)">적용 시작일</span>
             <div style="margin-top:3px"><input id="nvf-start-${p.id}" type="date" value="${nvfDate}" style="padding:3px 7px;border:1px solid #93c5fd;border-radius:6px;font-size:13px"></div>
           </td>
-          <td></td>
+          <td style="padding:6px 10px;vertical-align:middle">
+            <span style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:3px">과세구분</span>
+            <div style="display:flex;gap:2px;background:var(--surface3);border-radius:6px;padding:2px;width:fit-content">
+              <button class="tax-btn${nvfTax==='exempt'?' active':''}" id="nvf-tax-exempt-${p.id}" onclick="setB2BTaxInline(${p.id},'nvf-','exempt')" style="font-size:10px;padding:2px 7px">면세</button>
+              <button class="tax-btn taxable${nvfTax==='taxable'?' active':''}" id="nvf-tax-taxable-${p.id}" onclick="setB2BTaxInline(${p.id},'nvf-','taxable')" style="font-size:10px;padding:2px 7px">과세</button>
+            </div>
+            <input type="hidden" id="nvf-tax-val-${p.id}" value="${nvfTax}">
+          </td>
           <td style="white-space:nowrap;vertical-align:middle;padding:4px 6px">
             <button class="btn btn-primary btn-sm" style="font-size:11px;padding:2px 8px" onclick="saveNewVersion(${p.id})">저장</button>
             <button class="btn btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px" onclick="closeNewVersion(${p.id})">취소</button>
@@ -4196,7 +4230,7 @@ async function syncAllB2BPrices() {
     try {
       const res = await fetch('/api/b2b-prices/new-version', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ b2b_product_id: m.b2b_product_id, supplier_id: m.supplier_id, cost: m.actual_price, start_date: changeDate, supplier_product_name: m.supplier_product_name }),
+        body: JSON.stringify({ b2b_product_id: m.b2b_product_id, supplier_id: m.supplier_id, cost: m.actual_price, start_date: changeDate, supplier_product_name: m.supplier_product_name, tax_type: m.tax_type || 'exempt' }),
       });
       const data = await res.json();
       if (data.error) { failed++; console.warn('[syncAll] 실패:', m.b2b_price_id, data.error); }
@@ -4459,6 +4493,32 @@ function resetB2BPriceForm() {
   document.getElementById('b2bFormTitle').textContent      = '이력 추가';
   document.getElementById('b2bSaveBtn').textContent        = '+ 이력 추가';
   document.getElementById('b2bCancelBtn').style.display    = 'none';
+  setB2BFormTax('exempt');
+}
+
+function setB2BFormTax(type) {
+  b2bFormTaxType = type;
+  const exemptBtn  = document.getElementById('b2bTaxBtnExempt');
+  const taxableBtn = document.getElementById('b2bTaxBtnTaxable');
+  if (exemptBtn)  exemptBtn.classList.toggle('active',  type === 'exempt');
+  if (taxableBtn) taxableBtn.classList.toggle('active', type === 'taxable');
+}
+
+function setSb2BTax(type) {
+  _sb2bTaxType = type;
+  const exemptBtn  = document.getElementById('sb2bTaxBtnExempt');
+  const taxableBtn = document.getElementById('sb2bTaxBtnTaxable');
+  if (exemptBtn)  exemptBtn.classList.toggle('active',  type === 'exempt');
+  if (taxableBtn) taxableBtn.classList.toggle('active', type === 'taxable');
+}
+
+function setB2BTaxInline(id, prefix, type) {
+  const hidden = document.getElementById(prefix + 'tax-val-' + id);
+  if (hidden) hidden.value = type;
+  const exemptBtn  = document.getElementById(prefix + 'tax-exempt-'  + id);
+  const taxableBtn = document.getElementById(prefix + 'tax-taxable-' + id);
+  if (exemptBtn)  exemptBtn.classList.toggle('active',  type === 'exempt');
+  if (taxableBtn) taxableBtn.classList.toggle('active', type === 'taxable');
 }
 
 function editB2BPrice(id) { openInlineEdit(id); } // backward compat shim
@@ -4485,11 +4545,12 @@ async function saveInlineEdit(id) {
   const cost      = parseFloat(document.getElementById('bei-cost-'  + id)?.value) || 0;
   const startDate = document.getElementById('bei-start-' + id)?.value || '';
   const endDate   = document.getElementById('bei-end-'   + id)?.value || '';
+  const taxType   = document.getElementById('bei-tax-val-' + id)?.value || 'exempt';
   if (!cost || !startDate) { alert('공급가와 시작일을 입력하세요'); return; }
   const payload = {
     product_name: p.product_name, unit: p.unit || '',
     supplier_name: p.supplier_name, supplier_product_name: p.supplier_product_name || '',
-    cost, start_date: startDate, end_date: endDate || null,
+    cost, start_date: startDate, end_date: endDate || null, tax_type: taxType,
   };
   if (currentUser) {
     try {
@@ -4498,7 +4559,7 @@ async function saveInlineEdit(id) {
     } catch(e) { alert('오류: ' + e.message); return; }
   }
   const idx = b2bPriceHistory.findIndex(x => x.id == id);
-  if (idx >= 0) b2bPriceHistory[idx] = { ...b2bPriceHistory[idx], cost, start_date: startDate, end_date: endDate };
+  if (idx >= 0) b2bPriceHistory[idx] = { ...b2bPriceHistory[idx], cost, tax_type: taxType, start_date: startDate, end_date: endDate };
   localStorage.setItem('b2bPriceHistory', JSON.stringify(b2bPriceHistory));
   renderB2B();
 }
@@ -4528,6 +4589,7 @@ async function saveNewVersion(id) {
   if (!p) return;
   const cost      = parseFloat(document.getElementById('nvf-cost-'  + id)?.value) || 0;
   const startDate = document.getElementById('nvf-start-' + id)?.value || '';
+  const taxType   = document.getElementById('nvf-tax-val-' + id)?.value || 'exempt';
   if (!cost)      { alert('새 공급가를 입력하세요'); return; }
   if (!startDate) { alert('적용 시작일을 입력하세요'); return; }
   const endDateObj = new Date(startDate);
@@ -4540,7 +4602,7 @@ async function saveNewVersion(id) {
     try {
       const res = await fetch('/api/b2b-prices/new-version', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ b2b_product_id: p.b2b_product_id, supplier_id: p.supplier_id, cost, start_date: startDate, supplier_product_name: p.supplier_product_name || '' }),
+        body: JSON.stringify({ b2b_product_id: p.b2b_product_id, supplier_id: p.supplier_id, cost, tax_type: taxType, start_date: startDate, supplier_product_name: p.supplier_product_name || '' }),
       });
       const data = await res.json();
       if (data.error) { alert('저장 실패: ' + data.error); return; }
@@ -4567,6 +4629,7 @@ async function endB2BPrice(id) {
       unit:          p.unit || '',
       supplier_name: p.supplier_name,
       cost:          p.cost,
+      tax_type:      p.tax_type || 'exempt',
       start_date:    p.start_date,
       end_date:      endDate,
     };
@@ -4596,7 +4659,7 @@ async function saveB2BPrice() {
   if (!startDate)    { alert('적용 시작일을 입력하세요'); return; }
 
   const supplierProductName = document.getElementById('b2bSupplierProductName')?.value || '';
-  const payload = { product_name: productName, unit, supplier_name: supplierName, cost, start_date: startDate, end_date: endDate || null, supplier_product_name: supplierProductName };
+  const payload = { product_name: productName, unit, supplier_name: supplierName, cost, start_date: startDate, end_date: endDate || null, supplier_product_name: supplierProductName, tax_type: b2bFormTaxType };
 
   if (editingB2BPriceId !== null) {
     if (currentUser) {
@@ -12516,6 +12579,8 @@ function openSupplierB2BModalDirect(mapKey) {
   document.getElementById('sb2bSupplierProductName').value = p.name || '';
   document.getElementById('sb2bError').style.display = 'none';
   document.getElementById('sb2bError').textContent = '';
+  // 도매처 과세정보 → 초기값 매핑
+  setSb2BTax(p.taxable && p.taxable !== '비과세' ? 'taxable' : 'exempt');
   const desc = document.getElementById('sb2bModalDesc');
   if (desc) desc.textContent = (supplierName || '도매처') + ' 상품 정보를 B2B 매입가에 등록합니다.';
   const btn = document.getElementById('sb2bSaveBtn');
@@ -12678,6 +12743,8 @@ function openSupplierB2BModal(code) {
   document.getElementById('sb2bSupplierProductName').value = p.name || '';
   document.getElementById('sb2bError').style.display = 'none';
   document.getElementById('sb2bError').textContent = '';
+  // 도매처 과세정보 → 초기값 매핑: '비과세' = exempt, 그 외 값 있으면 taxable
+  setSb2BTax(p.taxable && p.taxable !== '비과세' ? 'taxable' : 'exempt');
   const btn = document.getElementById('sb2bSaveBtn');
   btn.textContent = '저장';
   btn.disabled = false;
@@ -12713,7 +12780,7 @@ async function saveSupplierToB2B() {
     const r = await fetch('/api/b2b-prices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_name, unit, supplier_name, cost: parseFloat(cost), start_date, end_date: end_date || undefined, supplier_product_name })
+      body: JSON.stringify({ product_name, unit, supplier_name, cost: parseFloat(cost), start_date, end_date: end_date || undefined, supplier_product_name, tax_type: _sb2bTaxType })
     });
     const j = await r.json();
     if (r.status === 409) {

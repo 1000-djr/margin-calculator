@@ -103,6 +103,10 @@ async function calculateProfit(userId, startDate, endDate, groupBy = 'month', di
         ), 0)`;
 
   // ── 공통 order_detail CTE 조각 (SQL 재사용) ─────────────────────────────────
+  // TODO(tax_type 매입세액공제): 과세 매입가(b2b_prices.tax_type='taxable')는 VAT 10%가 공제 가능하므로
+  // 실질 비용은 bp.cost/1.1 이 됩니다. 현재는 bp.cost를 그대로 사용합니다.
+  // 반영하려면 ORDER_DETAIL_CTE 내 "SELECT bp.cost"를
+  // "CASE WHEN bp.tax_type='taxable' THEN bp.cost/1.1 ELSE bp.cost END" 로 변경하세요.
   const ORDER_DETAIL_CTE = `
     order_detail AS (
       SELECT

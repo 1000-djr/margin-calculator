@@ -2407,6 +2407,7 @@ function b2bPriceRow(r) {
     supplier_name:        r.supplier_name,
     supplier_product_name: r.supplier_product_name || '',
     cost:                 parseFloat(r.cost),
+    tax_type:             r.tax_type || 'exempt',
     start_date:           r.start_date ? r.start_date.toISOString().slice(0,10) : '',
     end_date:             r.end_date   ? r.end_date.toISOString().slice(0,10)   : '',
   };
@@ -2444,6 +2445,7 @@ router.get('/b2b/price-mismatches', requireAuth, async (req, res) => {
         p.unit,
         bp.supplier_product_name,
         bp.cost            AS current_cost,
+        bp.tax_type,
         sp.price           AS actual_price,
         (sp.price - bp.cost) AS diff,
         hist.changed_at    AS last_changed_at
@@ -2477,6 +2479,7 @@ router.get('/b2b/price-mismatches', requireAuth, async (req, res) => {
       unit:                  r.unit || '',
       supplier_product_name: r.supplier_product_name,
       current_cost:          parseFloat(r.current_cost),
+      tax_type:              r.tax_type || 'exempt',
       actual_price:          parseFloat(r.actual_price),
       diff:                  parseFloat(r.diff),
       last_changed_at:       r.last_changed_at ? r.last_changed_at.toISOString() : null,
@@ -2494,7 +2497,7 @@ router.post('/b2b/price-sync', requireAuth, async (req, res) => {
     // 대상 활성 b2b_prices 행 조회
     const { rows: priceRows } = await client.query(`
       SELECT bp.id, bp.b2b_product_id, bp.supplier_id, bp.supplier_product_name, bp.cost,
-             bp.start_date::text AS start_date
+             bp.tax_type, bp.start_date::text AS start_date
       FROM b2b_prices bp
       WHERE bp.id = $1 AND bp.user_id = $2 AND bp.end_date IS NULL
     `, [b2b_price_id, req.user.id]);
@@ -2537,14 +2540,15 @@ router.post('/b2b/price-sync', requireAuth, async (req, res) => {
     // 새 활성 건 INSERT (충돌 시 cost만 UPDATE)
     const { rows: newRows } = await client.query(
       `INSERT INTO b2b_prices
-         (user_id, b2b_product_id, supplier_id, cost, start_date, end_date, supplier_product_name)
-       VALUES ($1, $2, $3, $4, $5, NULL, $6)
+         (user_id, b2b_product_id, supplier_id, cost, tax_type, start_date, end_date, supplier_product_name)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7)
        ON CONFLICT (user_id, b2b_product_id, supplier_id, start_date)
        DO UPDATE SET cost                 = EXCLUDED.cost,
+                     tax_type             = EXCLUDED.tax_type,
                      end_date             = NULL,
                      supplier_product_name = EXCLUDED.supplier_product_name
        RETURNING id`,
-      [req.user.id, bp.b2b_product_id, bp.supplier_id, actualPrice, changeDate, bp.supplier_product_name]
+      [req.user.id, bp.b2b_product_id, bp.supplier_id, actualPrice, bp.tax_type || 'exempt', changeDate, bp.supplier_product_name]
     );
 
     await client.query('COMMIT');
@@ -2560,7 +2564,7 @@ router.post('/b2b/price-sync', requireAuth, async (req, res) => {
 });
 
 router.post('/b2b-prices/new-version', requireAuth, async (req, res) => {
-  const { b2b_product_id, supplier_id, cost, start_date, supplier_product_name } = req.body;
+  const { b2b_product_id, supplier_id, cost, start_date, supplier_product_name, tax_type } = req.body;
   if (!b2b_product_id || !supplier_id || !cost || !start_date)
     return res.status(400).json({ error: '필수값 누락 (b2b_product_id, supplier_id, cost, start_date)' });
   const client = await pool.connect();
@@ -2577,14 +2581,14 @@ router.post('/b2b-prices/new-version', requireAuth, async (req, res) => {
       [req.user.id, b2b_product_id, supplier_id, endDateStr]
     );
     const closedId = closedRows[0]?.id || null;
-    // Insert new row (ON CONFLICT: update cost and clear end_date)
+    // Insert new row (ON CONFLICT: update cost/tax_type and clear end_date)
     const { rows: newRows } = await client.query(
-      `INSERT INTO b2b_prices (user_id, b2b_product_id, supplier_id, cost, start_date, end_date, supplier_product_name)
-       VALUES ($1, $2, $3, $4, $5, NULL, $6)
+      `INSERT INTO b2b_prices (user_id, b2b_product_id, supplier_id, cost, tax_type, start_date, end_date, supplier_product_name)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, $7)
        ON CONFLICT (user_id, b2b_product_id, supplier_id, start_date)
-       DO UPDATE SET cost = EXCLUDED.cost, end_date = NULL, supplier_product_name = EXCLUDED.supplier_product_name
+       DO UPDATE SET cost = EXCLUDED.cost, tax_type = EXCLUDED.tax_type, end_date = NULL, supplier_product_name = EXCLUDED.supplier_product_name
        RETURNING id`,
-      [req.user.id, b2b_product_id, supplier_id, cost, start_date, supplier_product_name || '']
+      [req.user.id, b2b_product_id, supplier_id, cost, tax_type || 'exempt', start_date, supplier_product_name || '']
     );
     await client.query('COMMIT');
     res.json({ ok: true, closed_id: closedId, new_id: newRows[0].id });
@@ -2602,7 +2606,7 @@ router.get('/b2b-prices/match', requireAuth, async (req, res) => {
   if (!b2b_name || !order_date) return res.status(400).json({ error: 'b2b_name, order_date 필수' });
   try {
     const { rows } = await pool.query(`
-      SELECT bp.id, bp.cost,
+      SELECT bp.id, bp.cost, bp.tax_type,
              bp.start_date::text, bp.end_date::text,
              p.name AS product_name, p.unit,
              s.name AS supplier_name,
@@ -2626,7 +2630,7 @@ router.get('/b2b-prices/match', requireAuth, async (req, res) => {
 router.get('/b2b-prices', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT bp.id, bp.b2b_product_id, bp.supplier_id, bp.cost, bp.start_date, bp.end_date,
+      SELECT bp.id, bp.b2b_product_id, bp.supplier_id, bp.cost, bp.tax_type, bp.start_date, bp.end_date,
              p.name AS product_name, p.unit,
              s.name AS supplier_name,
              bp.supplier_product_name
@@ -2641,21 +2645,21 @@ router.get('/b2b-prices', requireAuth, async (req, res) => {
 });
 
 router.post('/b2b-prices', requireAuth, async (req, res) => {
-  const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name } = req.body;
+  const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name, tax_type } = req.body;
   if (!product_name || !supplier_name || !cost || !start_date)
     return res.status(400).json({ error: 'product_name, supplier_name, cost, start_date 필수' });
   try {
     const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
     const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
     const { rows } = await pool.query(
-      `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date,supplier_product_name)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,tax_type,start_date,end_date,supplier_product_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (user_id,b2b_product_id,supplier_id,start_date) DO NOTHING
-       RETURNING id, cost, start_date, end_date`,
-      [req.user.id, productId, supplierId, cost, start_date, end_date || null, supplier_product_name || '']
+       RETURNING id, cost, tax_type, start_date, end_date`,
+      [req.user.id, productId, supplierId, cost, tax_type || 'exempt', start_date, end_date || null, supplier_product_name || '']
     );
     if (!rows.length) return res.status(409).json({ error: '동일 상품+공급처+시작일 중복' });
-    res.status(201).json({ id: rows[0].id, product_name, unit: unit||'', supplier_name, cost: parseFloat(rows[0].cost), start_date: rows[0].start_date.toISOString().slice(0,10), end_date: rows[0].end_date ? rows[0].end_date.toISOString().slice(0,10) : '', supplier_product_name: supplier_product_name || '' });
+    res.status(201).json({ id: rows[0].id, product_name, unit: unit||'', supplier_name, cost: parseFloat(rows[0].cost), tax_type: rows[0].tax_type || 'exempt', start_date: rows[0].start_date.toISOString().slice(0,10), end_date: rows[0].end_date ? rows[0].end_date.toISOString().slice(0,10) : '', supplier_product_name: supplier_product_name || '' });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2664,16 +2668,16 @@ router.post('/b2b-prices/bulk', requireAuth, async (req, res) => {
   let inserted = 0, dupCount = 0;
   const errorRows = [];
   for (const item of items) {
-    const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name } = item;
+    const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name, tax_type } = item;
     if (!product_name || !supplier_name || !cost || !start_date) { errorRows.push(`skip: ${product_name}`); continue; }
     try {
       const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
       const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
       const r = await pool.query(
-        `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,start_date,end_date,supplier_product_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO b2b_prices (user_id,b2b_product_id,supplier_id,cost,tax_type,start_date,end_date,supplier_product_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (user_id,b2b_product_id,supplier_id,start_date) DO NOTHING`,
-        [req.user.id, productId, supplierId, cost, start_date, end_date || null, supplier_product_name || '']
+        [req.user.id, productId, supplierId, cost, tax_type || 'exempt', start_date, end_date || null, supplier_product_name || '']
       );
       if (r.rowCount > 0) inserted++; else dupCount++;
     } catch(e) { errorRows.push(`${product_name}: ${e.message}`); }
@@ -2682,16 +2686,16 @@ router.post('/b2b-prices/bulk', requireAuth, async (req, res) => {
 });
 
 router.put('/b2b-prices/:id', requireAuth, async (req, res) => {
-  const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name } = req.body;
+  const { product_name, unit, supplier_name, cost, start_date, end_date, supplier_product_name, tax_type } = req.body;
   if (!product_name || !supplier_name || !cost || !start_date)
     return res.status(400).json({ error: '필수값 누락' });
   try {
     const productId  = await upsertB2BProduct(req.user.id, product_name, unit);
     const supplierId = await upsertB2BSupplier(req.user.id, supplier_name);
     await pool.query(
-      `UPDATE b2b_prices SET b2b_product_id=$3,supplier_id=$4,cost=$5,start_date=$6,end_date=$7,supplier_product_name=$8
+      `UPDATE b2b_prices SET b2b_product_id=$3,supplier_id=$4,cost=$5,tax_type=$6,start_date=$7,end_date=$8,supplier_product_name=$9
        WHERE id=$1 AND user_id=$2`,
-      [req.params.id, req.user.id, productId, supplierId, cost, start_date, end_date || null, supplier_product_name || '']
+      [req.params.id, req.user.id, productId, supplierId, cost, tax_type || 'exempt', start_date, end_date || null, supplier_product_name || '']
     );
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
