@@ -2085,8 +2085,8 @@ router.get('/fixed-discounts', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT fd.*,
-              COALESCE(pnm.registered_name, o.product_name) AS product_name,
-              COALESCE(pnm.option_name,     o.option_name)  AS option_name
+              COALESCE(NULLIF(fd.product_name,''), pnm.registered_name, o.product_name) AS product_name,
+              COALESCE(NULLIF(fd.option_name,''),  pnm.option_name,     o.option_name)  AS option_name
        FROM fixed_discounts fd
        LEFT JOIN LATERAL (
          SELECT registered_name, option_name
@@ -2102,7 +2102,7 @@ router.get('/fixed-discounts', requireAuth, async (req, res) => {
            AND product_name IS NOT NULL
          ORDER BY order_date DESC
          LIMIT 1
-       ) o ON (pnm.registered_name IS NULL)
+       ) o ON true
        WHERE fd.user_id = $1
        ORDER BY fd.start_date DESC, fd.created_at DESC`,
       [req.user.id]
@@ -2145,6 +2145,14 @@ router.post('/fixed-discounts', requireAuth, async (req, res) => {
   if (!start_date)                              return res.status(400).json({ error: '시작일 필수' });
   const oid   = String(option_id);
   const dtype = discount_type === 'download' ? 'download' : 'instant';
+  // payload에 이름이 없으면 DB에서 1회 조회
+  let pname = (req.body.product_name || '').trim();
+  let oname = (req.body.option_name  || '').trim();
+  if (!pname) {
+    const info = await lookupOptionInfo(req.user.id, oid);
+    pname = info.product_name || '';
+    oname = oname || info.option_name || '';
+  }
   console.log(`[fixed-discounts POST] user=${req.user.id} option_id=${oid} type=${dtype} start_date=${start_date}`);
   const client = await pool.connect();
   try {
@@ -2152,13 +2160,15 @@ router.post('/fixed-discounts', requireAuth, async (req, res) => {
     await autoCloseActiveDiscounts(client, req.user.id, oid, start_date, dtype);
     // ON CONFLICT DO UPDATE: start_date+discount_type 충돌 시 갱신 (ROLLBACK 방지)
     const { rows } = await client.query(
-      `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date,discount_type)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO fixed_discounts (user_id,option_id,discount_amount,start_date,end_date,discount_type,product_name,option_name)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        ON CONFLICT (user_id,option_id,start_date,discount_type)
        DO UPDATE SET discount_amount = EXCLUDED.discount_amount,
-                     end_date        = EXCLUDED.end_date
+                     end_date        = EXCLUDED.end_date,
+                     product_name    = CASE WHEN EXCLUDED.product_name <> '' THEN EXCLUDED.product_name ELSE fixed_discounts.product_name END,
+                     option_name     = CASE WHEN EXCLUDED.option_name  <> '' THEN EXCLUDED.option_name  ELSE fixed_discounts.option_name  END
        RETURNING *`,
-      [req.user.id, oid, discount_amount, start_date, end_date || null, dtype]
+      [req.user.id, oid, discount_amount, start_date, end_date || null, dtype, pname, oname]
     );
     await client.query('COMMIT');
     console.log(`[fixed-discounts POST] COMMIT → id=${rows[0]?.id}`);
@@ -2237,11 +2247,22 @@ router.put('/fixed-discounts/:id', requireAuth, async (req, res) => {
   if (!discount_amount || discount_amount <= 0) return res.status(400).json({ error: '할인금액 필수' });
   if (!start_date)                         return res.status(400).json({ error: '시작일 필수' });
   const dtype = discount_type === 'download' ? 'download' : 'instant';
+  const oid   = String(option_id);
+  let pname = (req.body.product_name || '').trim();
+  let oname = (req.body.option_name  || '').trim();
+  if (!pname) {
+    const info = await lookupOptionInfo(req.user.id, oid);
+    pname = info.product_name || '';
+    oname = oname || info.option_name || '';
+  }
   try {
     const { rows } = await pool.query(
-      `UPDATE fixed_discounts SET option_id=$3,discount_amount=$4,start_date=$5,end_date=$6,discount_type=$7
+      `UPDATE fixed_discounts
+       SET option_id=$3, discount_amount=$4, start_date=$5, end_date=$6, discount_type=$7,
+           product_name = CASE WHEN $8 <> '' THEN $8 ELSE product_name END,
+           option_name  = CASE WHEN $9 <> '' THEN $9 ELSE option_name  END
        WHERE id=$1 AND user_id=$2 RETURNING *`,
-      [req.params.id, req.user.id, option_id, discount_amount, start_date, end_date || null, dtype]
+      [req.params.id, req.user.id, oid, discount_amount, start_date, end_date || null, dtype, pname, oname]
     );
     if (!rows.length) return res.status(404).json({ error: '항목을 찾을 수 없습니다' });
     res.json(fdRow(rows[0]));

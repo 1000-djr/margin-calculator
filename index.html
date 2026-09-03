@@ -8,7 +8,7 @@
 <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.js"></script>
 <style>
 :root {
   --bg: #f5f5f7;
@@ -6872,7 +6872,9 @@ async function saveFixedDiscount() {
   if (discount_amount <= 0) return alert('할인금액을 입력하세요');
   if (!start_date)          return alert('적용시작일시를 입력하세요');
   const discount_type = document.getElementById('fdType')?.value || 'instant';
-  const payload = { option_id, discount_amount, start_date, end_date, discount_type };
+  const payload = { option_id, discount_amount, start_date, end_date, discount_type,
+    product_name: _fdOptionInfoCache.product_name || '',
+    option_name:  _fdOptionInfoCache.option_name  || '' };
   if (currentUser) {
     try {
       const method = currentEditingId ? 'PUT' : 'POST';
@@ -6950,24 +6952,27 @@ async function deleteFixedDiscount(id) {
   renderFixedDiscounts();
 }
 
+let _fdOptionInfoCache = {};
 async function fetchFdOptionInfo() {
   const optionId = (document.getElementById('fdOptionId').value || '').trim();
   const preview  = document.getElementById('fdOptionPreview');
   if (!preview) return;
-  if (!optionId || !currentUser) { preview.textContent = ''; return; }
+  if (!optionId || !currentUser) { preview.textContent = ''; _fdOptionInfoCache = {}; return; }
   try {
     const res  = await fetch(`/api/fixed-discounts/option-info?option_id=${encodeURIComponent(optionId)}`);
     const data = res.ok ? await res.json() : {};
+    _fdOptionInfoCache = { product_name: data.product_name || '', option_name: data.option_name || '' };
     if (data.product_name) {
       preview.textContent = `${data.product_name}${data.option_name ? ' / ' + data.option_name : ''}`;
     } else {
       preview.textContent = '주문 내역에서 상품명을 찾을 수 없습니다';
     }
-  } catch(e) { preview.textContent = ''; }
+  } catch(e) { preview.textContent = ''; _fdOptionInfoCache = {}; }
 }
 
 function resetFdForm() {
   editingFdId = null;
+  _fdOptionInfoCache = {};
   document.getElementById('fdOptionId').value   = '';
   document.getElementById('fdAmount').value     = '';
   document.getElementById('fdStartDate').value  = '';
@@ -8242,7 +8247,7 @@ async function renderProfit() {
 
       if (window._profitChart) { window._profitChart.destroy(); window._profitChart = null; }
 
-      window._profitChart = new Chart(chartCanvas, {
+      try { window._profitChart = new Chart(chartCanvas, {
         data: {
           labels,
           datasets: [
@@ -8339,7 +8344,7 @@ async function renderProfit() {
             },
           },
         },
-      });
+      }); } catch(chartErr) { console.warn('[Chart] 차트 렌더 실패:', chartErr); }
     })();
     // ─────────────────────────────────────────────────────────────────────────────
 

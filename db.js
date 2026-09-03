@@ -723,6 +723,45 @@ async function initDB() {
     );
   `);
 
+  // fixed_discounts: product_name / option_name 컬럼 추가 + 백필
+  try {
+    await pool.query(`
+      ALTER TABLE fixed_discounts ADD COLUMN IF NOT EXISTS product_name TEXT DEFAULT '';
+      ALTER TABLE fixed_discounts ADD COLUMN IF NOT EXISTS option_name  TEXT DEFAULT '';
+    `);
+    // 기존 빈 행 백필: product_name_mapping → orders 순서로 조회
+    const { rowCount: fdBackfilled } = await pool.query(`
+      UPDATE fixed_discounts fd
+      SET
+        product_name = COALESCE(NULLIF(src.pnm_name,''), src.ord_name, ''),
+        option_name  = COALESCE(NULLIF(src.pnm_opt,''),  src.ord_opt,  '')
+      FROM (
+        SELECT fd2.id,
+               pnm2.registered_name AS pnm_name,
+               pnm2.option_name     AS pnm_opt,
+               o2.product_name      AS ord_name,
+               o2.option_name       AS ord_opt
+        FROM fixed_discounts fd2
+        LEFT JOIN LATERAL (
+          SELECT registered_name, option_name
+          FROM product_name_mapping
+          WHERE user_id = fd2.user_id AND option_id = fd2.option_id
+          LIMIT 1
+        ) pnm2 ON true
+        LEFT JOIN LATERAL (
+          SELECT product_name, option_name
+          FROM orders
+          WHERE user_id = fd2.user_id AND option_id = fd2.option_id AND product_name IS NOT NULL
+          ORDER BY order_date DESC
+          LIMIT 1
+        ) o2 ON true
+        WHERE COALESCE(fd2.product_name,'') = ''
+      ) src
+      WHERE fd.id = src.id
+    `);
+    if (fdBackfilled > 0) console.log(`[db] fixed_discounts product_name 백필 완료: ${fdBackfilled}행`);
+  } catch(e) { console.warn('[db] fixed_discounts 이름 컬럼 마이그레이션 스킵:', e.message); }
+
   // fixed_discounts: DATE → TIMESTAMPTZ 마이그레이션
   await pool.query(`
     DO $$
