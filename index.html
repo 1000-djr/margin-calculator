@@ -942,6 +942,11 @@ input[type="date"], input[type="number"], input[type="text"] { font-family: var(
 
   <!-- ══ B2B 매입가 탭 ════════════════════════════════════════════ -->
   <div class="panel" id="tab-b2b">
+    <div id="b2bMismatchBanner" style="display:none;background:#fff3cd;border:1px solid #f0c36d;border-radius:10px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:15px">⚠</span>
+      <span id="b2bMismatchBannerText" style="flex:1;font-size:13px;font-weight:600;color:#856404"></span>
+      <button onclick="syncAllB2BPrices()" style="background:#f97316;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">전체 갱신</button>
+    </div>
     <div class="section-label">B2B 매입가 이력</div>
     <div class="btn-row" style="margin-bottom:14px">
       <button class="btn" onclick="downloadB2BTemplate()">📥 엑셀 양식 다운로드</button>
@@ -3078,6 +3083,7 @@ let couponSortDir = null; // null | 'asc' | 'desc'
 let b2bPriceHistory = JSON.parse(localStorage.getItem('b2bPriceHistory') || '[]');
 let b2bDropdownItems = [];  // 드롭다운용: b2bPriceHistory를 상품별로 묶은 목록
 let editingB2BPriceId = null;
+let b2bMismatches = [];     // 불일치 감지 결과
 let ordersExcludeFilter = 'all'; // 'all' | 'included' | 'excluded'
 let ordersSortCol = '주문일'; // 기본 정렬 컬럼
 let ordersSortDir = 'desc';  // 기본 내림차순
@@ -3121,7 +3127,7 @@ function _activateTabUI(name) {
     (b.getAttribute('onclick') || '').includes(`'${name}'`)
   );
   if (btn) btn.classList.add('active');
-  if (name === 'b2b')      { renderB2B(); }
+  if (name === 'b2b')      { renderB2B(); loadB2BMismatches(); }
   if (name === 'calc')   { if (costInputMode === 'b2b') populateB2BProductSelect(); renderHistory(); }
   if (name === 'coupang')  { setCoupangSubTab(_coupangSubTab || 'orders'); }
   if (name === 'supplier') { setSupplierSubTab('compare'); loadSupplierBalances(); }
@@ -4005,12 +4011,29 @@ function renderB2B() {
       const sorted = [...items].sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
       const rows = sorted.map(p => {
         const isActive = (!p.start_date || p.start_date <= today) && (!p.end_date || p.end_date >= today);
+        const mismatch = isActive ? b2bMismatches.find(m => m.b2b_price_id === p.id) : null;
         const badge = isActive
           ? `<span style="background:var(--green,#22c55e);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px">진행중</span>`
           : `<span style="background:var(--surface3,#f0f0f5);color:var(--text-dim);border-radius:4px;padding:1px 7px;font-size:11px">종료</span>`;
-        return `<tr style="${isActive ? 'background:rgba(34,197,94,0.05)' : ''}">
+        const mismatchBadge = mismatch
+          ? `<span style="background:#dc2626;color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;margin-left:4px">가격불일치</span>`
+          : '';
+        const mismatchHint = mismatch
+          ? `<div style="font-size:11px;color:#dc2626;margin-top:2px">
+               도매처 실제가 ${mismatch.actual_price.toLocaleString('ko-KR')}원
+               (현재 ${mismatch.current_cost.toLocaleString('ko-KR')}원,
+               ${mismatch.diff > 0 ? '+' : ''}${mismatch.diff.toLocaleString('ko-KR')}원 차이)
+             </div>`
+          : '';
+        const rowBg = mismatch ? 'background:rgba(220,38,38,0.05)' : (isActive ? 'background:rgba(34,197,94,0.05)' : '');
+        const syncBtn = mismatch
+          ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px;color:#dc2626;border-color:#dc2626;font-weight:600" onclick="syncB2BPrice(${p.id})">↑ 이 가격으로 갱신</button>`
+          : '';
+        return `<tr style="${rowBg}">
         <td style="${isActive ? 'color:var(--green);font-weight:600' : ''}">${p.supplier_name}</td>
-        <td style="font-family:var(--mono);${isActive ? 'color:var(--green);font-weight:600' : ''}">${p.cost.toLocaleString('ko-KR')}원</td>
+        <td style="font-family:var(--mono);${isActive ? 'color:var(--green);font-weight:600' : ''}">
+          ${p.cost.toLocaleString('ko-KR')}원${mismatchBadge}${mismatchHint}
+        </td>
         <td style="font-family:var(--mono);font-size:12px">${p.start_date || '-'}</td>
         <td style="font-family:var(--mono);font-size:12px">${p.end_date || '진행중'}</td>
         <td>${badge}</td>
@@ -4018,6 +4041,7 @@ function renderB2B() {
           <button class="history-edit-btn" onclick="editB2BPrice(${p.id})">수정</button>
           <button class="history-del-btn"  onclick="deleteB2BPrice(${p.id})">삭제</button>
           ${isActive ? `<button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px;color:#f97316;border-color:#f97316" onclick="endB2BPrice(${p.id})">종료</button>` : ''}
+          ${syncBtn}
           <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;margin-left:4px" onclick="openOrderAdjustModal(${p.id})">🔧 발주 조정</button>
         </td>
       </tr>`;
@@ -4052,6 +4076,79 @@ function renderB2B() {
   }).join('');
 
   updateQuickSelect();
+}
+
+// ── B2B 가격 불일치 감지 ─────────────────────────────────────────────────────
+async function loadB2BMismatches() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch('/api/b2b/price-mismatches');
+    if (!res.ok) return;
+    b2bMismatches = await res.json();
+  } catch(e) {
+    b2bMismatches = [];
+  }
+  // 배너 업데이트
+  const banner = document.getElementById('b2bMismatchBanner');
+  const bannerText = document.getElementById('b2bMismatchBannerText');
+  if (!banner || !bannerText) return;
+  if (b2bMismatches.length) {
+    bannerText.textContent = `도매처 실제가와 다른 매입가 ${b2bMismatches.length}건이 있습니다. 각 행에서 개별 갱신하거나 전체 갱신하세요.`;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+  // 행 재렌더 (배지 반영)
+  renderB2B();
+}
+
+async function syncB2BPrice(b2bPriceId) {
+  const m = b2bMismatches.find(x => x.b2b_price_id === b2bPriceId);
+  if (!m) return;
+  const changeDate = m.last_changed_at
+    ? m.last_changed_at.slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  const label = `${m.product_name}${m.unit ? ' ' + m.unit : ''}`;
+  const msg = `${label} 매입가를 ${m.current_cost.toLocaleString('ko-KR')}원 → ${m.actual_price.toLocaleString('ko-KR')}원으로, ${changeDate}부터 적용합니다.\n\n계속하시겠습니까?`;
+  if (!confirm(msg)) return;
+  try {
+    const res = await fetch('/api/b2b/price-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ b2b_price_id: b2bPriceId }),
+    });
+    const data = await res.json();
+    if (data.error) { alert('갱신 실패: ' + data.error); return; }
+    // 목록 새로고침
+    const fresh = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => null);
+    if (Array.isArray(fresh)) b2bPriceHistory = fresh;
+    await loadB2BMismatches();
+  } catch(e) {
+    alert('오류: ' + e.message);
+  }
+}
+
+async function syncAllB2BPrices() {
+  if (!b2bMismatches.length) return;
+  const count = b2bMismatches.length;
+  if (!confirm(`불일치 ${count}건을 모두 도매처 실제가로 갱신합니다.\n각 항목의 변경일 기준으로 적용됩니다. 계속하시겠습니까?`)) return;
+  let succeeded = 0, failed = 0;
+  for (const m of [...b2bMismatches]) {
+    try {
+      const res = await fetch('/api/b2b/price-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b2b_price_id: m.b2b_price_id }),
+      });
+      const data = await res.json();
+      if (data.error) { failed++; console.warn('[syncAll] 실패:', m.b2b_price_id, data.error); }
+      else succeeded++;
+    } catch(e) { failed++; }
+  }
+  const fresh = await fetch('/api/b2b-prices').then(r => r.json()).catch(() => null);
+  if (Array.isArray(fresh)) b2bPriceHistory = fresh;
+  await loadB2BMismatches();
+  alert(`갱신 완료: 성공 ${succeeded}건${failed ? `, 실패 ${failed}건` : ''}`);
 }
 
 // ── 발주 조정 모달 ───────────────────────────────────────────────────────────

@@ -2399,13 +2399,16 @@ router.delete('/ad-option-mappings/:adOptionId', requireAuth, async (req, res) =
 // ─── B2B 매입가 이력 ──────────────────────────────────────────────────────────
 function b2bPriceRow(r) {
   return {
-    id:            r.id,
-    product_name:  r.product_name,
-    unit:          r.unit || '',
-    supplier_name: r.supplier_name,
-    cost:          parseFloat(r.cost),
-    start_date:    r.start_date ? r.start_date.toISOString().slice(0,10) : '',
-    end_date:      r.end_date   ? r.end_date.toISOString().slice(0,10)   : '',
+    id:                   r.id,
+    b2b_product_id:       r.b2b_product_id,
+    supplier_id:          r.supplier_id,
+    product_name:         r.product_name,
+    unit:                 r.unit || '',
+    supplier_name:        r.supplier_name,
+    supplier_product_name: r.supplier_product_name || '',
+    cost:                 parseFloat(r.cost),
+    start_date:           r.start_date ? r.start_date.toISOString().slice(0,10) : '',
+    end_date:             r.end_date   ? r.end_date.toISOString().slice(0,10)   : '',
   };
 }
 
@@ -2428,6 +2431,133 @@ async function upsertB2BSupplier(userId, supplierName, client) {
   );
   return rows[0].id;
 }
+
+// ─── B2B 매입가 ↔ 도매처 실제가 불일치 감지 ──────────────────────────────────
+router.get('/b2b/price-mismatches', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        bp.id              AS b2b_price_id,
+        bp.b2b_product_id,
+        bp.supplier_id,
+        p.name             AS product_name,
+        p.unit,
+        bp.supplier_product_name,
+        bp.cost            AS current_cost,
+        sp.price           AS actual_price,
+        (sp.price - bp.cost) AS diff,
+        hist.changed_at    AS last_changed_at
+      FROM b2b_prices bp
+      JOIN b2b_products p    ON p.id = bp.b2b_product_id
+      JOIN b2b_suppliers s   ON s.id = bp.supplier_id
+      JOIN supplier_products sp
+        ON sp.user_id = bp.user_id
+       AND sp.name    = bp.supplier_product_name
+      LEFT JOIN LATERAL (
+        SELECT changed_at
+        FROM supplier_price_history
+        WHERE user_id = bp.user_id
+          AND name    = bp.supplier_product_name
+        ORDER BY changed_at DESC
+        LIMIT 1
+      ) hist ON true
+      WHERE bp.user_id  = $1
+        AND bp.end_date IS NULL
+        AND bp.supplier_product_name IS NOT NULL
+        AND bp.supplier_product_name != ''
+        AND bp.cost::numeric != sp.price::numeric
+      ORDER BY bp.id
+    `, [req.user.id]);
+
+    res.json(rows.map(r => ({
+      b2b_price_id:          r.b2b_price_id,
+      b2b_product_id:        r.b2b_product_id,
+      supplier_id:           r.supplier_id,
+      product_name:          r.product_name,
+      unit:                  r.unit || '',
+      supplier_product_name: r.supplier_product_name,
+      current_cost:          parseFloat(r.current_cost),
+      actual_price:          parseFloat(r.actual_price),
+      diff:                  parseFloat(r.diff),
+      last_changed_at:       r.last_changed_at ? r.last_changed_at.toISOString() : null,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── B2B 매입가 원클릭 갱신 ───────────────────────────────────────────────────
+router.post('/b2b/price-sync', requireAuth, async (req, res) => {
+  const { b2b_price_id } = req.body;
+  if (!b2b_price_id) return res.status(400).json({ error: 'b2b_price_id 필수' });
+
+  const client = await pool.connect();
+  try {
+    // 대상 활성 b2b_prices 행 조회
+    const { rows: priceRows } = await client.query(`
+      SELECT bp.id, bp.b2b_product_id, bp.supplier_id, bp.supplier_product_name, bp.cost,
+             bp.start_date::text AS start_date
+      FROM b2b_prices bp
+      WHERE bp.id = $1 AND bp.user_id = $2 AND bp.end_date IS NULL
+    `, [b2b_price_id, req.user.id]);
+    if (!priceRows.length) return res.status(404).json({ error: '활성 매입가 항목을 찾을 수 없습니다' });
+    const bp = priceRows[0];
+
+    // 도매처 실제가 조회 (supplier_product_name으로 연결)
+    const { rows: spRows } = await client.query(`
+      SELECT price FROM supplier_products
+      WHERE user_id = $1 AND name = $2
+      LIMIT 1
+    `, [req.user.id, bp.supplier_product_name]);
+    if (!spRows.length) return res.status(404).json({ error: '도매처 실제가를 찾을 수 없습니다' });
+    const actualPrice = parseFloat(spRows[0].price);
+
+    // 변경일 = supplier_price_history 최신 changed_at 날짜, 없으면 오늘
+    const { rows: histRows } = await client.query(`
+      SELECT (changed_at AT TIME ZONE 'Asia/Seoul')::date AS change_date
+      FROM supplier_price_history
+      WHERE user_id = $1 AND name = $2
+      ORDER BY changed_at DESC LIMIT 1
+    `, [req.user.id, bp.supplier_product_name]);
+    const changeDate = histRows.length
+      ? histRows[0].change_date.toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
+    // 종료일 = 변경일 - 1일
+    const endDateObj = new Date(changeDate);
+    endDateObj.setDate(endDateObj.getDate() - 1);
+    const endDateStr = endDateObj.toISOString().slice(0, 10);
+
+    await client.query('BEGIN');
+
+    // 기존 활성 건 종료
+    await client.query(
+      `UPDATE b2b_prices SET end_date = $3 WHERE id = $1 AND user_id = $2`,
+      [b2b_price_id, req.user.id, endDateStr]
+    );
+
+    // 새 활성 건 INSERT (충돌 시 cost만 UPDATE)
+    const { rows: newRows } = await client.query(
+      `INSERT INTO b2b_prices
+         (user_id, b2b_product_id, supplier_id, cost, start_date, end_date, supplier_product_name)
+       VALUES ($1, $2, $3, $4, $5, NULL, $6)
+       ON CONFLICT (user_id, b2b_product_id, supplier_id, start_date)
+       DO UPDATE SET cost                 = EXCLUDED.cost,
+                     end_date             = NULL,
+                     supplier_product_name = EXCLUDED.supplier_product_name
+       RETURNING id`,
+      [req.user.id, bp.b2b_product_id, bp.supplier_id, actualPrice, changeDate, bp.supplier_product_name]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, closed_id: parseInt(b2b_price_id), new_id: newRows[0].id,
+               change_date: changeDate, new_cost: actualPrice });
+  } catch(e) {
+    await client.query('ROLLBACK');
+    console.error('[b2b/price-sync] ROLLBACK:', e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
 
 router.get('/b2b-prices/match', requireAuth, async (req, res) => {
   const { b2b_name, unit = '', order_date } = req.query;
@@ -2458,7 +2588,7 @@ router.get('/b2b-prices/match', requireAuth, async (req, res) => {
 router.get('/b2b-prices', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT bp.id, bp.cost, bp.start_date, bp.end_date,
+      SELECT bp.id, bp.b2b_product_id, bp.supplier_id, bp.cost, bp.start_date, bp.end_date,
              p.name AS product_name, p.unit,
              s.name AS supplier_name,
              bp.supplier_product_name
